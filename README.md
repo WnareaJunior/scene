@@ -86,4 +86,4 @@ GNU Affero General Public License v3.0 - See LICENSE file for details
 
 ## Contributing
 
-This project is closed-source. For inquiries, contact [your-email].
+This project is closed-source. For inquiries, contact [wilsondev27@outlook.com].
