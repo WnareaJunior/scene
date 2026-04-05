@@ -3,6 +3,7 @@
     "name": "scene",
     "slug": "scene",
     "version": "1.0.0",
+    "main": "index.js",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -12,7 +13,8 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.anonymous.scene"
     },
     "android": {
       "adaptiveIcon": {
