@@ -1,89 +1,58 @@
-# Scene
+# OpenCrib
 
-A location-based event discovery platform that connects micro-venue hosts and independent artists with local audiences. Find, create, and RSVP to events near you through an intuitive map-based interface.
+Location-based event discovery platform connecting micro-venue hosts and independent artists with local audiences. Map-driven, RSVP-enforced, social-graph-aware.
 
-## Features (MVP)
+## What it does
 
-- **User Authentication** - Sign up with email/password, optional profile customization (bio, interests, gender, profile picture)
-- **Event Discovery** - Browse parties on an interactive map, filter by location, time, and genre
-- **Event Creation** - Host your own parties with capacity limits, time, location, and description
-- **Social Integration** - Follow other users, see which friends are attending events, discover events from your network
-- **RSVP System** - Mark attendance status (going, interested, maybe), view attendee lists, enforce capacity limits
+- **Map-first discovery** — Browse live event pins on an interactive dark-mode map. Pins update as you pan and zoom.
+- **Event creation** — Host events with capacity limits, hashtag categories, privacy controls, and attendee list visibility.
+- **RSVP system** — Mark yourself as Going or Interested. Capacity is enforced server-side on Going RSVPs.
+- **Social graph** — Follow users, see events from people you follow in your feed, view follower/following lists.
+- **Surprise me** — Random event picker respects hashtag filters and capacity state.
+- **Auth** — JWT access + refresh token flow with server-side revocation on logout.
 
-## Tech Stack
+## Stack
 
-- **Frontend:** React Native (cross-platform iOS/Android)
-- **Backend:** Node.js + Express
-- **Database:** PostgreSQL
-- **Authentication:** JWT (JSON Web Tokens)
-- **Geolocation:** Latitude/Longitude based queries
+| Layer | Tech |
+|---|---|
+| Frontend | React Native (Expo) |
+| Backend | Node.js + Express |
+| Database | PostgreSQL + PostGIS |
+| Auth | JWT (access + refresh tokens) |
+| Geo | PostGIS `ST_Within` (bbox) · `ST_DWithin` (radius) |
 
-## Getting Started
+## Monorepo structure
 
-### Prerequisites
-- Node.js v16+
-- PostgreSQL
-- React Native CLI
-- npm or yarn
-
-### Installation
-
-#### Backend Setup
-```bash
-git clone [repo-url]
-cd backend
-npm install
-cp .env.example .env
-# Configure DATABASE_URL, JWT_SECRET, etc.
-npm run dev
-```
-
-#### Frontend Setup
-```bash
-cd frontend
-npm install
-npx react-native run-ios   # or run-android
-```
-
-### Environment Variables
-
-Backend (.env):
-```
-DATABASE_URL=postgresql://user:password@localhost:5432/dbname
-JWT_SECRET=your-secret-key
-NODE_ENV=development
-PORT=5000
-```
-
-## API Documentation
-
-See `BACKEND_ENDPOINTS.md` for complete endpoint specification.
-
-## Project Structure
 ```
 .
-├── backend/
+├── backend/                  Node.js/Express API
 │   ├── src/
-│   │   ├── routes/
-│   │   ├── controllers/
-│   │   ├── models/
+│   │   ├── app.js
+│   │   ├── db.js
 │   │   ├── middleware/
-│   │   └── app.js
-│   └── package.json
-├── frontend/
-│   ├── src/
-│   │   ├── screens/
-│   │   ├── components/
-│   │   ├── navigation/
-│   │   └── App.js
-│   └── package.json
-└── README.md
+│   │   │   └── auth.js
+│   │   └── routes/
+│   │       ├── auth.js
+│   │       ├── events.js     (includes RSVPs)
+│   │       ├── map.js
+│   │       └── users.js
+│   ├── migrations/
+│   │   └── 001_init.sql
+│   ├── index.js
+│   └── .env.example
+└── frontend/
+    └── scene/                Expo app
+        ├── src/
+        │   └── api.js        typed API client
+        ├── App.js            auth gate + session bootstrap
+        ├── AuthScreen.jsx    login / register
+        └── Scene.jsx         map, bottom sheet, event creation, profile
 ```
+
+## Quick start
+
+See [`backend/README.md`](./backend/README.md) and [`frontend/scene/README.md`](./frontend/scene/README.md) for full setup instructions.
 
 ## License
 
-GNU Affero General Public License v3.0 - See LICENSE file for details
-
-## Contributing
-
-This project is closed-source. For inquiries, contact [your-email].
+GNU Affero General Public License v3.0 — see [LICENSE](./LICENSE).
