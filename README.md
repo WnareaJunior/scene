@@ -56,3 +56,4 @@ See [`backend/README.md`](./backend/README.md) and [`frontend/scene/README.md`](
 ## License
 
 GNU Affero General Public License v3.0 — see [LICENSE](./LICENSE).
+This project is closed-source. For inquiries, contact [wilsondev27@outlook.com].
