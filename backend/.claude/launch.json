@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "Backend (Express API)",
+      "runtimeExecutable": "/opt/homebrew/bin/node",
+      "runtimeArgs": ["node_modules/.bin/nodemon", "index.js"],
+      "port": 3000
+    },
+    {
+      "name": "Frontend (Expo)",
+      "runtimeExecutable": "/bin/sh",
+      "runtimeArgs": ["-c", "cd /Users/wnarea/Github/scene/frontend/scene && /opt/homebrew/bin/node node_modules/.bin/expo start --ios"],
+      "port": 8081
+    }
+  ]
+}
