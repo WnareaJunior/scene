@@ -7,7 +7,6 @@ const eventRoutes = require('./routes/events');
 const mapRoutes = require('./routes/map');
 
 const app = express();
-
 app.use(cors());
 app.use(express.json());
 

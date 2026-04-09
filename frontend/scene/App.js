@@ -6,8 +6,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import AuthScreen from './AuthScreen';
 import Scene from './Scene';
-import { users } from './src/api';
-import { saveTokens } from './src/api';
+import { users, saveTokens } from './src/api';
 
 export default function App() {
   const [user, setUser] = useState(null);
@@ -16,8 +15,9 @@ export default function App() {
   useEffect(() => {
     bootstrap();
   }, []);
-
+  
   async function bootstrap() {
+    await AsyncStorage.multiRemove(['accessToken', 'refreshToken']);
     try {
       const token = await AsyncStorage.getItem('accessToken');
       if (token) {
