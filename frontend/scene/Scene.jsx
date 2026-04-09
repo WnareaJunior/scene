@@ -27,7 +27,6 @@ export default function Scene({ user, onSignOut }) {
 
   // Navigation
   const [screen, setScreen] = useState('map'); // 'map' | 'profile' | 'create'
-  const swipeX = useSharedValue(0);
 
   // Map state
   const [pins, setPins] = useState([]);
@@ -95,6 +94,8 @@ export default function Scene({ user, onSignOut }) {
   // ── Bottom sheet gesture ──────────────────────────────────────────────────────
 
   const sheetGesture = Gesture.Pan()
+    .activeOffsetY([-5, 5])
+    .failOffsetX([-10, 10])
     .onUpdate((e) => {
       const next = sheetY.value + e.changeY;
       sheetY.value = Math.max(SNAP_FULL, Math.min(SNAP_PEEK, next));
@@ -114,9 +115,8 @@ export default function Scene({ user, onSignOut }) {
   // ── Swipe navigation gesture ──────────────────────────────────────────────────
 
   const navGesture = Gesture.Pan()
-    .onUpdate((e) => {
-      swipeX.value = e.translationX;
-    })
+    .activeOffsetX([-20, 20])
+    .failOffsetY([-10, 10])
     .onEnd((e) => {
       const THRESHOLD = 60;
       if (e.translationX > THRESHOLD) {
@@ -126,7 +126,6 @@ export default function Scene({ user, onSignOut }) {
       } else {
         runOnJS(setScreen)('map');
       }
-      swipeX.value = withSpring(0);
     });
 
   // ── Profile ───────────────────────────────────────────────────────────────────
@@ -201,6 +200,13 @@ export default function Scene({ user, onSignOut }) {
 
   return (
     <View style={styles.root}>
+      {/* Nav hints live outside the sliding view so they stay visible during swipe nav */}
+      <SafeAreaView style={styles.navHints} pointerEvents="none">
+        <Text style={styles.navHint}>👤</Text>
+        <Text style={styles.appTitle}>scene</Text>
+        <Text style={styles.navHint}>＋</Text>
+      </SafeAreaView>
+
       <Animated.View style={[StyleSheet.absoluteFill, containerStyle]}>
         {/* ── MAP SCREEN ─────────────────────────── */}
         <GestureDetector gesture={navGesture}>
@@ -233,52 +239,47 @@ export default function Scene({ user, onSignOut }) {
               ))}
             </MapView>
 
-            {/* Nav hints */}
-            <SafeAreaView style={styles.navHints} pointerEvents="none">
-              <Text style={styles.navHint}>👤</Text>
-              <Text style={styles.appTitle}>scene</Text>
-              <Text style={styles.navHint}>＋</Text>
-            </SafeAreaView>
+            {/* Bottom sheet — gesture only on the drag handle, so ScrollViews scroll freely */}
+            <Animated.View style={[styles.sheet, sheetStyle]}>
+              <GestureDetector gesture={sheetGesture}>
+                <View style={styles.sheetHandleArea}>
+                  <View style={styles.sheetHandle} />
+                </View>
+              </GestureDetector>
 
-            {/* Bottom sheet */}
-            <GestureDetector gesture={sheetGesture}>
-              <Animated.View style={[styles.sheet, sheetStyle]}>
-                <View style={styles.sheetHandle} />
+              {/* Categories */}
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={styles.categories}
+                contentContainerStyle={styles.categoriesContent}
+              >
+                {CATEGORIES.map((cat) => (
+                  <TouchableOpacity
+                    key={cat}
+                    style={[styles.catPill, activeCategory === cat && styles.catPillActive]}
+                    onPress={() => setActiveCategory(cat)}
+                  >
+                    <Text style={[styles.catText, activeCategory === cat && styles.catTextActive]}>
+                      {cat}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
 
-                {/* Categories */}
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  style={styles.categories}
-                  contentContainerStyle={styles.categoriesContent}
-                >
-                  {CATEGORIES.map((cat) => (
-                    <TouchableOpacity
-                      key={cat}
-                      style={[styles.catPill, activeCategory === cat && styles.catPillActive]}
-                      onPress={() => setActiveCategory(cat)}
-                    >
-                      <Text style={[styles.catText, activeCategory === cat && styles.catTextActive]}>
-                        {cat}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </ScrollView>
-
-                {/* Event list */}
-                <ScrollView style={styles.eventList} showsVerticalScrollIndicator={false}>
-                  {loadingEvents ? (
-                    <ActivityIndicator color="#a855f7" style={{ marginTop: 24 }} />
-                  ) : sheetEvents.length === 0 ? (
-                    <Text style={styles.empty}>No events in this area</Text>
-                  ) : (
-                    sheetEvents.map((ev) => (
-                      <EventCard key={ev.id} event={ev} onRsvp={handleRsvp} />
-                    ))
-                  )}
-                </ScrollView>
-              </Animated.View>
-            </GestureDetector>
+              {/* Event list */}
+              <ScrollView style={styles.eventList} showsVerticalScrollIndicator={false}>
+                {loadingEvents ? (
+                  <ActivityIndicator color="#a855f7" style={{ marginTop: 24 }} />
+                ) : sheetEvents.length === 0 ? (
+                  <Text style={styles.empty}>No events in this area</Text>
+                ) : (
+                  sheetEvents.map((ev) => (
+                    <EventCard key={ev.id} event={ev} onRsvp={handleRsvp} />
+                  ))
+                )}
+              </ScrollView>
+            </Animated.View>
           </View>
         </GestureDetector>
 
@@ -383,9 +384,12 @@ const styles = StyleSheet.create({
     backgroundColor: '#111',
     borderTopLeftRadius: 20, borderTopRightRadius: 20,
   },
+  sheetHandleArea: {
+    paddingVertical: 12, alignItems: 'center',
+  },
   sheetHandle: {
     width: 36, height: 4, backgroundColor: '#333',
-    borderRadius: 2, alignSelf: 'center', marginTop: 10, marginBottom: 6,
+    borderRadius: 2,
   },
   categories: { maxHeight: 44 },
   categoriesContent: { paddingHorizontal: 16, gap: 8, flexDirection: 'row', alignItems: 'center' },
