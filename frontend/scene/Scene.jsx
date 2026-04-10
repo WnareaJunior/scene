@@ -1,77 +1,81 @@
 import React, { useState } from 'react';
-import {
-  View, Text, StyleSheet, Platform,
-  KeyboardAvoidingView, Dimensions,
-} from 'react-native';
+import { View, StyleSheet, Dimensions } from 'react-native';
 import { GestureDetector, Gesture } from 'react-native-gesture-handler';
-import Animated, {
-  useAnimatedStyle, withSpring, runOnJS,
-} from 'react-native-reanimated';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import Animated, { useSharedValue, useAnimatedStyle, withSpring } from 'react-native-reanimated';
 
 import MapScreen from './src/screens/MapScreen';
-import ProfileScreen from './src/screens/ProfileScreen';
+import SearchSheet from './src/components/SearchSheet';
 import CreateScreen from './src/screens/CreateScreen';
+import ProfileScreen from './src/screens/ProfileScreen';
 
 const { width: SCREEN_W } = Dimensions.get('window');
 
+const SPRING = { damping: 40, stiffness: 200, mass: 1 };
+
+// Track layout:  [ Create | Map+Sheet | Profile ]
+// slideX = 0           → create
+// slideX = -SCREEN_W   → map (default)
+// slideX = -SCREEN_W*2 → profile
 export default function Scene({ user, onSignOut }) {
-  const [screen, setScreen] = useState('map'); // 'map' | 'profile' | 'create'
   const [viewport, setViewport] = useState(null);
 
-  // ── Swipe navigation gesture ────────────────────────────────────────────────
+  const slideX = useSharedValue(-SCREEN_W);
+  const startX = useSharedValue(0);
 
-  const navGesture = Gesture.Pan()
-    .activeOffsetX([-20, 20])
-    .failOffsetY([-10, 10])
-    .onEnd((e) => {
-      const THRESHOLD = 60;
-      if (e.translationX > THRESHOLD) {
-        runOnJS(setScreen)('profile');
-      } else if (e.translationX < -THRESHOLD) {
-        runOnJS(setScreen)('create');
-      } else {
-        runOnJS(setScreen)('map');
-      }
-    });
+  function makeEdgePan(onlyDirection) {
+    const offsetX = onlyDirection === 'left' ? [-99999, -15] : [15, 99999];
+    return Gesture.Pan()
+      .activeOffsetX(offsetX)
+      .failOffsetY([-20, 20])
+      .onBegin(() => { startX.value = slideX.value; })
+      .onUpdate((e) => {
+        const next = startX.value + e.translationX;
+        slideX.value = Math.max(-SCREEN_W * 2, Math.min(0, next));
+      })
+      .onEnd((e) => {
+        const pages = [0, -SCREEN_W, -SCREEN_W * 2];
+        const projected = slideX.value + e.velocityX * 0.18;
+        const closest = pages.reduce((a, b) =>
+          Math.abs(a - projected) < Math.abs(b - projected) ? a : b
+        );
+        slideX.value = withSpring(closest, SPRING);
+      });
+  }
 
-  const containerStyle = useAnimatedStyle(() => ({
-    flex: 1,
-    transform: [{ translateX: withSpring(
-      screen === 'profile' ? SCREEN_W : screen === 'create' ? -SCREEN_W : 0,
-      { damping: 20 },
-    )}],
+  const panBackFromCreate  = makeEdgePan('left');
+  const panBackFromProfile = makeEdgePan('right');
+
+  const trackStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: slideX.value }],
   }));
 
   return (
     <View style={styles.root}>
-      {/* Nav hints live outside the sliding view so they stay visible during swipe nav */}
-      <SafeAreaView style={styles.navHints} pointerEvents="none">
-        <Text style={styles.navHint}>👤</Text>
-        <Text style={styles.appTitle}>scene</Text>
-        <Text style={styles.navHint}>＋</Text>
-      </SafeAreaView>
+      <Animated.View style={[styles.track, trackStyle]}>
 
-      <Animated.View style={[StyleSheet.absoluteFill, containerStyle]}>
-        {/* ── MAP ──────────────────────────────────── */}
-        <MapScreen
-          navGesture={navGesture}
-          viewport={viewport}
-          onViewportChange={setViewport}
-        />
+        {/* page 0 — create */}
+        <GestureDetector gesture={panBackFromCreate}>
+          <View style={[styles.page, styles.darkPage]}>
+            <CreateScreen
+              viewport={viewport}
+              onCreated={() => { slideX.value = withSpring(-SCREEN_W, SPRING); }}
+            />
+          </View>
+        </GestureDetector>
 
-        {/* ── PROFILE ──────────────────────────────── */}
-        <View style={[styles.sideScreen, { left: -SCREEN_W }]}>
-          <ProfileScreen user={user} onSignOut={onSignOut} />
+        {/* page 1 — map + search sheet */}
+        <View style={styles.page}>
+          <MapScreen onRegionChangeComplete={setViewport} />
+          <SearchSheet slideX={slideX} screenW={SCREEN_W} viewport={viewport} />
         </View>
 
-        {/* ── CREATE ───────────────────────────────── */}
-        <KeyboardAvoidingView
-          style={[styles.sideScreen, { left: SCREEN_W }]}
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        >
-          <CreateScreen viewport={viewport} onCreated={() => setScreen('map')} />
-        </KeyboardAvoidingView>
+        {/* page 2 — profile */}
+        <GestureDetector gesture={panBackFromProfile}>
+          <View style={[styles.page, styles.darkPage]}>
+            <ProfileScreen user={user} onSignOut={onSignOut} />
+          </View>
+        </GestureDetector>
+
       </Animated.View>
     </View>
   );
@@ -79,15 +83,11 @@ export default function Scene({ user, onSignOut }) {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#0a0a0a', overflow: 'hidden' },
-  navHints: {
-    position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10,
-    flexDirection: 'row', justifyContent: 'space-between',
-    paddingHorizontal: 20, paddingTop: 8,
+  track: {
+    flex: 1,
+    flexDirection: 'row',
+    width: SCREEN_W * 3,
   },
-  navHint: { color: 'rgba(255,255,255,0.5)', fontSize: 20 },
-  appTitle: { color: '#fff', fontSize: 18, fontWeight: '800', letterSpacing: -0.5 },
-  sideScreen: {
-    position: 'absolute', top: 0, bottom: 0, width: SCREEN_W,
-    backgroundColor: '#0a0a0a',
-  },
+  page: { width: SCREEN_W, flex: 1 },
+  darkPage: { backgroundColor: '#0a0a0a' },
 });

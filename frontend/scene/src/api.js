@@ -100,6 +100,7 @@ export const users = {
   hostedEvents: (params = {}) => request('GET', `/users/me/hosted-events?${qs(params)}`),
   myRsvps: (params = {}) => request('GET', `/users/me/rsvps?${qs(params)}`),
   getUser: (userId) => request('GET', `/users/${userId}`),
+  search: (q) => request('GET', `/users/search?q=${encodeURIComponent(q)}`),
   follow: (userId) => request('POST', `/users/${userId}/follow`),
   unfollow: (userId) => request('DELETE', `/users/${userId}/follow`),
   followers: (userId, params = {}) => request('GET', `/users/${userId}/followers?${qs(params)}`),
