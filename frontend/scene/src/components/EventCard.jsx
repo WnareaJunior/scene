@@ -8,6 +8,10 @@ export default function EventCard({ event, onRsvp }) {
       })
     : '';
 
+  const goingCount = parseInt(event.going_count ?? 0);
+  const isFull = event.capacity != null && goingCount >= event.capacity;
+  const spotsLeft = event.capacity != null ? event.capacity - goingCount : null;
+
   return (
     <View style={styles.card}>
       <View style={styles.cardHeader}>
@@ -18,10 +22,22 @@ export default function EventCard({ event, onRsvp }) {
       </View>
       <Text style={styles.cardMeta}>{date}{event.address ? ` · ${event.address}` : ''}</Text>
       <View style={styles.cardFooter}>
-        <Text style={styles.cardCount}>{event.going_count ?? 0} going</Text>
+        <View>
+          <Text style={styles.cardCount}>{goingCount} going</Text>
+          {isFull
+            ? <Text style={styles.capacityFull}>Full</Text>
+            : spotsLeft != null && spotsLeft <= 5
+              ? <Text style={styles.capacityLow}>{spotsLeft} spot{spotsLeft !== 1 ? 's' : ''} left</Text>
+              : null
+          }
+        </View>
         <View style={styles.rsvpBtns}>
-          <TouchableOpacity style={styles.rsvpBtn} onPress={() => onRsvp(event.id, 'going')}>
-            <Text style={styles.rsvpBtnText}>Going</Text>
+          <TouchableOpacity
+            style={[styles.rsvpBtn, isFull && styles.rsvpBtnDisabled]}
+            onPress={() => !isFull && onRsvp(event.id, 'going')}
+            disabled={isFull}
+          >
+            <Text style={[styles.rsvpBtnText, isFull && styles.rsvpBtnTextDisabled]}>Going</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.rsvpBtn, styles.rsvpBtnInterested]}
@@ -55,4 +71,8 @@ const styles = StyleSheet.create({
   rsvpBtnInterested: { backgroundColor: 'transparent', borderWidth: 1, borderColor: '#a855f7' },
   rsvpBtnText: { color: '#fff', fontSize: 13, fontWeight: '600' },
   rsvpBtnTextInterested: { color: '#a855f7' },
+  rsvpBtnDisabled: { backgroundColor: '#333' },
+  rsvpBtnTextDisabled: { color: '#666' },
+  capacityFull: { color: '#ef4444', fontSize: 12, fontWeight: '600', marginTop: 2 },
+  capacityLow: { color: '#f97316', fontSize: 12, fontWeight: '600', marginTop: 2 },
 });

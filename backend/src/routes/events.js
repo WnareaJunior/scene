@@ -152,6 +152,19 @@ router.get('/', requireAuth, async (req, res, next) => {
     const offset = (pageNum - 1) * limitNum;
     params.push(limitNum, offset);
 
+    // relevance sort when a center point is available, otherwise chronological
+    let orderBy;
+    if (lat && lng) {
+      orderBy = `(
+        0.6 / (1 + ST_Distance(e.location::geography,
+          ST_SetSRID(ST_MakePoint(${parseFloat(lng)}, ${parseFloat(lat)}), 4326)::geography) / 1000.0)
+        +
+        0.4 / (1 + EXTRACT(EPOCH FROM (e.start_time - now())) / 3600.0)
+      ) DESC`;
+    } else {
+      orderBy = `e.start_time ASC`;
+    }
+
     const { rows } = await db.query(
       `SELECT e.id, e.title, e.description, e.latitude, e.longitude, e.address,
               e.start_time, e.end_time, e.capacity, e.hashtags, e.show_attendees, e.host_id,
@@ -161,7 +174,7 @@ router.get('/', requireAuth, async (req, res, next) => {
        FROM events e
        JOIN users u ON u.id = e.host_id
        WHERE ${conditions.join(' AND ')}
-       ORDER BY e.start_time ASC
+       ORDER BY ${orderBy}
        LIMIT $${params.length - 1} OFFSET $${params.length}`,
       params
     );

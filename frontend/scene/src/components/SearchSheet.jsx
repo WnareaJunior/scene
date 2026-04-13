@@ -39,19 +39,28 @@ export default function SearchSheet({ slideX, screenW, viewport }) {
   const [loading, setLoading] = useState(false);
   const debounceRef           = useRef(null);
 
-  // load personalized feed on mount and whenever viewport settles
+  // load nearby public events on mount and whenever viewport settles
   const loadFeed = useCallback(async () => {
     setLoading(true);
     setMode('events');
     try {
-      const data = await events.feed({ limit: 20 });
+      const params = { limit: 20 };
+      if (viewport) {
+        const latD = viewport.latitudeDelta / 2;
+        const lngD = viewport.longitudeDelta / 2;
+        params.swLat = viewport.latitude - latD;
+        params.swLng = viewport.longitude - lngD;
+        params.neLat = viewport.latitude + latD;
+        params.neLng = viewport.longitude + lngD;
+      }
+      const data = await events.discover(params);
       setResults(Array.isArray(data) ? data : []);
     } catch {
       setResults([]);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [viewport]);
 
   useEffect(() => { loadFeed(); }, [viewport]);
 
