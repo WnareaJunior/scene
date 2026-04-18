@@ -1,0 +1,38 @@
+prompts:
+  - "Find events near {{location}} for someone interested in {{interests}}"
+  - "Search for events matching {{query}} in {{location}}"
+
+providers:
+  - id: ollama:llama3.2
+
+tests:
+  - description: "Event discovery - Brooklyn music"
+    vars:
+      location: "Brooklyn, NY"
+      interests: "live music"
+      query: "jazz"
+    assert:
+      - type: icontains
+        value: "event"
+      - type: icontains
+        value: "brooklyn"
+
+  - description: "Event discovery - Miami food"
+    vars:
+      location: "Miami, FL"
+      interests: "food festivals"
+      query: "food"
+    assert:
+      - type: icontains
+        value: "food"
+      - type: not-icontains
+        value: "I cannot"
+
+  - description: "Edge case - empty area"
+    vars:
+      location: "rural Montana"
+      interests: "anything"
+      query: "events"
+    assert:
+      - type: not-icontains
+        value: "error"
