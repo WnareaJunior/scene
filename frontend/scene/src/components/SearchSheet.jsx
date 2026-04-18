@@ -44,7 +44,7 @@ export default function SearchSheet({ slideX, screenW, viewport }) {
     setLoading(true);
     setMode('events');
     try {
-      const params = { limit: 20 };
+      const params = { limit: 20, startAfter: new Date().toISOString() };
       if (viewport) {
         const latD = viewport.latitudeDelta / 2;
         const lngD = viewport.longitudeDelta / 2;
@@ -87,7 +87,7 @@ export default function SearchSheet({ slideX, screenW, viewport }) {
           }
         } else {
           setMode('events');
-          const params = { hashtags: query.trim(), limit: 20 };
+          const params = { hashtags: query.trim(), limit: 20, startAfter: new Date().toISOString() };
           if (viewport) {
             const latD = viewport.latitudeDelta / 2;
             const lngD = viewport.longitudeDelta / 2;
