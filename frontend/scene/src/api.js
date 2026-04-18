@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const BASE_URL = 'http://localhost:3000/api/v1';
+const BASE_URL = 'https://scene-19ss.onrender.com/api/v1';
 
 // ── Token storage ─────────────────────────────────────────────────────────────
 
@@ -54,7 +54,7 @@ async function request(method, path, body, retry = true) {
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
 
-  if (res.status === 401 && retry) {
+  if (res.status === 401 && retry && !path.startsWith('/auth/')) {
     try {
       await refreshAccessToken();
       return request(method, path, body, false);
@@ -97,6 +97,20 @@ export const auth = {
 export const users = {
   me: () => request('GET', '/users/me'),
   update: (data) => request('PATCH', '/users/me', data),
+  uploadAvatar: async (imageUri) => {
+    const token = await AsyncStorage.getItem('accessToken');
+    const filename = imageUri.split('/').pop();
+    const match = /\.(\w+)$/.exec(filename);
+    const type = match ? `image/${match[1]}` : 'image/jpeg';
+    const formData = new FormData();
+    formData.append('avatar', { uri: imageUri, name: filename, type });
+    const res = await fetch(`${BASE_URL}/users/me/avatar`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+      body: formData,
+    });
+    return res.json();
+  },
   hostedEvents: (params = {}) => request('GET', `/users/me/hosted-events?${qs(params)}`),
   myRsvps: (params = {}) => request('GET', `/users/me/rsvps?${qs(params)}`),
   getUser: (userId) => request('GET', `/users/${userId}`),

@@ -16,7 +16,10 @@
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "Scene uses your location to show nearby events."
       },
-      "bundleIdentifier": "ios.scene"
+      "bundleIdentifier": "ios.scene",
+      "config": {
+        "googleMapsApiKey": "AIzaSyAUusXz2TICcD_bhRm8GeidpnEwrCLWpHk"
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -26,7 +29,12 @@
       "permissions": [
         "ACCESS_FINE_LOCATION"
       ],
-      "package": "android.scene"
+      "package": "android.scene",
+      "config": {
+        "googleMaps": {
+          "apiKey": "AIzaSyBsvBEJYdiM8_Vz5rekXANo1rn-zca6jxk"
+        }
+      }
     },
     "web": {
       "favicon": "./assets/favicon.png"

@@ -29,16 +29,23 @@ export default function Scene({ user, onSignOut }) {
       .failOffsetY([-20, 20])
       .onBegin(() => { startX.value = slideX.value; })
       .onUpdate((e) => {
-        const next = startX.value + e.translationX;
-        slideX.value = Math.max(-SCREEN_W * 2, Math.min(0, next));
+        const lo = onlyDirection === 'left'
+          ? Math.max(-SCREEN_W * 2, startX.value - SCREEN_W)
+          : startX.value;
+        const hi = onlyDirection === 'left'
+          ? startX.value
+          : Math.min(0, startX.value + SCREEN_W);
+        slideX.value = Math.max(lo, Math.min(hi, startX.value + e.translationX));
       })
       .onEnd((e) => {
-        const pages = [0, -SCREEN_W, -SCREEN_W * 2];
-        const projected = slideX.value + e.velocityX * 0.18;
-        const closest = pages.reduce((a, b) =>
-          Math.abs(a - projected) < Math.abs(b - projected) ? a : b
-        );
-        slideX.value = withSpring(closest, SPRING);
+        const didSwipe = Math.abs(e.translationX) > SCREEN_W * 0.25 || Math.abs(e.velocityX) > 300;
+        if (didSwipe) {
+          const dir = onlyDirection === 'left' ? -1 : 1;
+          const target = Math.max(-SCREEN_W * 2, Math.min(0, startX.value + dir * SCREEN_W));
+          slideX.value = withSpring(target, SPRING);
+        } else {
+          slideX.value = withSpring(startX.value, SPRING);
+        }
       });
   }
 
@@ -54,14 +61,15 @@ export default function Scene({ user, onSignOut }) {
       <Animated.View style={[styles.track, trackStyle]}>
 
         {/* page 0 — create */}
-        <GestureDetector gesture={panBackFromCreate}>
-          <View style={[styles.page, styles.darkPage]}>
-            <CreateScreen
-              viewport={viewport}
-              onCreated={() => { slideX.value = withSpring(-SCREEN_W, SPRING); }}
-            />
-          </View>
-        </GestureDetector>
+        <View style={[styles.page, styles.darkPage]}>
+          <CreateScreen
+            viewport={viewport}
+            onCreated={() => { slideX.value = withSpring(-SCREEN_W, SPRING); }}
+          />
+          <GestureDetector gesture={panBackFromCreate}>
+            <View style={styles.rightEdge} />
+          </GestureDetector>
+        </View>
 
         {/* page 1 — map + search sheet */}
         <View style={styles.page}>
@@ -90,4 +98,11 @@ const styles = StyleSheet.create({
   },
   page: { width: SCREEN_W, flex: 1 },
   darkPage: { backgroundColor: '#0a0a0a' },
+  rightEdge: {
+    position: 'absolute',
+    right: 0,
+    top: 0,
+    bottom: 0,
+    width: 28,
+  },
 });

@@ -140,12 +140,14 @@ export default function SearchSheet({ slideX, screenW, viewport }) {
       slideX.value = Math.max(lo, Math.min(hi, next));
     })
     .onEnd((e) => {
-      const pages = [0, -screenW, -screenW * 2];
-      const projected = slideX.value + e.velocityX * 0.18;
-      const closest = pages.reduce((a, b) =>
-        Math.abs(a - projected) < Math.abs(b - projected) ? a : b
-      );
-      slideX.value = withSpring(closest, SPRING_H);
+      const didSwipe = Math.abs(e.translationX) > screenW * 0.25 || Math.abs(e.velocityX) > 300;
+      if (didSwipe) {
+        const dir = e.translationX < 0 ? -1 : 1;
+        const target = Math.max(-screenW * 2, Math.min(0, startX.value + dir * screenW));
+        slideX.value = withSpring(target, SPRING_H);
+      } else {
+        slideX.value = withSpring(startX.value, SPRING_H);
+      }
     });
 
   const sheetStyle = useAnimatedStyle(() => ({ top: sheetY.value }));

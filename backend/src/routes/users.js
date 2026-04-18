@@ -1,6 +1,22 @@
 const router = require('express').Router();
 const db = require('../db');
 const requireAuth = require('../middleware/auth');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
+
+const uploadDir = path.join(__dirname, '../../uploads/avatars');
+fs.mkdirSync(uploadDir, { recursive: true });
+
+const upload = multer({
+  storage: multer.diskStorage({
+    destination: uploadDir,
+    filename: (req, file, cb) => {
+      cb(null, `${req.user.sub}-${Date.now()}${path.extname(file.originalname)}`);
+    },
+  }),
+  limits: { fileSize: 5 * 1024 * 1024 },
+});
 
 // GET /users/me
 router.get('/me', requireAuth, async (req, res, next) => {
@@ -38,6 +54,20 @@ router.patch('/me', requireAuth, async (req, res, next) => {
   } catch (err) {
     next(err);
   }
+});
+
+// POST /users/me/avatar
+router.post('/me/avatar', requireAuth, upload.single('avatar'), async (req, res, next) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+    const url = `/uploads/avatars/${req.file.filename}`;
+    const { rows } = await db.query(
+      `UPDATE users SET profile_picture = $1, updated_at = now() WHERE id = $2
+       RETURNING id, email, username, bio, profile_picture`,
+      [url, req.user.sub]
+    );
+    res.json(rows[0]);
+  } catch (err) { next(err); }
 });
 
 // GET /users/me/hosted-events

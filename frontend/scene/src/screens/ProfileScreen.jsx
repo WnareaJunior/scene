@@ -1,8 +1,26 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, FlatList } from 'react-native';
+import {
+  View,
+  Text,
+  Image,
+  ScrollView,
+  TouchableOpacity,
+  StyleSheet,
+  StatusBar,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import * as ImagePicker from 'expo-image-picker';
 
 import { users, auth, clearTokens } from '../api';
+
+// ============================================================================
+// Helpers
+// ============================================================================
+const formatCount = (n) => {
+  if (!n && n !== 0) return '0';
+  if (n >= 1000) return `${(n / 1000).toFixed(1).replace(/\.0$/, '')}k`;
+  return String(n);
+};
 
 function getEventState(event) {
   const now = Date.now();
@@ -13,41 +31,115 @@ function getEventState(event) {
   return 'past';
 }
 
-function formatEventDate(isoString) {
-  return new Date(isoString).toLocaleDateString('en-US', {
-    month: 'short', day: 'numeric',
-    hour: '2-digit', minute: '2-digit',
-  });
-}
+// ============================================================================
+// Subcomponents
+// ============================================================================
+const ProfileHeader = ({ profileData, onAvatarPress }) => (
+  <View style={styles.header}>
+    <TouchableOpacity onPress={onAvatarPress} activeOpacity={0.8} style={styles.avatarWrap}>
+      {profileData?.profile_picture ? (
+        <Image source={{ uri: profileData.profile_picture }} style={styles.avatar} />
+      ) : (
+        <View style={styles.avatarPlaceholder}>
+          <Text style={styles.avatarInitial}>
+            {profileData?.username?.[0]?.toUpperCase() ?? '?'}
+          </Text>
+        </View>
+      )}
+      <View style={styles.avatarEdit}>
+        <Text style={styles.avatarEditText}>+</Text>
+      </View>
+    </TouchableOpacity>
+
+    <View style={styles.headerInfo}>
+      <Text style={styles.name}>{profileData?.username}</Text>
+      {profileData?.bio ? (
+        <Text style={styles.bio}>{profileData.bio}</Text>
+      ) : (
+        <Text style={styles.bio}>{profileData?.email}</Text>
+      )}
+      <View style={styles.statsRow}>
+        <Text style={styles.statText}>
+          <Text style={styles.statNumber}>{formatCount(profileData?.following_count)}</Text> Following
+        </Text>
+        <Text style={styles.statText}>
+          <Text style={styles.statNumber}>{formatCount(profileData?.followers_count)}</Text> Followers
+        </Text>
+      </View>
+    </View>
+  </View>
+);
+
+const StatusBadge = ({ status }) => {
+  if (!status) return null;
+  const isHosting = status === 'hosting';
+  return (
+    <View style={[styles.badge, isHosting ? styles.badgeHosting : styles.badgeGoing]}>
+      <Text style={[styles.badgeText, isHosting ? styles.badgeTextHosting : styles.badgeTextGoing]}>
+        {isHosting ? 'Hosting' : 'Going'}
+      </Text>
+    </View>
+  );
+};
 
 const STATE_COLORS = { live: '#22c55e', upcoming: '#a855f7', past: '#555' };
 const STATE_LABELS = { live: 'Live', upcoming: 'Upcoming', past: 'Past' };
 
-function EventRow({ item }) {
-  const state = getEventState(item);
+const EventCard = ({ event, profileData }) => {
+  const state = getEventState(event);
+  const status = event.source === 'hosting' ? 'hosting' : 'going';
+  const formattedDate = new Date(event.start_time).toLocaleDateString('en-US', {
+    month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
+  });
+
   return (
-    <View style={styles.eventRow}>
-      <View style={styles.eventRowLeft}>
-        <Text style={styles.eventRowTitle} numberOfLines={1}>{item.title}</Text>
-        <Text style={styles.eventRowMeta}>
-          {formatEventDate(item.start_time)}
-          {item.address ? ` · ${item.address}` : ''}
-        </Text>
+    <View style={styles.eventCard}>
+      {/* Host row */}
+      <View style={styles.hostRow}>
+        <View style={styles.hostInfo}>
+          {profileData?.profile_picture ? (
+            <Image source={{ uri: profileData.profile_picture }} style={styles.hostAvatar} />
+          ) : (
+            <View style={[styles.hostAvatar, styles.hostAvatarPlaceholder]}>
+              <Text style={styles.hostAvatarInitial}>
+                {profileData?.username?.[0]?.toUpperCase() ?? '?'}
+              </Text>
+            </View>
+          )}
+          <Text style={styles.hostName}>{profileData?.username}</Text>
+        </View>
+        <StatusBadge status={status} />
       </View>
-      <View style={styles.eventRowRight}>
-        {item.source === 'hosting' && (
-          <Text style={styles.hostingLabel}>Hosting</Text>
+
+      {/* Event image + details */}
+      <View>
+        {event.image_url ? (
+          <Image source={{ uri: event.image_url }} style={styles.eventImage} />
+        ) : (
+          <View style={styles.eventImagePlaceholder}>
+            <Text style={styles.eventImagePlaceholderText}>{event.title?.[0] ?? '?'}</Text>
+          </View>
         )}
-        <View style={[styles.badge, { borderColor: STATE_COLORS[state] }]}>
-          <Text style={[styles.badgeText, { color: STATE_COLORS[state] }]}>
-            {STATE_LABELS[state]}
+        <View style={styles.eventDetails}>
+          <Text style={styles.eventTitle}>{event.title}</Text>
+          <Text style={styles.eventLocation}>
+            {event.address ?? formattedDate}
+            {event.address ? `  ·  ${formattedDate}` : ''}
           </Text>
+          <View style={[styles.statePill, { borderColor: STATE_COLORS[state] }]}>
+            <Text style={[styles.statePillText, { color: STATE_COLORS[state] }]}>
+              {STATE_LABELS[state]}
+            </Text>
+          </View>
         </View>
       </View>
     </View>
   );
-}
+};
 
+// ============================================================================
+// Main screen
+// ============================================================================
 export default function ProfileScreen({ user, onSignOut }) {
   const [profileData, setProfileData] = useState(user);
   const [feed, setFeed] = useState([]);
@@ -68,6 +160,20 @@ export default function ProfileScreen({ user, onSignOut }) {
       .catch(() => {});
   }, []);
 
+  async function handlePickAvatar() {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') return;
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.7,
+    });
+    if (result.canceled) return;
+    const updated = await users.uploadAvatar(result.assets[0].uri);
+    if (updated?.id) setProfileData((prev) => ({ ...prev, profile_picture: updated.profile_picture }));
+  }
+
   async function handleSignOut() {
     await auth.logout();
     await clearTokens();
@@ -75,76 +181,228 @@ export default function ProfileScreen({ user, onSignOut }) {
   }
 
   return (
-    <SafeAreaView style={styles.safeContent}>
-      <FlatList
-        data={feed}
-        keyExtractor={(item) => item.id}
-        renderItem={({ item }) => <EventRow item={item} />}
-        ListHeaderComponent={
-          <>
-            <Text style={styles.screenTitle}>profile</Text>
-            <View style={styles.profileCard}>
-              <Text style={styles.profileName}>{profileData?.username}</Text>
-              <Text style={styles.profileEmail}>{profileData?.email}</Text>
-              {profileData?.bio ? <Text style={styles.profileBio}>{profileData.bio}</Text> : null}
-              <View style={styles.profileStats}>
-                <View style={styles.stat}>
-                  <Text style={styles.statNum}>{profileData?.followers_count ?? 0}</Text>
-                  <Text style={styles.statLabel}>followers</Text>
-                </View>
-                <View style={styles.stat}>
-                  <Text style={styles.statNum}>{profileData?.following_count ?? 0}</Text>
-                  <Text style={styles.statLabel}>following</Text>
-                </View>
-              </View>
-            </View>
-            <TouchableOpacity style={styles.signOutBtn} onPress={handleSignOut}>
-              <Text style={styles.signOutText}>Sign out</Text>
-            </TouchableOpacity>
-            {feed.length > 0 && <Text style={styles.feedTitle}>your events</Text>}
-          </>
-        }
-        ListEmptyComponent={<Text style={styles.feedEmpty}>No events yet</Text>}
-        contentContainerStyle={styles.listContent}
+    <SafeAreaView style={styles.container}>
+      <StatusBar barStyle="light-content" backgroundColor="#000" />
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
-      />
+      >
+        <ProfileHeader profileData={profileData} onAvatarPress={handlePickAvatar} />
+
+        <TouchableOpacity style={styles.signOutBtn} onPress={handleSignOut}>
+          <Text style={styles.signOutText}>Sign out</Text>
+        </TouchableOpacity>
+
+        <View style={styles.divider} />
+
+        {feed.length === 0 ? (
+          <Text style={styles.feedEmpty}>No events yet</Text>
+        ) : (
+          feed.map((event, idx) => (
+            <React.Fragment key={event.id}>
+              <EventCard event={event} profileData={profileData} />
+              {idx < feed.length - 1 && <View style={styles.divider} />}
+            </React.Fragment>
+          ))
+        )}
+      </ScrollView>
     </SafeAreaView>
   );
 }
 
+// ============================================================================
+// Styles
+// ============================================================================
+const COLORS = {
+  bg: '#000',
+  text: '#fff',
+  textMuted: '#8e8e93',
+  divider: '#1c1c1e',
+  badgeGoing: '#2c2c2e',
+  badgeHosting: '#fff',
+};
+
 const styles = StyleSheet.create({
-  safeContent: { flex: 1 },
-  listContent: { paddingHorizontal: 24, paddingBottom: 40 },
-  screenTitle: { color: '#fff', fontSize: 28, fontWeight: '800', marginBottom: 20, marginTop: 16 },
-  profileCard: {
-    backgroundColor: '#1a1a1a', borderRadius: 16,
-    padding: 20, borderWidth: 1, borderColor: '#2a2a2a',
+  container: { flex: 1, backgroundColor: COLORS.bg },
+  scrollContent: { paddingBottom: 40 },
+
+  // Header
+  header: {
+    flexDirection: 'row',
+    padding: 16,
+    paddingTop: 20,
   },
-  profileName: { color: '#fff', fontSize: 22, fontWeight: '700', marginBottom: 4 },
-  profileEmail: { color: '#666', fontSize: 14, marginBottom: 10 },
-  profileBio: { color: '#aaa', fontSize: 15, marginBottom: 16 },
-  profileStats: { flexDirection: 'row', gap: 24 },
-  stat: { alignItems: 'center' },
-  statNum: { color: '#fff', fontSize: 20, fontWeight: '700' },
-  statLabel: { color: '#555', fontSize: 12 },
+  avatarWrap: { marginBottom: 0 },
+  avatar: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: '#333',
+  },
+  avatarPlaceholder: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: '#2a1a3e',
+    borderWidth: 2,
+    borderColor: '#a855f7',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarInitial: { color: '#a855f7', fontSize: 28, fontWeight: '700' },
+  avatarEdit: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: '#a855f7',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarEditText: { color: '#fff', fontSize: 14, fontWeight: '700', lineHeight: 18 },
+  headerInfo: {
+    flex: 1,
+    marginLeft: 14,
+  },
+  name: {
+    color: COLORS.text,
+    fontSize: 22,
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  bio: {
+    color: COLORS.textMuted,
+    fontSize: 14,
+    lineHeight: 19,
+    marginBottom: 10,
+  },
+  statsRow: {
+    flexDirection: 'row',
+    gap: 20,
+    marginTop: 4,
+  },
+  statText: {
+    color: COLORS.textMuted,
+    fontSize: 14,
+  },
+  statNumber: {
+    color: COLORS.text,
+    fontWeight: '700',
+  },
+
+  // Sign out
   signOutBtn: {
-    marginTop: 12, backgroundColor: '#1a1a1a',
-    borderRadius: 12, padding: 14, alignItems: 'center',
-    borderWidth: 1, borderColor: '#2a2a2a',
+    marginHorizontal: 16,
+    marginBottom: 16,
+    backgroundColor: '#1a1a1a',
+    borderRadius: 12,
+    padding: 14,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#2a2a2a',
   },
   signOutText: { color: '#ef4444', fontWeight: '600' },
-  feedTitle: { color: '#fff', fontSize: 18, fontWeight: '700', marginTop: 28, marginBottom: 12 },
-  feedEmpty: { color: '#444', textAlign: 'center', marginTop: 32 },
-  eventRow: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    backgroundColor: '#1a1a1a', borderRadius: 12, padding: 14, marginBottom: 8,
-    borderWidth: 1, borderColor: '#2a2a2a',
+
+  // Divider
+  divider: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: COLORS.divider,
+    marginVertical: 12,
   },
-  eventRowLeft: { flex: 1, marginRight: 12 },
-  eventRowTitle: { color: '#fff', fontSize: 15, fontWeight: '600', marginBottom: 3 },
-  eventRowMeta: { color: '#555', fontSize: 12 },
-  eventRowRight: { alignItems: 'flex-end', gap: 4 },
-  hostingLabel: { color: '#a855f7', fontSize: 11, fontWeight: '600' },
-  badge: { borderWidth: 1, borderRadius: 6, paddingHorizontal: 7, paddingVertical: 2 },
-  badgeText: { fontSize: 11, fontWeight: '600' },
+
+  // Empty state
+  feedEmpty: {
+    color: '#444',
+    textAlign: 'center',
+    marginTop: 32,
+  },
+
+  // Event card
+  eventCard: { paddingHorizontal: 16 },
+  hostRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  hostInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  hostAvatar: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#333',
+    marginRight: 10,
+  },
+  hostAvatarPlaceholder: {
+    backgroundColor: '#2a1a3e',
+    borderWidth: 1,
+    borderColor: '#a855f7',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  hostAvatarInitial: { color: '#a855f7', fontSize: 13, fontWeight: '700' },
+  hostName: {
+    color: COLORS.text,
+    fontSize: 15,
+    fontWeight: '600',
+  },
+
+  // Status badges
+  badge: {
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 6,
+  },
+  badgeHosting: { backgroundColor: COLORS.badgeHosting },
+  badgeGoing: { backgroundColor: COLORS.badgeGoing },
+  badgeText: { fontSize: 13, fontWeight: '600' },
+  badgeTextHosting: { color: '#000' },
+  badgeTextGoing: { color: COLORS.text },
+
+  // Event image + details
+  eventImage: {
+    width: '100%',
+    aspectRatio: 16 / 10,
+    borderRadius: 12,
+    backgroundColor: '#222',
+  },
+  eventImagePlaceholder: {
+    width: '100%',
+    aspectRatio: 16 / 10,
+    borderRadius: 12,
+    backgroundColor: '#1c1c1e',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  eventImagePlaceholderText: {
+    color: '#555',
+    fontSize: 40,
+    fontWeight: '700',
+  },
+  eventDetails: { paddingTop: 12 },
+  eventTitle: {
+    color: COLORS.text,
+    fontSize: 17,
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  eventLocation: {
+    color: COLORS.textMuted,
+    fontSize: 14,
+    marginBottom: 10,
+  },
+  statePill: {
+    alignSelf: 'flex-start',
+    borderWidth: 1,
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  statePillText: { fontSize: 12, fontWeight: '600' },
 });

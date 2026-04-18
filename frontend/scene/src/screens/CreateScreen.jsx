@@ -1,11 +1,16 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, TextInput,
   Alert, ActivityIndicator, Modal, ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import MapView from 'react-native-maps';
+import { GooglePlacesAutocomplete } from 'react-native-google-places-autocomplete';
+import * as Location from 'expo-location';
 
 import { events } from '../api';
+
+const GOOGLE_MAPS_API_KEY = 'AIzaSyBsvBEJYdiM8_Vz5rekXANo1rn-zca6jxk';
 
 function roundUpTo15(date) {
   const ms = 15 * 60 * 1000;
@@ -114,8 +119,47 @@ export default function CreateScreen({ viewport, onCreated }) {
   const [hashtags, setHashtags] = useState([]);
   const [tagInput, setTagInput] = useState('');
   const [showPicker, setShowPicker] = useState(false);
-
   const [creating, setCreating] = useState(false);
+  const [selectedLocation, setSelectedLocation] = useState(null);
+
+  const mapRef = useRef(null);
+  const placesRef = useRef(null);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status !== 'granted') return;
+        const pos = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.Balanced,
+        });
+        const coords = {
+          latitude: pos.coords.latitude,
+          longitude: pos.coords.longitude,
+        };
+        setSelectedLocation((prev) => prev ?? coords);
+        mapRef.current?.animateToRegion({
+          ...coords,
+          latitudeDelta: 0.01,
+          longitudeDelta: 0.01,
+        }, 600);
+      } catch {}
+    })();
+  }, []);
+
+  const initialRegion = (() => {
+    const center = selectedLocation ?? viewport;
+    if (!center) return {
+      latitude: 40.7128, longitude: -74.006,
+      latitudeDelta: 0.01, longitudeDelta: 0.01,
+    };
+    return {
+      latitude: center.latitude,
+      longitude: center.longitude,
+      latitudeDelta: 0.01,
+      longitudeDelta: 0.01,
+    };
+  })();
 
   function setField(key, value) {
     setForm((f) => ({ ...f, [key]: value }));
@@ -137,8 +181,9 @@ export default function CreateScreen({ viewport, onCreated }) {
       Alert.alert('Missing fields', 'Title and start time are required.');
       return;
     }
-    if (!viewport) {
-      Alert.alert('Location needed', 'Pan the map to set event location.');
+    const locationToSubmit = selectedLocation ?? viewport;
+    if (!locationToSubmit) {
+      Alert.alert('Location needed', 'Search an address or pan the map to set event location.');
       return;
     }
     setCreating(true);
@@ -147,8 +192,8 @@ export default function CreateScreen({ viewport, onCreated }) {
         title: form.title,
         address: form.address,
         startTime: form.startTime.toISOString(),
-        latitude: viewport.latitude,
-        longitude: viewport.longitude,
+        latitude: locationToSubmit.latitude,
+        longitude: locationToSubmit.longitude,
         capacity: form.capacity ? parseInt(form.capacity) : undefined,
         hashtags,
       });
@@ -157,6 +202,8 @@ export default function CreateScreen({ viewport, onCreated }) {
         setForm({ title: '', address: '', startTime: null, capacity: '' });
         setHashtags([]);
         setTagInput('');
+        setSelectedLocation(null);
+        placesRef.current?.setAddressText('');
         onCreated();
       } else {
         Alert.alert('Error', data?.error || 'Could not create event.');
@@ -169,81 +216,146 @@ export default function CreateScreen({ viewport, onCreated }) {
 
   return (
     <SafeAreaView style={styles.safeContent}>
-      <Text style={styles.screenTitle}>create event</Text>
-      <Text style={styles.createHint}>Location: map center</Text>
-
-      <TextInput
-        style={styles.input} placeholder="title" placeholderTextColor="#555"
-        value={form.title} onChangeText={(v) => setField('title', v)}
-      />
-      <TextInput
-        style={styles.input} placeholder="address (display only)" placeholderTextColor="#555"
-        value={form.address} onChangeText={(v) => setField('address', v)}
-      />
-
-      {/* Start time picker */}
-      <TouchableOpacity
-        style={styles.input}
-        onPress={() => setShowPicker(true)}
-        activeOpacity={0.7}
+      <ScrollView
+        keyboardShouldPersistTaps="always"
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
       >
-        <Text style={form.startTime ? styles.inputText : styles.inputPlaceholder}>
-          {form.startTime ? formatDate(form.startTime) : 'start time'}
-        </Text>
-      </TouchableOpacity>
-      <DatePickerModal
-        visible={showPicker}
-        initial={form.startTime}
-        onConfirm={(date) => { setField('startTime', date); setShowPicker(false); }}
-        onCancel={() => setShowPicker(false)}
-      />
+        <Text style={styles.screenTitle}>create event</Text>
 
-      <TextInput
-        style={styles.input} placeholder="capacity (optional)" placeholderTextColor="#555"
-        keyboardType="number-pad"
-        value={form.capacity} onChangeText={(v) => setField('capacity', v)}
-      />
+        <TextInput
+          style={styles.input} placeholder="title" placeholderTextColor="#555"
+          value={form.title} onChangeText={(v) => setField('title', v)}
+        />
 
-      {/* Tags input */}
-      <TextInput
-        style={styles.input}
-        placeholder={hashtags.length >= 5 ? 'max 5 tags' : 'add tag (e.g. music)'}
-        placeholderTextColor="#555"
-        autoCapitalize="none"
-        autoCorrect={false}
-        returnKeyType="done"
-        value={tagInput}
-        onChangeText={setTagInput}
-        onSubmitEditing={addTag}
-        editable={hashtags.length < 5}
-      />
-      {hashtags.length > 0 && (
-        <View style={styles.chipsRow}>
-          {hashtags.map((tag) => (
-            <View key={tag} style={styles.chip}>
-              <Text style={styles.chipText}>#{tag}</Text>
-              <TouchableOpacity onPress={() => removeTag(tag)} hitSlop={8}>
-                <Text style={styles.chipRemove}>×</Text>
-              </TouchableOpacity>
-            </View>
-          ))}
+        {/* Address autocomplete */}
+        <View style={styles.autocompleteContainer}>
+          <GooglePlacesAutocomplete
+            ref={placesRef}
+            placeholder="address"
+            fetchDetails
+            onPress={(data, details) => {
+              const lat = details?.geometry?.location?.lat;
+              const lng = details?.geometry?.location?.lng;
+              if (lat && lng) {
+                const coords = { latitude: lat, longitude: lng };
+                setSelectedLocation(coords);
+                setField('address', data.description);
+                mapRef.current?.animateToRegion({
+                  ...coords,
+                  latitudeDelta: 0.005,
+                  longitudeDelta: 0.005,
+                }, 600);
+              }
+            }}
+            query={{ key: GOOGLE_MAPS_API_KEY, language: 'en' }}
+            styles={{
+              textInputContainer: styles.placesInputContainer,
+              textInput: styles.placesInput,
+              listView: styles.placesList,
+              row: styles.placesRow,
+              description: styles.placesDescription,
+              separator: styles.placesSeparator,
+              poweredContainer: { display: 'none' },
+            }}
+            enablePoweredByContainer={false}
+            minLength={2}
+            debounce={300}
+            textInputProps={{ placeholderTextColor: '#555' }}
+          />
         </View>
-      )}
 
-      <TouchableOpacity style={styles.createBtn} onPress={handleSubmit} disabled={creating}>
-        {creating
-          ? <ActivityIndicator color="#fff" />
-          : <Text style={styles.createBtnText}>Post event</Text>
-        }
-      </TouchableOpacity>
+        {/* Embedded location map */}
+        <View style={styles.mapContainer}>
+          <MapView
+            ref={mapRef}
+            style={StyleSheet.absoluteFill}
+            customMapStyle={darkMapStyle}
+            initialRegion={initialRegion}
+            onRegionChangeComplete={(region) => {
+              setSelectedLocation({
+                latitude: region.latitude,
+                longitude: region.longitude,
+              });
+            }}
+            showsUserLocation
+            showsMyLocationButton={false}
+            scrollEnabled
+            zoomEnabled
+          />
+          {/* Crosshair overlay */}
+          <View style={styles.crosshairOuter} pointerEvents="none">
+            <View style={styles.crosshairH} />
+            <View style={styles.crosshairV} />
+            <View style={styles.crosshairDot} />
+          </View>
+        </View>
+
+        {/* Start time picker */}
+        <TouchableOpacity
+          style={styles.input}
+          onPress={() => setShowPicker(true)}
+          activeOpacity={0.7}
+        >
+          <Text style={form.startTime ? styles.inputText : styles.inputPlaceholder}>
+            {form.startTime ? formatDate(form.startTime) : 'start time'}
+          </Text>
+        </TouchableOpacity>
+        <DatePickerModal
+          visible={showPicker}
+          initial={form.startTime}
+          onConfirm={(date) => { setField('startTime', date); setShowPicker(false); }}
+          onCancel={() => setShowPicker(false)}
+        />
+
+        <TextInput
+          style={styles.input} placeholder="capacity (optional)" placeholderTextColor="#555"
+          keyboardType="number-pad"
+          value={form.capacity} onChangeText={(v) => setField('capacity', v)}
+        />
+
+        {/* Tags input */}
+        <TextInput
+          style={styles.input}
+          placeholder={hashtags.length >= 5 ? 'max 5 tags' : 'add tag (e.g. music)'}
+          placeholderTextColor="#555"
+          autoCapitalize="none"
+          autoCorrect={false}
+          returnKeyType="done"
+          value={tagInput}
+          onChangeText={setTagInput}
+          onSubmitEditing={addTag}
+          editable={hashtags.length < 5}
+        />
+        {hashtags.length > 0 && (
+          <View style={styles.chipsRow}>
+            {hashtags.map((tag) => (
+              <View key={tag} style={styles.chip}>
+                <Text style={styles.chipText}>#{tag}</Text>
+                <TouchableOpacity onPress={() => removeTag(tag)} hitSlop={8}>
+                  <Text style={styles.chipRemove}>×</Text>
+                </TouchableOpacity>
+              </View>
+            ))}
+          </View>
+        )}
+
+        <TouchableOpacity style={styles.createBtn} onPress={handleSubmit} disabled={creating}>
+          {creating
+            ? <ActivityIndicator color="#fff" />
+            : <Text style={styles.createBtnText}>Post event</Text>
+          }
+        </TouchableOpacity>
+      </ScrollView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  safeContent: { flex: 1, paddingHorizontal: 24 },
+  safeContent: { flex: 1 },
+  scrollContent: { paddingHorizontal: 24, paddingBottom: 40 },
   screenTitle: { color: '#fff', fontSize: 28, fontWeight: '800', marginBottom: 20, marginTop: 16 },
-  createHint: { color: '#555', fontSize: 13, marginBottom: 16, marginTop: -8 },
+
   input: {
     backgroundColor: '#1a1a1a', borderRadius: 10,
     padding: 13, fontSize: 15, marginBottom: 10,
@@ -252,6 +364,77 @@ const styles = StyleSheet.create({
   },
   inputText: { color: '#fff', fontSize: 15 },
   inputPlaceholder: { color: '#555', fontSize: 15 },
+
+  autocompleteContainer: {
+    zIndex: 10,
+    elevation: 10,
+    marginBottom: 10,
+  },
+  placesInputContainer: {
+    backgroundColor: 'transparent',
+    borderTopWidth: 0,
+    borderBottomWidth: 0,
+  },
+  placesInput: {
+    backgroundColor: '#1a1a1a',
+    borderRadius: 10,
+    fontSize: 15,
+    borderWidth: 1,
+    borderColor: '#2a2a2a',
+    color: '#fff',
+    height: 48,
+    paddingHorizontal: 13,
+  },
+  placesList: {
+    backgroundColor: '#1a1a1a',
+    borderWidth: 1,
+    borderColor: '#2a2a2a',
+    borderRadius: 10,
+    marginTop: 2,
+  },
+  placesRow: {
+    backgroundColor: '#1a1a1a',
+    paddingVertical: 12,
+    paddingHorizontal: 13,
+  },
+  placesDescription: { color: '#ccc', fontSize: 14 },
+  placesSeparator: { backgroundColor: '#2a2a2a', height: 1 },
+
+  mapContainer: {
+    height: 200,
+    borderRadius: 12,
+    overflow: 'hidden',
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: '#2a2a2a',
+    zIndex: 1,
+    elevation: 1,
+  },
+  crosshairOuter: {
+    position: 'absolute',
+    top: 0, left: 0, right: 0, bottom: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  crosshairH: {
+    position: 'absolute',
+    width: 20,
+    height: 1.5,
+    backgroundColor: '#a855f7',
+  },
+  crosshairV: {
+    position: 'absolute',
+    width: 1.5,
+    height: 20,
+    backgroundColor: '#a855f7',
+  },
+  crosshairDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: '#a855f7',
+  },
+
   chipsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 10, marginTop: -2 },
   chip: {
     flexDirection: 'row', alignItems: 'center', gap: 5,
@@ -261,6 +444,7 @@ const styles = StyleSheet.create({
   },
   chipText: { color: '#a855f7', fontSize: 13, fontWeight: '600' },
   chipRemove: { color: '#a855f7', fontSize: 16, lineHeight: 18 },
+
   createBtn: {
     backgroundColor: '#a855f7', borderRadius: 10,
     padding: 15, alignItems: 'center', marginTop: 8,
@@ -309,3 +493,14 @@ const ps = StyleSheet.create({
   },
   confirmText: { color: '#fff', fontWeight: '700' },
 });
+
+const darkMapStyle = [
+  { elementType: 'geometry', stylers: [{ color: '#0a0a0a' }] },
+  { elementType: 'labels.text.fill', stylers: [{ color: '#444' }] },
+  { elementType: 'labels.text.stroke', stylers: [{ color: '#0a0a0a' }] },
+  { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#1a1a1a' }] },
+  { featureType: 'road', elementType: 'geometry.stroke', stylers: [{ color: '#111' }] },
+  { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#050505' }] },
+  { featureType: 'poi', stylers: [{ visibility: 'off' }] },
+  { featureType: 'transit', stylers: [{ visibility: 'off' }] },
+];
