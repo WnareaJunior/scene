@@ -8,9 +8,12 @@ import MapView from 'react-native-maps';
 import { GooglePlacesAutocomplete } from 'react-native-google-places-autocomplete';
 import * as Location from 'expo-location';
 
+import Constants from 'expo-constants';
+
 import { events } from '../api';
 
-const GOOGLE_MAPS_API_KEY = 'AIzaSyBsvBEJYdiM8_Vz5rekXANo1rn-zca6jxk';
+const GOOGLE_MAPS_API_KEY =
+  Constants.expoConfig?.android?.config?.googleMaps?.apiKey ?? '';
 
 function roundUpTo15(date) {
   const ms = 15 * 60 * 1000;
