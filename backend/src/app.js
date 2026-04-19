@@ -20,8 +20,10 @@ app.use('/api/v1/events', eventRoutes);
 app.use('/api/v1/map', mapRoutes);
 
 app.use((err, req, res, next) => {
-  console.error(err);
-  res.status(err.status || 500).json({ error: err.message || 'Internal server error' });
+  console.error(err.message, err.stack);
+  const status = err.status || 500;
+  const message = status < 500 ? err.message : 'Internal server error';
+  res.status(status).json({ error: message });
 });
 
 module.exports = app;
