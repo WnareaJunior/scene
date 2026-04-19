@@ -1,9 +1,17 @@
 const router = require('express').Router();
 const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
 const { v4: uuidv4 } = require('uuid');
 const db = require('../db');
 const requireAuth = require('../middleware/auth');
+
+// NOTE: The `token` column in refresh_tokens should be VARCHAR(64) or CHAR(64)
+// to store SHA-256 hex digests (64 chars) rather than full JWT strings.
+// Migration required: ALTER TABLE refresh_tokens ALTER COLUMN token TYPE VARCHAR(64);
+function hashToken(token) {
+  return crypto.createHash('sha256').update(token).digest('hex');
+}
 
 function signAccess(userId) {
   return jwt.sign({ sub: userId }, process.env.JWT_SECRET, {
@@ -39,7 +47,7 @@ router.post('/register', async (req, res, next) => {
     const decoded = jwt.decode(refreshToken);
     await db.query(
       `INSERT INTO refresh_tokens (user_id, token, expires_at) VALUES ($1, $2, to_timestamp($3))`,
-      [user.id, refreshToken, decoded.exp]
+      [user.id, hashToken(refreshToken), decoded.exp]
     );
 
     res.status(201).json({ accessToken, refreshToken, user });
@@ -70,7 +78,7 @@ router.post('/login', async (req, res, next) => {
     const decoded = jwt.decode(refreshToken);
     await db.query(
       `INSERT INTO refresh_tokens (user_id, token, expires_at) VALUES ($1, $2, to_timestamp($3))`,
-      [user.id, refreshToken, decoded.exp]
+      [user.id, hashToken(refreshToken), decoded.exp]
     );
 
     const { password_hash, ...safeUser } = user;
@@ -95,7 +103,7 @@ router.post('/refresh', async (req, res, next) => {
 
     const { rows } = await db.query(
       `SELECT id FROM refresh_tokens WHERE token = $1 AND expires_at > now()`,
-      [refreshToken]
+      [hashToken(refreshToken)]
     );
     if (!rows.length) return res.status(401).json({ error: 'Token revoked or expired' });
 
@@ -111,7 +119,10 @@ router.post('/logout', requireAuth, async (req, res, next) => {
   try {
     const { refreshToken } = req.body;
     if (refreshToken) {
-      await db.query(`DELETE FROM refresh_tokens WHERE token = $1`, [refreshToken]);
+      await db.query(
+        `DELETE FROM refresh_tokens WHERE token = $1 AND user_id = $2`,
+        [hashToken(refreshToken), req.user.id]
+      );
     }
     res.status(204).end();
   } catch (err) {
