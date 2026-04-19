@@ -188,7 +188,9 @@ router.get('/', requireAuth, async (req, res, next) => {
 router.get('/:eventId', requireAuth, async (req, res, next) => {
   try {
     const { rows } = await db.query(
-      `SELECT e.*,
+      `SELECT e.id, e.title, e.description, e.latitude, e.longitude, e.address,
+              e.start_time, e.end_time, e.capacity, e.hashtags, e.is_private, e.show_attendees, e.status,
+              e.host_id,
               (SELECT count(*) FROM rsvps WHERE event_id = e.id AND status = 'going') AS going_count,
               (SELECT count(*) FROM rsvps WHERE event_id = e.id AND status = 'interested') AS interested_count,
               u.username AS host_username, u.profile_picture AS host_picture
@@ -198,7 +200,17 @@ router.get('/:eventId', requireAuth, async (req, res, next) => {
       [req.params.eventId]
     );
     if (!rows.length) return res.status(404).json({ error: 'Event not found' });
-    res.json(rows[0]);
+
+    const event = rows[0];
+    if (event.is_private && event.host_id !== req.user.sub) {
+      const { rows: rsvpRows } = await db.query(
+        `SELECT 1 FROM rsvps WHERE event_id = $1 AND user_id = $2 AND status = 'going'`,
+        [event.id, req.user.sub]
+      );
+      if (!rsvpRows.length) return res.status(404).json({ error: 'Event not found' });
+    }
+
+    res.json(event);
   } catch (err) {
     next(err);
   }
