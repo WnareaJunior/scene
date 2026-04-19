@@ -18,7 +18,6 @@ export default function App() {
   }, []);
   
   async function bootstrap() {
-    await AsyncStorage.multiRemove(['accessToken', 'refreshToken']);
     try {
       const token = await AsyncStorage.getItem('accessToken');
       if (token) {
