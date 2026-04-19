@@ -118,6 +118,29 @@ router.get('/me/rsvps', requireAuth, async (req, res, next) => {
   }
 });
 
+// GET /users/search?q=
+// TODO: also filter on display_name once migration adds that column
+router.get('/search', requireAuth, async (req, res, next) => {
+  try {
+    const q = (req.query.q || '').trim();
+    if (!q) return res.json([]);
+    const limit = Math.min(parseInt(req.query.limit, 10) || 20, 100);
+    const offset = parseInt(req.query.offset, 10) || 0;
+    const { rows } = await db.query(
+      `SELECT id, username, profile_picture
+       FROM users
+       WHERE username ILIKE $1
+         AND id != $2
+       ORDER BY username
+       LIMIT $3 OFFSET $4`,
+      [`%${q}%`, req.user.sub, limit, offset]
+    );
+    res.json(rows);
+  } catch (err) {
+    next(err);
+  }
+});
+
 // GET /users/:userId
 router.get('/:userId', requireAuth, async (req, res, next) => {
   try {
