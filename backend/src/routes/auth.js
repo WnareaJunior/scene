@@ -35,6 +35,15 @@ router.post('/register', async (req, res, next) => {
     if (!email || !password || !username) {
       return res.status(400).json({ error: 'email, password, and username are required' });
     }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return res.status(400).json({ error: 'Invalid email format' });
+    }
+    if (!/^\w+$/.test(username)) {
+      return res.status(400).json({ error: 'Username must contain only alphanumeric characters and underscores' });
+    }
+    if (password.length < 8) {
+      return res.status(400).json({ error: 'Password must be at least 8 characters' });
+    }
 
     const hash = await bcrypt.hash(password, 12);
     const { rows } = await db.query(
