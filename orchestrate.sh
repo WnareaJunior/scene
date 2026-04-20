@@ -51,8 +51,6 @@ echo "⚙️  [1/4] Running dev agent..."
 
 COMMIT_BEFORE=$(git rev-parse HEAD)
 
-# --print makes claude non-interactive: it processes the prompt fully, outputs
-# to stdout, and exits — so the script reliably waits for completion.
 claude --dangerously-skip-permissions --print "
 You are acting as the engineering-backend-architect agent for Scene.
 Read the task below and implement it fully.

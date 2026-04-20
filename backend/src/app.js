@@ -1,6 +1,8 @@
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
 
 const authRoutes = require('./routes/auth');
 const userRoutes = require('./routes/users');
@@ -28,7 +30,23 @@ const corsOptions = {
   allowedHeaders: ['Authorization', 'Content-Type'],
 };
 
+const rateLimitResponse = (req, res) =>
+  res.status(429).json({ error: 'Too many attempts, please try again later' });
+
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  handler: rateLimitResponse,
+});
+
+const refreshLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 30,
+  handler: rateLimitResponse,
+});
+
 const app = express();
+app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
 app.use(cors(corsOptions));
 app.use(express.json());
 app.use('/uploads', (req, res, next) => {
@@ -38,6 +56,10 @@ app.use('/uploads', (req, res, next) => {
 }, express.static(path.join(__dirname, '..', 'uploads')));
 
 app.get('/health', (req, res) => res.json({ status: 'ok' }));
+
+app.post('/api/v1/auth/login', authLimiter);
+app.post('/api/v1/auth/register', authLimiter);
+app.post('/api/v1/auth/refresh', refreshLimiter);
 
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/users', userRoutes);
