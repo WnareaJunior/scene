@@ -42,7 +42,7 @@ git checkout -b "$BRANCH"
 
 TASK_CONTENT=$(cat "$TASK_FILE")
 
-claude --print "
+claude --dangerously-skip-permissions --print "
 You are acting as the engineering-backend-architect agent for Scene.
 Read the task below and implement it fully.
 Follow all conventions in CLAUDE.md.
