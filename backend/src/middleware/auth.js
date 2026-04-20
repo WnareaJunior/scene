@@ -7,7 +7,11 @@ module.exports = function requireAuth(req, res, next) {
   }
   const token = header.slice(7);
   try {
-    req.user = jwt.verify(token, process.env.JWT_SECRET);
+    req.user = jwt.verify(token, process.env.JWT_ACCESS_SECRET, {
+      algorithms: ['HS256'],
+      issuer: 'scene-api',
+      audience: 'scene-app',
+    });
     next();
   } catch {
     res.status(401).json({ error: 'Invalid or expired token' });

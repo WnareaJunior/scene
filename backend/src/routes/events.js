@@ -117,6 +117,12 @@ router.get('/', requireAuth, async (req, res, next) => {
       page = 1, limit = 20,
     } = req.query;
 
+    const latNum = lat !== undefined ? parseFloat(lat) : undefined;
+    const lngNum = lng !== undefined ? parseFloat(lng) : undefined;
+    if ((lat !== undefined || lng !== undefined) && (!Number.isFinite(latNum) || !Number.isFinite(lngNum))) {
+      return res.status(400).json({ error: 'lat and lng must be finite numbers' });
+    }
+
     const params = [];
     const conditions = [`e.status = 'active'`, `e.is_private = false`];
 
@@ -125,8 +131,8 @@ router.get('/', requireAuth, async (req, res, next) => {
       conditions.push(
         `ST_Within(location::geometry, ST_MakeEnvelope($${params.length - 3}, $${params.length - 2}, $${params.length - 1}, $${params.length}, 4326))`
       );
-    } else if (lat && lng) {
-      params.push(lng, lat, radius);
+    } else if (latNum !== undefined && lngNum !== undefined) {
+      params.push(lngNum, latNum, radius);
       conditions.push(
         `ST_DWithin(location::geography, ST_SetSRID(ST_MakePoint($${params.length - 2}, $${params.length - 1}), 4326)::geography, $${params.length})`
       );
@@ -139,12 +145,25 @@ router.get('/', requireAuth, async (req, res, next) => {
     }
 
     if (startAfter) {
-      params.push(startAfter);
+      const d = new Date(startAfter);
+      if (isNaN(d.getTime())) {
+        return res.status(400).json({ error: 'startAfter must be a valid ISO 8601 date' });
+      }
+      params.push(d.toISOString());
       conditions.push(`e.start_time >= $${params.length}`);
     }
     if (startBefore) {
-      params.push(startBefore);
+      const d = new Date(startBefore);
+      if (isNaN(d.getTime())) {
+        return res.status(400).json({ error: 'startBefore must be a valid ISO 8601 date' });
+      }
+      params.push(d.toISOString());
       conditions.push(`e.start_time <= $${params.length}`);
+    }
+    if (startAfter && startBefore) {
+      if (new Date(startBefore) <= new Date(startAfter)) {
+        return res.status(400).json({ error: 'startBefore must be after startAfter' });
+      }
     }
 
     const pageNum = Math.max(1, parseInt(page));
@@ -154,10 +173,13 @@ router.get('/', requireAuth, async (req, res, next) => {
 
     // relevance sort when a center point is available, otherwise chronological
     let orderBy;
-    if (lat && lng) {
+    if (latNum !== undefined && lngNum !== undefined) {
+      params.push(lngNum, latNum);
+      const lngIdx = params.length - 1;
+      const latIdx = params.length;
       orderBy = `(
         0.6 / (1 + ST_Distance(e.location::geography,
-          ST_SetSRID(ST_MakePoint(${parseFloat(lng)}, ${parseFloat(lat)}), 4326)::geography) / 1000.0)
+          ST_SetSRID(ST_MakePoint($${lngIdx}, $${latIdx}), 4326)::geography) / 1000.0)
         +
         0.4 / (1 + EXTRACT(EPOCH FROM (e.start_time - now())) / 3600.0)
       ) DESC`;
@@ -188,7 +210,9 @@ router.get('/', requireAuth, async (req, res, next) => {
 router.get('/:eventId', requireAuth, async (req, res, next) => {
   try {
     const { rows } = await db.query(
-      `SELECT e.*,
+      `SELECT e.id, e.title, e.description, e.latitude, e.longitude, e.address,
+              e.start_time, e.end_time, e.capacity, e.hashtags, e.is_private, e.show_attendees, e.status,
+              e.host_id,
               (SELECT count(*) FROM rsvps WHERE event_id = e.id AND status = 'going') AS going_count,
               (SELECT count(*) FROM rsvps WHERE event_id = e.id AND status = 'interested') AS interested_count,
               u.username AS host_username, u.profile_picture AS host_picture
@@ -198,7 +222,17 @@ router.get('/:eventId', requireAuth, async (req, res, next) => {
       [req.params.eventId]
     );
     if (!rows.length) return res.status(404).json({ error: 'Event not found' });
-    res.json(rows[0]);
+
+    const event = rows[0];
+    if (event.is_private && event.host_id !== req.user.sub) {
+      const { rows: rsvpRows } = await db.query(
+        `SELECT 1 FROM rsvps WHERE event_id = $1 AND user_id = $2 AND status = 'going'`,
+        [event.id, req.user.sub]
+      );
+      if (!rsvpRows.length) return res.status(404).json({ error: 'Event not found' });
+    }
+
+    res.json(event);
   } catch (err) {
     next(err);
   }
@@ -264,27 +298,37 @@ router.post('/:eventId/rsvp', requireAuth, async (req, res, next) => {
       return res.status(400).json({ error: 'status must be going or interested' });
     }
 
-    // Enforce capacity for going RSVPs
-    if (status === 'going') {
-      const { rows } = await db.query(
-        `SELECT capacity, (SELECT count(*) FROM rsvps WHERE event_id = $1 AND status = 'going') AS going_count
-         FROM events WHERE id = $1`,
-        [req.params.eventId]
-      );
-      if (!rows.length) return res.status(404).json({ error: 'Event not found' });
-      const { capacity, going_count } = rows[0];
-      if (capacity !== null && parseInt(going_count) >= capacity) {
-        return res.status(409).json({ error: 'Event is at capacity' });
-      }
-    }
+    // Check event exists
+    const eventCheck = await db.query(`SELECT id FROM events WHERE id = $1`, [req.params.eventId]);
+    if (!eventCheck.rows.length) return res.status(404).json({ error: 'Event not found' });
 
-    const { rows } = await db.query(
-      `INSERT INTO rsvps (event_id, user_id, status)
-       VALUES ($1, $2, $3)
-       ON CONFLICT (event_id, user_id) DO UPDATE SET status = $3, updated_at = now()
-       RETURNING *`,
-      [req.params.eventId, req.user.sub, status]
-    );
+    let rows;
+    if (status === 'going') {
+      // Atomic conditional INSERT: only succeeds when going_count < capacity (or capacity is null)
+      ({ rows } = await db.query(
+        `WITH capacity_check AS (
+           SELECT id, capacity FROM events WHERE id = $1
+         ), current_count AS (
+           SELECT count(*) AS going_count FROM rsvps WHERE event_id = $1 AND status = 'going' AND user_id != $2
+         )
+         INSERT INTO rsvps (event_id, user_id, status)
+         SELECT $1, $2, $3
+         FROM capacity_check, current_count
+         WHERE capacity_check.capacity IS NULL OR current_count.going_count < capacity_check.capacity
+         ON CONFLICT (event_id, user_id) DO UPDATE SET status = $3, updated_at = now()
+         RETURNING *`,
+        [req.params.eventId, req.user.sub, status]
+      ));
+      if (!rows.length) return res.status(409).json({ error: 'Event is at capacity' });
+    } else {
+      ({ rows } = await db.query(
+        `INSERT INTO rsvps (event_id, user_id, status)
+         VALUES ($1, $2, $3)
+         ON CONFLICT (event_id, user_id) DO UPDATE SET status = $3, updated_at = now()
+         RETURNING *`,
+        [req.params.eventId, req.user.sub, status]
+      ));
+    }
     res.status(201).json(rows[0]);
   } catch (err) {
     next(err);
@@ -299,24 +343,41 @@ router.patch('/:eventId/rsvp', requireAuth, async (req, res, next) => {
       return res.status(400).json({ error: 'status must be going or interested' });
     }
 
+    let rows;
     if (status === 'going') {
-      const { rows } = await db.query(
-        `SELECT capacity, (SELECT count(*) FROM rsvps WHERE event_id = $1 AND status = 'going' AND user_id != $2) AS going_count
-         FROM events WHERE id = $1`,
-        [req.params.eventId, req.user.sub]
-      );
-      if (rows.length && rows[0].capacity !== null && parseInt(rows[0].going_count) >= rows[0].capacity) {
+      // Atomic conditional UPDATE: only succeeds when going_count < capacity (or capacity is null)
+      ({ rows } = await db.query(
+        `WITH capacity_check AS (
+           SELECT capacity FROM events WHERE id = $2
+         ), current_count AS (
+           SELECT count(*) AS going_count FROM rsvps WHERE event_id = $2 AND status = 'going' AND user_id != $3
+         )
+         UPDATE rsvps SET status = $1, updated_at = now()
+         FROM capacity_check, current_count
+         WHERE rsvps.event_id = $2
+           AND rsvps.user_id = $3
+           AND (capacity_check.capacity IS NULL OR current_count.going_count < capacity_check.capacity)
+         RETURNING rsvps.*`,
+        [status, req.params.eventId, req.user.sub]
+      ));
+      if (!rows.length) {
+        // Distinguish between not-found and capacity exceeded
+        const exists = await db.query(
+          `SELECT 1 FROM rsvps WHERE event_id = $1 AND user_id = $2`,
+          [req.params.eventId, req.user.sub]
+        );
+        if (!exists.rows.length) return res.status(404).json({ error: 'RSVP not found' });
         return res.status(409).json({ error: 'Event is at capacity' });
       }
+    } else {
+      ({ rows } = await db.query(
+        `UPDATE rsvps SET status = $1, updated_at = now()
+         WHERE event_id = $2 AND user_id = $3
+         RETURNING *`,
+        [status, req.params.eventId, req.user.sub]
+      ));
+      if (!rows.length) return res.status(404).json({ error: 'RSVP not found' });
     }
-
-    const { rows } = await db.query(
-      `UPDATE rsvps SET status = $1, updated_at = now()
-       WHERE event_id = $2 AND user_id = $3
-       RETURNING *`,
-      [status, req.params.eventId, req.user.sub]
-    );
-    if (!rows.length) return res.status(404).json({ error: 'RSVP not found' });
     res.json(rows[0]);
   } catch (err) {
     next(err);
@@ -348,15 +409,26 @@ router.get('/:eventId/attendees', requireAuth, async (req, res, next) => {
       return res.status(403).json({ error: 'Attendee list is private' });
     }
 
-    const { rows } = await db.query(
-      `SELECT u.id, u.username, u.profile_picture, r.status AS rsvp_status
-       FROM rsvps r
-       JOIN users u ON u.id = r.user_id
-       WHERE r.event_id = $1
-       ORDER BY r.status DESC, r.created_at ASC`,
-      [req.params.eventId]
-    );
-    res.json(rows);
+    const limit = Math.min(parseInt(req.query.limit) || 50, 100);
+    const offset = parseInt(req.query.offset) || 0;
+
+    const [{ rows: countRows }, { rows }] = await Promise.all([
+      db.query(
+        `SELECT count(*) FROM rsvps WHERE event_id = $1`,
+        [req.params.eventId]
+      ),
+      db.query(
+        `SELECT u.id, u.username, u.profile_picture, r.status AS rsvp_status
+         FROM rsvps r
+         JOIN users u ON u.id = r.user_id
+         WHERE r.event_id = $1
+         ORDER BY r.status DESC, r.created_at ASC
+         LIMIT $2 OFFSET $3`,
+        [req.params.eventId, limit, offset]
+      ),
+    ]);
+
+    res.json({ data: rows, total: parseInt(countRows[0].count), limit, offset });
   } catch (err) {
     next(err);
   }

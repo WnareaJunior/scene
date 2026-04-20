@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(curl -s http://localhost:1933*)",
+      "Bash(curl -s \"http://localhost:1933*\")",
+      "Bash(git add backend/src/*)",
+      "Bash(git add frontend/*)",
+      "Bash(git commit*)"
+    ]
+  }
+}

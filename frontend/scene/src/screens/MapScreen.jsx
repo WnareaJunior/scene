@@ -22,13 +22,17 @@ function regionToBounds(region) {
 
 export default function MapScreen({ onRegionChangeComplete }) {
   const [pins, setPins] = useState([]);
+  const [fetchError, setFetchError] = useState(false);
   const mapRef = useRef(null);
 
   async function fetchPins(region) {
     try {
       const data = await mapApi.eventPins(regionToBounds(region));
       setPins(Array.isArray(data) ? data : []);
-    } catch {}
+      setFetchError(false);
+    } catch {
+      setFetchError(true);
+    }
   }
 
   useEffect(() => { fetchPins(initialRegion); }, []);
@@ -76,6 +80,12 @@ export default function MapScreen({ onRegionChangeComplete }) {
       <TouchableOpacity style={styles.locBtn} onPress={centerOnUser}>
         <Text style={styles.locBtnText}>⊙</Text>
       </TouchableOpacity>
+
+      {fetchError && (
+        <View style={styles.errorBanner}>
+          <Text style={styles.errorBannerText}>Something went wrong</Text>
+        </View>
+      )}
     </View>
   );
 }
@@ -98,6 +108,21 @@ const styles = StyleSheet.create({
     color: '#a855f7',
     fontSize: 20,
     lineHeight: 24,
+  },
+  errorBanner: {
+    position: 'absolute',
+    bottom: 20,
+    left: 16,
+    right: 16,
+    backgroundColor: 'rgba(220,50,50,0.9)',
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+  },
+  errorBannerText: {
+    color: '#fff',
+    fontSize: 14,
   },
 });
 

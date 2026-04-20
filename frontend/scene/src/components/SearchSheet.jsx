@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View, TextInput, StyleSheet, Dimensions,
-  ScrollView, Text, TouchableOpacity, ActivityIndicator,
+  ScrollView, Text, TouchableOpacity, ActivityIndicator, Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { GestureDetector, Gesture } from 'react-native-gesture-handler';
@@ -11,6 +11,19 @@ import Animated, {
 
 import { events, users } from '../api';
 import EventCard from './EventCard';
+
+// Haversine distance between two lat/lng points, in kilometres.
+function haversineKm(lat1, lng1, lat2, lng2) {
+  const R = 6371;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLng = ((lng2 - lng1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
 
 const { height: SCREEN_H } = Dimensions.get('window');
 
@@ -37,32 +50,69 @@ export default function SearchSheet({ slideX, screenW, viewport }) {
   const [results, setResults] = useState([]);
   const [mode, setMode]       = useState('events'); // 'events' | 'users'
   const [loading, setLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState(null);
   const debounceRef           = useRef(null);
+  const viewportTimerRef      = useRef(null);
+  const feedGenRef            = useRef(0);
+  const lastFetchPosRef       = useRef(null);
 
-  // load nearby public events on mount and whenever viewport settles
+  // Keep a ref so loadFeed can always read the latest viewport without it
+  // appearing in the dependency array (avoids recreating the callback on every pan).
+  const viewportRef = useRef(viewport);
+  useEffect(() => { viewportRef.current = viewport; }, [viewport]);
+
+  // load nearby public events — stable reference, reads viewport via ref
   const loadFeed = useCallback(async () => {
+    const gen = ++feedGenRef.current;
     setLoading(true);
     setMode('events');
+    setErrorMsg(null);
     try {
+      const vp = viewportRef.current;
       const params = { limit: 20, startAfter: new Date().toISOString() };
-      if (viewport) {
-        const latD = viewport.latitudeDelta / 2;
-        const lngD = viewport.longitudeDelta / 2;
-        params.swLat = viewport.latitude - latD;
-        params.swLng = viewport.longitude - lngD;
-        params.neLat = viewport.latitude + latD;
-        params.neLng = viewport.longitude + lngD;
+      if (vp) {
+        const latD = vp.latitudeDelta / 2;
+        const lngD = vp.longitudeDelta / 2;
+        params.swLat = vp.latitude - latD;
+        params.swLng = vp.longitude - lngD;
+        params.neLat = vp.latitude + latD;
+        params.neLng = vp.longitude + lngD;
       }
       const data = await events.discover(params);
+      if (gen !== feedGenRef.current) return; // stale — a newer fetch is in flight
       setResults(Array.isArray(data) ? data : []);
     } catch {
+      if (gen !== feedGenRef.current) return;
       setResults([]);
+      setErrorMsg('Something went wrong');
     } finally {
-      setLoading(false);
+      if (gen === feedGenRef.current) setLoading(false);
     }
-  }, [viewport]);
+  }, []);
 
-  useEffect(() => { loadFeed(); }, [viewport]);
+  // Debounced viewport effect: wait 400 ms after panning stops, then skip the
+  // fetch entirely if the map center moved less than 0.5 km since the last one.
+  useEffect(() => {
+    clearTimeout(viewportTimerRef.current);
+
+    viewportTimerRef.current = setTimeout(() => {
+      if (viewport && lastFetchPosRef.current) {
+        const dist = haversineKm(
+          lastFetchPosRef.current.lat,
+          lastFetchPosRef.current.lng,
+          viewport.latitude,
+          viewport.longitude,
+        );
+        if (dist < 0.5) return;
+      }
+      if (viewport) {
+        lastFetchPosRef.current = { lat: viewport.latitude, lng: viewport.longitude };
+      }
+      loadFeed();
+    }, 400);
+
+    return () => clearTimeout(viewportTimerRef.current);
+  }, [viewport, loadFeed]);
 
   // debounced search whenever query changes
   useEffect(() => {
@@ -75,6 +125,7 @@ export default function SearchSheet({ slideX, screenW, viewport }) {
 
     debounceRef.current = setTimeout(async () => {
       setLoading(true);
+      setErrorMsg(null);
       try {
         if (query.startsWith('@')) {
           const username = query.slice(1).trim();
@@ -101,6 +152,7 @@ export default function SearchSheet({ slideX, screenW, viewport }) {
         }
       } catch {
         setResults([]);
+        setErrorMsg('Something went wrong');
       } finally {
         setLoading(false);
       }
@@ -110,7 +162,34 @@ export default function SearchSheet({ slideX, screenW, viewport }) {
   }, [query]);
 
   async function handleRsvp(eventId, status) {
-    try { await events.rsvp(eventId, status); } catch {}
+    const prevEvent = results.find(ev => ev.id === eventId);
+    if (!prevEvent) return;
+
+    const prevStatus = prevEvent.user_rsvp ?? null;
+    const newStatus = prevStatus === status ? null : status;
+
+    let countDelta = 0;
+    if (prevStatus === 'going' && newStatus !== 'going') countDelta = -1;
+    else if (prevStatus !== 'going' && newStatus === 'going') countDelta = 1;
+
+    setResults(rs => rs.map(ev =>
+      ev.id === eventId
+        ? { ...ev, user_rsvp: newStatus, going_count: Math.max(0, parseInt(ev.going_count ?? 0) + countDelta) }
+        : ev
+    ));
+
+    try {
+      if (newStatus === null) {
+        await events.cancelRsvp(eventId);
+      } else if (prevStatus !== null) {
+        await events.updateRsvp(eventId, newStatus);
+      } else {
+        await events.rsvp(eventId, newStatus);
+      }
+    } catch {
+      setResults(rs => rs.map(ev => ev.id === eventId ? prevEvent : ev));
+      Alert.alert('Error', 'Could not update RSVP. Please try again.');
+    }
   }
 
   // ── vertical pan — handle + search bar only ────────────────────────────────
@@ -177,9 +256,12 @@ export default function SearchSheet({ slideX, screenW, viewport }) {
       {/* BOTTOM ZONE — swipe left/right + scrollable results */}
       <GestureDetector gesture={panH}>
         <View style={styles.bottomZone}>
+          {errorMsg && !loading && (
+            <Text style={styles.errorText}>{errorMsg}</Text>
+          )}
           {loading ? (
             <ActivityIndicator color="#a855f7" style={styles.spinner} />
-          ) : results.length === 0 ? (
+          ) : errorMsg ? null : results.length === 0 ? (
             <Text style={styles.empty}>
               {query.startsWith('@') ? 'no users found' : 'no events nearby'}
             </Text>
@@ -244,4 +326,5 @@ const styles = StyleSheet.create({
   userName: { color: '#fff', fontSize: 16, fontWeight: '600', marginBottom: 4 },
   userBio: { color: '#888', fontSize: 13, marginBottom: 4 },
   userMeta: { color: '#555', fontSize: 12 },
+  errorText: { color: '#e05050', textAlign: 'center', marginTop: 20, fontSize: 14 },
 });

@@ -11,6 +11,9 @@ export default function EventCard({ event, onRsvp }) {
   const goingCount = parseInt(event.going_count ?? 0);
   const isFull = event.capacity != null && goingCount >= event.capacity;
   const spotsLeft = event.capacity != null ? event.capacity - goingCount : null;
+  const userStatus = event.user_rsvp ?? null;
+  const isGoing = userStatus === 'going';
+  const isInterested = userStatus === 'interested';
 
   return (
     <View style={styles.card}>
@@ -33,17 +36,21 @@ export default function EventCard({ event, onRsvp }) {
         </View>
         <View style={styles.rsvpBtns}>
           <TouchableOpacity
-            style={[styles.rsvpBtn, isFull && styles.rsvpBtnDisabled]}
-            onPress={() => !isFull && onRsvp(event.id, 'going')}
-            disabled={isFull}
+            style={[styles.rsvpBtn, isGoing && styles.rsvpBtnActive, isFull && !isGoing && styles.rsvpBtnDisabled]}
+            onPress={() => (!isFull || isGoing) && onRsvp(event.id, 'going')}
+            disabled={isFull && !isGoing}
           >
-            <Text style={[styles.rsvpBtnText, isFull && styles.rsvpBtnTextDisabled]}>Going</Text>
+            <Text style={[styles.rsvpBtnText, isFull && !isGoing && styles.rsvpBtnTextDisabled]}>
+              {isGoing ? '✓ Going' : 'Going'}
+            </Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={[styles.rsvpBtn, styles.rsvpBtnInterested]}
+            style={[styles.rsvpBtn, styles.rsvpBtnInterested, isInterested && styles.rsvpBtnInterestedActive]}
             onPress={() => onRsvp(event.id, 'interested')}
           >
-            <Text style={[styles.rsvpBtnText, styles.rsvpBtnTextInterested]}>Interested</Text>
+            <Text style={[styles.rsvpBtnText, styles.rsvpBtnTextInterested]}>
+              {isInterested ? '✓ Interested' : 'Interested'}
+            </Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -71,6 +78,8 @@ const styles = StyleSheet.create({
   rsvpBtnInterested: { backgroundColor: 'transparent', borderWidth: 1, borderColor: '#a855f7' },
   rsvpBtnText: { color: '#fff', fontSize: 13, fontWeight: '600' },
   rsvpBtnTextInterested: { color: '#a855f7' },
+  rsvpBtnActive: { backgroundColor: '#7c3aed' },
+  rsvpBtnInterestedActive: { backgroundColor: '#2d1b4e', borderColor: '#7c3aed' },
   rsvpBtnDisabled: { backgroundColor: '#333' },
   rsvpBtnTextDisabled: { color: '#666' },
   capacityFull: { color: '#ef4444', fontSize: 12, fontWeight: '600', marginTop: 2 },
