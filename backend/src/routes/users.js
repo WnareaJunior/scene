@@ -118,6 +118,40 @@ router.get('/me/rsvps', requireAuth, async (req, res, next) => {
   }
 });
 
+// GET /users/search?q=&limit=&offset=
+router.get('/search', requireAuth, async (req, res, next) => {
+  try {
+    const q = String(req.query.q || '').trim().slice(0, 100);
+    if (!q) return res.status(400).json({ error: 'Query parameter q is required' });
+
+    const limit = Math.min(Math.max(parseInt(req.query.limit) || 20, 1), 100);
+    const offset = Math.max(parseInt(req.query.offset) || 0, 0);
+    const pattern = `%${q.replace(/[%_\\]/g, '\\$&')}%`;
+
+    const { rows } = await db.query(
+      `SELECT id, username, display_name, bio, profile_picture,
+              (SELECT count(*) FROM follows WHERE followed_id = users.id) AS followers_count
+       FROM users
+       WHERE id != $1
+         AND (username ILIKE $2 ESCAPE '\\' OR display_name ILIKE $2 ESCAPE '\\')
+       ORDER BY username ASC
+       LIMIT $3 OFFSET $4`,
+      [req.user.sub, pattern, limit, offset]
+    );
+
+    const { rows: countRows } = await db.query(
+      `SELECT count(*) AS total FROM users
+       WHERE id != $1
+         AND (username ILIKE $2 ESCAPE '\\' OR display_name ILIKE $2 ESCAPE '\\')`,
+      [req.user.sub, pattern]
+    );
+
+    res.json({ data: rows, total: parseInt(countRows[0].total), limit, offset });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // GET /users/:userId
 router.get('/:userId', requireAuth, async (req, res, next) => {
   try {

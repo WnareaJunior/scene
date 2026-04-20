@@ -12,15 +12,18 @@ const requireAuth = require('../middleware/auth');
 function hashToken(token) {
   return crypto.createHash('sha256').update(token).digest('hex');
 }
+const JWT_OPTS = { algorithm: 'HS256', issuer: 'scene-api', audience: 'scene-app' };
 
 function signAccess(userId) {
-  return jwt.sign({ sub: userId }, process.env.JWT_SECRET, {
+  return jwt.sign({ sub: userId }, process.env.JWT_ACCESS_SECRET, {
+    ...JWT_OPTS,
     expiresIn: process.env.JWT_ACCESS_EXPIRES_IN || '15m',
   });
 }
 
 function signRefresh(userId) {
-  return jwt.sign({ sub: userId, jti: uuidv4() }, process.env.JWT_SECRET, {
+  return jwt.sign({ sub: userId, jti: uuidv4() }, process.env.JWT_REFRESH_SECRET, {
+    ...JWT_OPTS,
     expiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '7d',
   });
 }
@@ -96,7 +99,11 @@ router.post('/refresh', async (req, res, next) => {
 
     let payload;
     try {
-      payload = jwt.verify(refreshToken, process.env.JWT_SECRET);
+      payload = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET, {
+        algorithms: ['HS256'],
+        issuer: 'scene-api',
+        audience: 'scene-app',
+      });
     } catch {
       return res.status(401).json({ error: 'Invalid refresh token' });
     }
