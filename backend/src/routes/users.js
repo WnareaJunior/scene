@@ -167,15 +167,26 @@ router.delete('/:userId/follow', requireAuth, async (req, res, next) => {
 // GET /users/:userId/followers
 router.get('/:userId/followers', requireAuth, async (req, res, next) => {
   try {
-    const { rows } = await db.query(
-      `SELECT u.id, u.username, u.profile_picture
-       FROM follows f
-       JOIN users u ON u.id = f.follower_id
-       WHERE f.followed_id = $1
-       ORDER BY f.created_at DESC`,
-      [req.params.userId]
-    );
-    res.json(rows);
+    const limit = Math.min(parseInt(req.query.limit) || 50, 100);
+    const offset = parseInt(req.query.offset) || 0;
+
+    const [{ rows: countRows }, { rows }] = await Promise.all([
+      db.query(
+        `SELECT count(*) FROM follows WHERE followed_id = $1`,
+        [req.params.userId]
+      ),
+      db.query(
+        `SELECT u.id, u.username, u.profile_picture
+         FROM follows f
+         JOIN users u ON u.id = f.follower_id
+         WHERE f.followed_id = $1
+         ORDER BY f.created_at DESC
+         LIMIT $2 OFFSET $3`,
+        [req.params.userId, limit, offset]
+      ),
+    ]);
+
+    res.json({ data: rows, total: parseInt(countRows[0].count), limit, offset });
   } catch (err) {
     next(err);
   }
@@ -184,15 +195,26 @@ router.get('/:userId/followers', requireAuth, async (req, res, next) => {
 // GET /users/:userId/following
 router.get('/:userId/following', requireAuth, async (req, res, next) => {
   try {
-    const { rows } = await db.query(
-      `SELECT u.id, u.username, u.profile_picture
-       FROM follows f
-       JOIN users u ON u.id = f.followed_id
-       WHERE f.follower_id = $1
-       ORDER BY f.created_at DESC`,
-      [req.params.userId]
-    );
-    res.json(rows);
+    const limit = Math.min(parseInt(req.query.limit) || 50, 100);
+    const offset = parseInt(req.query.offset) || 0;
+
+    const [{ rows: countRows }, { rows }] = await Promise.all([
+      db.query(
+        `SELECT count(*) FROM follows WHERE follower_id = $1`,
+        [req.params.userId]
+      ),
+      db.query(
+        `SELECT u.id, u.username, u.profile_picture
+         FROM follows f
+         JOIN users u ON u.id = f.followed_id
+         WHERE f.follower_id = $1
+         ORDER BY f.created_at DESC
+         LIMIT $2 OFFSET $3`,
+        [req.params.userId, limit, offset]
+      ),
+    ]);
+
+    res.json({ data: rows, total: parseInt(countRows[0].count), limit, offset });
   } catch (err) {
     next(err);
   }

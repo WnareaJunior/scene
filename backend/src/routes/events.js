@@ -348,15 +348,26 @@ router.get('/:eventId/attendees', requireAuth, async (req, res, next) => {
       return res.status(403).json({ error: 'Attendee list is private' });
     }
 
-    const { rows } = await db.query(
-      `SELECT u.id, u.username, u.profile_picture, r.status AS rsvp_status
-       FROM rsvps r
-       JOIN users u ON u.id = r.user_id
-       WHERE r.event_id = $1
-       ORDER BY r.status DESC, r.created_at ASC`,
-      [req.params.eventId]
-    );
-    res.json(rows);
+    const limit = Math.min(parseInt(req.query.limit) || 50, 100);
+    const offset = parseInt(req.query.offset) || 0;
+
+    const [{ rows: countRows }, { rows }] = await Promise.all([
+      db.query(
+        `SELECT count(*) FROM rsvps WHERE event_id = $1`,
+        [req.params.eventId]
+      ),
+      db.query(
+        `SELECT u.id, u.username, u.profile_picture, r.status AS rsvp_status
+         FROM rsvps r
+         JOIN users u ON u.id = r.user_id
+         WHERE r.event_id = $1
+         ORDER BY r.status DESC, r.created_at ASC
+         LIMIT $2 OFFSET $3`,
+        [req.params.eventId, limit, offset]
+      ),
+    ]);
+
+    res.json({ data: rows, total: parseInt(countRows[0].count), limit, offset });
   } catch (err) {
     next(err);
   }
