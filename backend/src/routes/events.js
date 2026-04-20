@@ -117,6 +117,12 @@ router.get('/', requireAuth, async (req, res, next) => {
       page = 1, limit = 20,
     } = req.query;
 
+    const latNum = lat !== undefined ? parseFloat(lat) : undefined;
+    const lngNum = lng !== undefined ? parseFloat(lng) : undefined;
+    if ((lat !== undefined || lng !== undefined) && (!Number.isFinite(latNum) || !Number.isFinite(lngNum))) {
+      return res.status(400).json({ error: 'lat and lng must be finite numbers' });
+    }
+
     const params = [];
     const conditions = [`e.status = 'active'`, `e.is_private = false`];
 
@@ -125,8 +131,8 @@ router.get('/', requireAuth, async (req, res, next) => {
       conditions.push(
         `ST_Within(location::geometry, ST_MakeEnvelope($${params.length - 3}, $${params.length - 2}, $${params.length - 1}, $${params.length}, 4326))`
       );
-    } else if (lat && lng) {
-      params.push(lng, lat, radius);
+    } else if (latNum !== undefined && lngNum !== undefined) {
+      params.push(lngNum, latNum, radius);
       conditions.push(
         `ST_DWithin(location::geography, ST_SetSRID(ST_MakePoint($${params.length - 2}, $${params.length - 1}), 4326)::geography, $${params.length})`
       );
@@ -167,10 +173,13 @@ router.get('/', requireAuth, async (req, res, next) => {
 
     // relevance sort when a center point is available, otherwise chronological
     let orderBy;
-    if (lat && lng) {
+    if (latNum !== undefined && lngNum !== undefined) {
+      params.push(lngNum, latNum);
+      const lngIdx = params.length - 1;
+      const latIdx = params.length;
       orderBy = `(
         0.6 / (1 + ST_Distance(e.location::geography,
-          ST_SetSRID(ST_MakePoint(${parseFloat(lng)}, ${parseFloat(lat)}), 4326)::geography) / 1000.0)
+          ST_SetSRID(ST_MakePoint($${lngIdx}, $${latIdx}), 4326)::geography) / 1000.0)
         +
         0.4 / (1 + EXTRACT(EPOCH FROM (e.start_time - now())) / 3600.0)
       ) DESC`;
