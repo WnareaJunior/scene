@@ -12,6 +12,19 @@ import Animated, {
 import { events, users } from '../api';
 import EventCard from './EventCard';
 
+// Haversine distance between two lat/lng points, in kilometres.
+function haversineKm(lat1, lng1, lat2, lng2) {
+  const R = 6371;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLng = ((lng2 - lng1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
 const { height: SCREEN_H } = Dimensions.get('window');
 
 const HEADER_H = 110;
@@ -39,33 +52,67 @@ export default function SearchSheet({ slideX, screenW, viewport }) {
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState(null);
   const debounceRef           = useRef(null);
+  const viewportTimerRef      = useRef(null);
+  const feedGenRef            = useRef(0);
+  const lastFetchPosRef       = useRef(null);
 
-  // load nearby public events on mount and whenever viewport settles
+  // Keep a ref so loadFeed can always read the latest viewport without it
+  // appearing in the dependency array (avoids recreating the callback on every pan).
+  const viewportRef = useRef(viewport);
+  useEffect(() => { viewportRef.current = viewport; }, [viewport]);
+
+  // load nearby public events — stable reference, reads viewport via ref
   const loadFeed = useCallback(async () => {
+    const gen = ++feedGenRef.current;
     setLoading(true);
     setMode('events');
     setErrorMsg(null);
     try {
+      const vp = viewportRef.current;
       const params = { limit: 20, startAfter: new Date().toISOString() };
-      if (viewport) {
-        const latD = viewport.latitudeDelta / 2;
-        const lngD = viewport.longitudeDelta / 2;
-        params.swLat = viewport.latitude - latD;
-        params.swLng = viewport.longitude - lngD;
-        params.neLat = viewport.latitude + latD;
-        params.neLng = viewport.longitude + lngD;
+      if (vp) {
+        const latD = vp.latitudeDelta / 2;
+        const lngD = vp.longitudeDelta / 2;
+        params.swLat = vp.latitude - latD;
+        params.swLng = vp.longitude - lngD;
+        params.neLat = vp.latitude + latD;
+        params.neLng = vp.longitude + lngD;
       }
       const data = await events.discover(params);
+      if (gen !== feedGenRef.current) return; // stale — a newer fetch is in flight
       setResults(Array.isArray(data) ? data : []);
     } catch {
+      if (gen !== feedGenRef.current) return;
       setResults([]);
       setErrorMsg('Something went wrong');
     } finally {
-      setLoading(false);
+      if (gen === feedGenRef.current) setLoading(false);
     }
-  }, [viewport]);
+  }, []);
 
-  useEffect(() => { loadFeed(); }, [viewport]);
+  // Debounced viewport effect: wait 400 ms after panning stops, then skip the
+  // fetch entirely if the map center moved less than 0.5 km since the last one.
+  useEffect(() => {
+    clearTimeout(viewportTimerRef.current);
+
+    viewportTimerRef.current = setTimeout(() => {
+      if (viewport && lastFetchPosRef.current) {
+        const dist = haversineKm(
+          lastFetchPosRef.current.lat,
+          lastFetchPosRef.current.lng,
+          viewport.latitude,
+          viewport.longitude,
+        );
+        if (dist < 0.5) return;
+      }
+      if (viewport) {
+        lastFetchPosRef.current = { lat: viewport.latitude, lng: viewport.longitude };
+      }
+      loadFeed();
+    }, 400);
+
+    return () => clearTimeout(viewportTimerRef.current);
+  }, [viewport, loadFeed]);
 
   // debounced search whenever query changes
   useEffect(() => {
