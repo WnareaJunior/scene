@@ -37,12 +37,14 @@ export default function SearchSheet({ slideX, screenW, viewport }) {
   const [results, setResults] = useState([]);
   const [mode, setMode]       = useState('events'); // 'events' | 'users'
   const [loading, setLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState(null);
   const debounceRef           = useRef(null);
 
   // load nearby public events on mount and whenever viewport settles
   const loadFeed = useCallback(async () => {
     setLoading(true);
     setMode('events');
+    setErrorMsg(null);
     try {
       const params = { limit: 20, startAfter: new Date().toISOString() };
       if (viewport) {
@@ -57,6 +59,7 @@ export default function SearchSheet({ slideX, screenW, viewport }) {
       setResults(Array.isArray(data) ? data : []);
     } catch {
       setResults([]);
+      setErrorMsg('Something went wrong');
     } finally {
       setLoading(false);
     }
@@ -75,6 +78,7 @@ export default function SearchSheet({ slideX, screenW, viewport }) {
 
     debounceRef.current = setTimeout(async () => {
       setLoading(true);
+      setErrorMsg(null);
       try {
         if (query.startsWith('@')) {
           const username = query.slice(1).trim();
@@ -101,6 +105,7 @@ export default function SearchSheet({ slideX, screenW, viewport }) {
         }
       } catch {
         setResults([]);
+        setErrorMsg('Something went wrong');
       } finally {
         setLoading(false);
       }
@@ -110,7 +115,11 @@ export default function SearchSheet({ slideX, screenW, viewport }) {
   }, [query]);
 
   async function handleRsvp(eventId, status) {
-    try { await events.rsvp(eventId, status); } catch {}
+    try {
+      await events.rsvp(eventId, status);
+    } catch {
+      setErrorMsg('Something went wrong');
+    }
   }
 
   // ── vertical pan — handle + search bar only ────────────────────────────────
@@ -177,9 +186,12 @@ export default function SearchSheet({ slideX, screenW, viewport }) {
       {/* BOTTOM ZONE — swipe left/right + scrollable results */}
       <GestureDetector gesture={panH}>
         <View style={styles.bottomZone}>
+          {errorMsg && !loading && (
+            <Text style={styles.errorText}>{errorMsg}</Text>
+          )}
           {loading ? (
             <ActivityIndicator color="#a855f7" style={styles.spinner} />
-          ) : results.length === 0 ? (
+          ) : errorMsg ? null : results.length === 0 ? (
             <Text style={styles.empty}>
               {query.startsWith('@') ? 'no users found' : 'no events nearby'}
             </Text>
@@ -244,4 +256,5 @@ const styles = StyleSheet.create({
   userName: { color: '#fff', fontSize: 16, fontWeight: '600', marginBottom: 4 },
   userBio: { color: '#888', fontSize: 13, marginBottom: 4 },
   userMeta: { color: '#555', fontSize: 12 },
+  errorText: { color: '#e05050', textAlign: 'center', marginTop: 20, fontSize: 14 },
 });
