@@ -8,13 +8,12 @@ const fs = require('fs');
 const uploadDir = path.join(__dirname, '../../uploads/avatars');
 fs.mkdirSync(uploadDir, { recursive: true });
 
-const ALLOWED_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
-const ALLOWED_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.webp', '.gif'];
+const ALLOWED_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+const ALLOWED_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.webp'];
 const MIME_TO_EXT = {
   'image/jpeg': '.jpg',
   'image/png': '.png',
   'image/webp': '.webp',
-  'image/gif': '.gif',
 };
 
 const upload = multer({
@@ -29,7 +28,7 @@ const upload = multer({
   fileFilter: (req, file, cb) => {
     const ext = path.extname(file.originalname).toLowerCase();
     if (!ALLOWED_MIME_TYPES.includes(file.mimetype) || !ALLOWED_EXTENSIONS.includes(ext)) {
-      const err = new Error('Invalid file type. Only JPEG, PNG, WebP, and GIF images are allowed.');
+      const err = new Error('Invalid file type. Only JPEG, PNG, and WebP images are allowed.');
       err.status = 400;
       return cb(err, false);
     }
