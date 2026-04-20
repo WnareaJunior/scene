@@ -8,5 +8,4 @@ module.exports = {
 
 pool.on('error', (err) => {
   console.error('Unexpected DB error', err);
-  process.exit(-1);
 });
