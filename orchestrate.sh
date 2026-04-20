@@ -11,7 +11,6 @@ REPO_ROOT="$(cd "$(dirname "$0")" && pwd)"
 TASK_FILE="$(realpath "$1")"
 TASKS_DIR="$(realpath "$REPO_ROOT/tasks")"
 
-# Ensure task file is inside tasks/ directory
 if [[ "$TASK_FILE" != "$TASKS_DIR"/* ]]; then
   echo "Error: task file must be inside the tasks/ directory"
   exit 1
@@ -23,10 +22,22 @@ if [ ! -f "$TASK_FILE" ]; then
 fi
 
 # ── Config ────────────────────────────────────────────────────────────────────
-BRANCH="feature/$(date +%s)"
 TASK_TITLE=$(head -1 "$TASK_FILE" | sed 's/^#[[:space:]]*//')
 DIFF_FILE=$(mktemp)
 trap 'rm -f "$DIFF_FILE"' EXIT
+
+# ── Branch setup (skip if already on a feature branch) ───────────────────────
+cd "$REPO_ROOT"
+CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
+
+if [[ "$CURRENT_BRANCH" == "main" ]] || [[ "$CURRENT_BRANCH" == "master" ]]; then
+  BRANCH="feature/$(date +%s)"
+  git checkout -b "$BRANCH"
+  echo "ℹ️  Created branch: $BRANCH"
+else
+  BRANCH="$CURRENT_BRANCH"
+  echo "ℹ️  Already on branch: $BRANCH — skipping branch creation"
+fi
 
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "🚀 Scene Orchestrator"
@@ -37,12 +48,10 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 # ── Step 1: Dev Agent ─────────────────────────────────────────────────────────
 echo ""
 echo "⚙️  [1/4] Running dev agent..."
-cd "$REPO_ROOT"
-git checkout -b "$BRANCH"
 
-TASK_CONTENT=$(cat "$TASK_FILE")
+COMMIT_BEFORE=$(git rev-parse HEAD)
 
-claude --print "
+claude --dangerously-skip-permissions --print "
 You are acting as the engineering-backend-architect agent for Scene.
 Read the task below and implement it fully.
 Follow all conventions in CLAUDE.md.
@@ -50,30 +59,46 @@ Query OpenViking at http://localhost:1933 for codebase context before starting.
 Commit your changes with a clear message when done.
 Do not open a PR — the orchestrator will handle that.
 
+SCOPE CONSTRAINT — CRITICAL:
+- Only write or edit files inside backend/src/ and frontend/
+- Never touch .claude/, settings.json, CLAUDE.md, orchestrate.sh, or any config/tooling file
+- Never request permission changes or modify tool settings — just implement the task
+
 TASK:
-$TASK_CONTENT
+$(cat "$TASK_FILE")
 "
 
-# Stage only source directories — never .env or secrets
+# ── Capture commit ────────────────────────────────────────────────────────────
 cd "$REPO_ROOT"
-git add backend/src/ frontend/ 2>/dev/null || true
+COMMIT_AFTER=$(git rev-parse HEAD)
 
-if git diff --staged --quiet; then
-  echo "⚠️  No changes staged — agent may not have written files"
-  echo "   Check agent output above and apply changes manually"
-  git checkout main
-  git branch -D "$BRANCH"
-  exit 1
+if [ "$COMMIT_BEFORE" != "$COMMIT_AFTER" ]; then
+  # Agent committed — nothing more to do
+  echo "✓ Agent committed: $(git log -1 --oneline)"
+else
+  # Agent wrote files but didn't commit — stage source dirs and commit
+  git add backend/src/ frontend/ 2>/dev/null || true
+
+  if git diff --staged --quiet; then
+    echo "⚠️  No changes detected — agent may not have written files"
+    echo "   Check agent output above and apply changes manually"
+    if [[ "$CURRENT_BRANCH" == "main" ]] || [[ "$CURRENT_BRANCH" == "master" ]]; then
+      git checkout main
+      git branch -D "$BRANCH"
+    fi
+    exit 1
+  fi
+
+  git commit -m "feat: ${TASK_TITLE}"
+  echo "✓ Staged changes committed: $(git log -1 --oneline)"
 fi
 
-git commit -m "feat: ${TASK_TITLE}"
 echo "✓ Dev agent complete"
 
 # ── Step 2: PromptFoo Evals ───────────────────────────────────────────────────
 echo ""
 echo "🧪 [2/4] Running PromptFoo evals..."
-cd "$REPO_ROOT/backend"
-if promptfoo eval --no-cache 2>&1 | tee /tmp/eval_out.txt | tail -5; then
+if cd "$REPO_ROOT/backend" && promptfoo eval --no-cache -c "$REPO_ROOT/backend/promptfooconfig.yaml" 2>&1 | tee /tmp/eval_out.txt | tail -5; then
   echo "✓ Evals complete"
 else
   echo "⚠️  Evals failed — review /tmp/eval_out.txt before merging"
@@ -103,8 +128,6 @@ if [ ! -s "$DIFF_FILE" ]; then
   exit 1
 fi
 
-DIFF_CONTENT=$(cat "$DIFF_FILE")
-
 REVIEW=$(claude --print "
 You are acting as the engineering-code-reviewer and engineering-security-engineer
 agents for Scene, a React Native / Node.js / Express / PostgreSQL app.
@@ -128,7 +151,7 @@ APPROVE / REQUEST CHANGES
 Be terse. Flag real issues only. No filler.
 
 DIFF:
-$DIFF_CONTENT
+$(cat "$DIFF_FILE")
 ")
 
 echo "$REVIEW" | gh pr comment "$PR_NUM" --body-file -
@@ -140,4 +163,8 @@ echo "   $PR_URL"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
 cd "$REPO_ROOT"
-git checkout main
+if [[ "$CURRENT_BRANCH" != "main" ]] && [[ "$CURRENT_BRANCH" != "master" ]]; then
+  : # stay on the feature branch — caller may want to inspect it
+else
+  git checkout main
+fi

@@ -8,14 +8,32 @@ const fs = require('fs');
 const uploadDir = path.join(__dirname, '../../uploads/avatars');
 fs.mkdirSync(uploadDir, { recursive: true });
 
+const ALLOWED_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+const ALLOWED_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.webp'];
+const MIME_TO_EXT = {
+  'image/jpeg': '.jpg',
+  'image/png': '.png',
+  'image/webp': '.webp',
+};
+
 const upload = multer({
   storage: multer.diskStorage({
     destination: uploadDir,
     filename: (req, file, cb) => {
-      cb(null, `${req.user.sub}-${Date.now()}${path.extname(file.originalname)}`);
+      const ext = MIME_TO_EXT[file.mimetype];
+      cb(null, `${req.user.sub}-${Date.now()}${ext}`);
     },
   }),
   limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (!ALLOWED_MIME_TYPES.includes(file.mimetype) || !ALLOWED_EXTENSIONS.includes(ext)) {
+      const err = new Error('Invalid file type. Only JPEG, PNG, and WebP images are allowed.');
+      err.status = 400;
+      return cb(err, false);
+    }
+    cb(null, true);
+  },
 });
 
 // GET /users/me
@@ -118,24 +136,35 @@ router.get('/me/rsvps', requireAuth, async (req, res, next) => {
   }
 });
 
-// GET /users/search?q=
-// TODO: also filter on display_name once migration adds that column
+// GET /users/search?q=&limit=&offset=
 router.get('/search', requireAuth, async (req, res, next) => {
   try {
-    const q = (req.query.q || '').trim();
-    if (!q) return res.json([]);
-    const limit = Math.min(parseInt(req.query.limit, 10) || 20, 100);
-    const offset = parseInt(req.query.offset, 10) || 0;
+    const q = String(req.query.q || '').trim().slice(0, 100);
+    if (!q) return res.status(400).json({ error: 'Query parameter q is required' });
+
+    const limit = Math.min(Math.max(parseInt(req.query.limit) || 20, 1), 100);
+    const offset = Math.max(parseInt(req.query.offset) || 0, 0);
+    const pattern = `%${q.replace(/[%_\\]/g, '\\$&')}%`;
+
     const { rows } = await db.query(
-      `SELECT id, username, profile_picture
+      `SELECT id, username, display_name, bio, profile_picture,
+              (SELECT count(*) FROM follows WHERE followed_id = users.id) AS followers_count
        FROM users
-       WHERE username ILIKE $1
-         AND id != $2
-       ORDER BY username
+       WHERE id != $1
+         AND (username ILIKE $2 ESCAPE '\\' OR display_name ILIKE $2 ESCAPE '\\')
+       ORDER BY username ASC
        LIMIT $3 OFFSET $4`,
-      [`%${q}%`, req.user.sub, limit, offset]
+      [req.user.sub, pattern, limit, offset]
     );
-    res.json(rows);
+
+    const { rows: countRows } = await db.query(
+      `SELECT count(*) AS total FROM users
+       WHERE id != $1
+         AND (username ILIKE $2 ESCAPE '\\' OR display_name ILIKE $2 ESCAPE '\\')`,
+      [req.user.sub, pattern]
+    );
+
+    res.json({ data: rows, total: parseInt(countRows[0].total), limit, offset });
   } catch (err) {
     next(err);
   }
@@ -190,15 +219,26 @@ router.delete('/:userId/follow', requireAuth, async (req, res, next) => {
 // GET /users/:userId/followers
 router.get('/:userId/followers', requireAuth, async (req, res, next) => {
   try {
-    const { rows } = await db.query(
-      `SELECT u.id, u.username, u.profile_picture
-       FROM follows f
-       JOIN users u ON u.id = f.follower_id
-       WHERE f.followed_id = $1
-       ORDER BY f.created_at DESC`,
-      [req.params.userId]
-    );
-    res.json(rows);
+    const limit = Math.min(parseInt(req.query.limit) || 50, 100);
+    const offset = parseInt(req.query.offset) || 0;
+
+    const [{ rows: countRows }, { rows }] = await Promise.all([
+      db.query(
+        `SELECT count(*) FROM follows WHERE followed_id = $1`,
+        [req.params.userId]
+      ),
+      db.query(
+        `SELECT u.id, u.username, u.profile_picture
+         FROM follows f
+         JOIN users u ON u.id = f.follower_id
+         WHERE f.followed_id = $1
+         ORDER BY f.created_at DESC
+         LIMIT $2 OFFSET $3`,
+        [req.params.userId, limit, offset]
+      ),
+    ]);
+
+    res.json({ data: rows, total: parseInt(countRows[0].count), limit, offset });
   } catch (err) {
     next(err);
   }
@@ -207,15 +247,26 @@ router.get('/:userId/followers', requireAuth, async (req, res, next) => {
 // GET /users/:userId/following
 router.get('/:userId/following', requireAuth, async (req, res, next) => {
   try {
-    const { rows } = await db.query(
-      `SELECT u.id, u.username, u.profile_picture
-       FROM follows f
-       JOIN users u ON u.id = f.followed_id
-       WHERE f.follower_id = $1
-       ORDER BY f.created_at DESC`,
-      [req.params.userId]
-    );
-    res.json(rows);
+    const limit = Math.min(parseInt(req.query.limit) || 50, 100);
+    const offset = parseInt(req.query.offset) || 0;
+
+    const [{ rows: countRows }, { rows }] = await Promise.all([
+      db.query(
+        `SELECT count(*) FROM follows WHERE follower_id = $1`,
+        [req.params.userId]
+      ),
+      db.query(
+        `SELECT u.id, u.username, u.profile_picture
+         FROM follows f
+         JOIN users u ON u.id = f.followed_id
+         WHERE f.follower_id = $1
+         ORDER BY f.created_at DESC
+         LIMIT $2 OFFSET $3`,
+        [req.params.userId, limit, offset]
+      ),
+    ]);
+
+    res.json({ data: rows, total: parseInt(countRows[0].count), limit, offset });
   } catch (err) {
     next(err);
   }
