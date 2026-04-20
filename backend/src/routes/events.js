@@ -139,12 +139,25 @@ router.get('/', requireAuth, async (req, res, next) => {
     }
 
     if (startAfter) {
-      params.push(startAfter);
+      const d = new Date(startAfter);
+      if (isNaN(d.getTime())) {
+        return res.status(400).json({ error: 'startAfter must be a valid ISO 8601 date' });
+      }
+      params.push(d.toISOString());
       conditions.push(`e.start_time >= $${params.length}`);
     }
     if (startBefore) {
-      params.push(startBefore);
+      const d = new Date(startBefore);
+      if (isNaN(d.getTime())) {
+        return res.status(400).json({ error: 'startBefore must be a valid ISO 8601 date' });
+      }
+      params.push(d.toISOString());
       conditions.push(`e.start_time <= $${params.length}`);
+    }
+    if (startAfter && startBefore) {
+      if (new Date(startBefore) <= new Date(startAfter)) {
+        return res.status(400).json({ error: 'startBefore must be after startAfter' });
+      }
     }
 
     const pageNum = Math.max(1, parseInt(page));
