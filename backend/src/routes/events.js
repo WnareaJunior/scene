@@ -277,27 +277,37 @@ router.post('/:eventId/rsvp', requireAuth, async (req, res, next) => {
       return res.status(400).json({ error: 'status must be going or interested' });
     }
 
-    // Enforce capacity for going RSVPs
-    if (status === 'going') {
-      const { rows } = await db.query(
-        `SELECT capacity, (SELECT count(*) FROM rsvps WHERE event_id = $1 AND status = 'going') AS going_count
-         FROM events WHERE id = $1`,
-        [req.params.eventId]
-      );
-      if (!rows.length) return res.status(404).json({ error: 'Event not found' });
-      const { capacity, going_count } = rows[0];
-      if (capacity !== null && parseInt(going_count) >= capacity) {
-        return res.status(409).json({ error: 'Event is at capacity' });
-      }
-    }
+    // Check event exists
+    const eventCheck = await db.query(`SELECT id FROM events WHERE id = $1`, [req.params.eventId]);
+    if (!eventCheck.rows.length) return res.status(404).json({ error: 'Event not found' });
 
-    const { rows } = await db.query(
-      `INSERT INTO rsvps (event_id, user_id, status)
-       VALUES ($1, $2, $3)
-       ON CONFLICT (event_id, user_id) DO UPDATE SET status = $3, updated_at = now()
-       RETURNING *`,
-      [req.params.eventId, req.user.sub, status]
-    );
+    let rows;
+    if (status === 'going') {
+      // Atomic conditional INSERT: only succeeds when going_count < capacity (or capacity is null)
+      ({ rows } = await db.query(
+        `WITH capacity_check AS (
+           SELECT id, capacity FROM events WHERE id = $1
+         ), current_count AS (
+           SELECT count(*) AS going_count FROM rsvps WHERE event_id = $1 AND status = 'going' AND user_id != $2
+         )
+         INSERT INTO rsvps (event_id, user_id, status)
+         SELECT $1, $2, $3
+         FROM capacity_check, current_count
+         WHERE capacity_check.capacity IS NULL OR current_count.going_count < capacity_check.capacity
+         ON CONFLICT (event_id, user_id) DO UPDATE SET status = $3, updated_at = now()
+         RETURNING *`,
+        [req.params.eventId, req.user.sub, status]
+      ));
+      if (!rows.length) return res.status(409).json({ error: 'Event is at capacity' });
+    } else {
+      ({ rows } = await db.query(
+        `INSERT INTO rsvps (event_id, user_id, status)
+         VALUES ($1, $2, $3)
+         ON CONFLICT (event_id, user_id) DO UPDATE SET status = $3, updated_at = now()
+         RETURNING *`,
+        [req.params.eventId, req.user.sub, status]
+      ));
+    }
     res.status(201).json(rows[0]);
   } catch (err) {
     next(err);
@@ -312,24 +322,41 @@ router.patch('/:eventId/rsvp', requireAuth, async (req, res, next) => {
       return res.status(400).json({ error: 'status must be going or interested' });
     }
 
+    let rows;
     if (status === 'going') {
-      const { rows } = await db.query(
-        `SELECT capacity, (SELECT count(*) FROM rsvps WHERE event_id = $1 AND status = 'going' AND user_id != $2) AS going_count
-         FROM events WHERE id = $1`,
-        [req.params.eventId, req.user.sub]
-      );
-      if (rows.length && rows[0].capacity !== null && parseInt(rows[0].going_count) >= rows[0].capacity) {
+      // Atomic conditional UPDATE: only succeeds when going_count < capacity (or capacity is null)
+      ({ rows } = await db.query(
+        `WITH capacity_check AS (
+           SELECT capacity FROM events WHERE id = $2
+         ), current_count AS (
+           SELECT count(*) AS going_count FROM rsvps WHERE event_id = $2 AND status = 'going' AND user_id != $3
+         )
+         UPDATE rsvps SET status = $1, updated_at = now()
+         FROM capacity_check, current_count
+         WHERE rsvps.event_id = $2
+           AND rsvps.user_id = $3
+           AND (capacity_check.capacity IS NULL OR current_count.going_count < capacity_check.capacity)
+         RETURNING rsvps.*`,
+        [status, req.params.eventId, req.user.sub]
+      ));
+      if (!rows.length) {
+        // Distinguish between not-found and capacity exceeded
+        const exists = await db.query(
+          `SELECT 1 FROM rsvps WHERE event_id = $1 AND user_id = $2`,
+          [req.params.eventId, req.user.sub]
+        );
+        if (!exists.rows.length) return res.status(404).json({ error: 'RSVP not found' });
         return res.status(409).json({ error: 'Event is at capacity' });
       }
+    } else {
+      ({ rows } = await db.query(
+        `UPDATE rsvps SET status = $1, updated_at = now()
+         WHERE event_id = $2 AND user_id = $3
+         RETURNING *`,
+        [status, req.params.eventId, req.user.sub]
+      ));
+      if (!rows.length) return res.status(404).json({ error: 'RSVP not found' });
     }
-
-    const { rows } = await db.query(
-      `UPDATE rsvps SET status = $1, updated_at = now()
-       WHERE event_id = $2 AND user_id = $3
-       RETURNING *`,
-      [status, req.params.eventId, req.user.sub]
-    );
-    if (!rows.length) return res.status(404).json({ error: 'RSVP not found' });
     res.json(rows[0]);
   } catch (err) {
     next(err);
