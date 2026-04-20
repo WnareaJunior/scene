@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View, TextInput, StyleSheet, Dimensions,
-  ScrollView, Text, TouchableOpacity, ActivityIndicator,
+  ScrollView, Text, TouchableOpacity, ActivityIndicator, Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { GestureDetector, Gesture } from 'react-native-gesture-handler';
@@ -162,10 +162,33 @@ export default function SearchSheet({ slideX, screenW, viewport }) {
   }, [query]);
 
   async function handleRsvp(eventId, status) {
+    const prevEvent = results.find(ev => ev.id === eventId);
+    if (!prevEvent) return;
+
+    const prevStatus = prevEvent.user_rsvp ?? null;
+    const newStatus = prevStatus === status ? null : status;
+
+    let countDelta = 0;
+    if (prevStatus === 'going' && newStatus !== 'going') countDelta = -1;
+    else if (prevStatus !== 'going' && newStatus === 'going') countDelta = 1;
+
+    setResults(rs => rs.map(ev =>
+      ev.id === eventId
+        ? { ...ev, user_rsvp: newStatus, going_count: Math.max(0, parseInt(ev.going_count ?? 0) + countDelta) }
+        : ev
+    ));
+
     try {
-      await events.rsvp(eventId, status);
+      if (newStatus === null) {
+        await events.cancelRsvp(eventId);
+      } else if (prevStatus !== null) {
+        await events.updateRsvp(eventId, newStatus);
+      } else {
+        await events.rsvp(eventId, newStatus);
+      }
     } catch {
-      setErrorMsg('Something went wrong');
+      setResults(rs => rs.map(ev => ev.id === eventId ? prevEvent : ev));
+      Alert.alert('Error', 'Could not update RSVP. Please try again.');
     }
   }
 
