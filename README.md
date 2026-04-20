@@ -1,4 +1,4 @@
-# OpenCrib
+# Scene
 
 Location-based event discovery platform connecting micro-venue hosts and independent artists with local audiences. Map-driven, RSVP-enforced, social-graph-aware.
 
