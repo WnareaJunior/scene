@@ -18,3 +18,9 @@ Before starting any task, query relevant context:
 - All new routes follow existing pattern in events.js
 - Open a PR for every change, never push directly to main
 - Run promptfoo eval before any PR touching AI logic
+
+## Agent Scope — Mandatory
+- Only write or edit files inside `backend/src/` and `frontend/`
+- Never modify `.claude/settings.json`, `CLAUDE.md`, `orchestrate.sh`, or any tooling/config file
+- Never request permission changes — implement the task directly in source files
+- If a task requires a migration, describe it in a comment and stop; do not create or modify migration files
