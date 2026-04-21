@@ -60,8 +60,8 @@ export default function App() {
     }
   }
 
-  function handleAuth(data) {
-    saveTokens({ accessToken: data.accessToken, refreshToken: data.refreshToken });
+  async function handleAuth(data) {
+    await saveTokens({ accessToken: data.accessToken, refreshToken: data.refreshToken });
     setUser(data.user);
   }
 

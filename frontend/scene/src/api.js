@@ -64,7 +64,10 @@ async function request(method, path, body, retry = true) {
   }
 
   if (res.status === 204) return null;
-  if (!res.ok) throw new Error('Request failed');
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error || 'Request failed');
+  }
   return res.json();
 }
 
