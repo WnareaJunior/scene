@@ -14,15 +14,18 @@ function hashToken(token) {
 }
 const JWT_OPTS = { algorithm: 'HS256', issuer: 'scene-api', audience: 'scene-app' };
 
+const ACCESS_SECRET = process.env.JWT_ACCESS_SECRET || process.env.JWT_SECRET;
+const REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET;
+
 function signAccess(userId) {
-  return jwt.sign({ sub: userId }, process.env.JWT_ACCESS_SECRET, {
+  return jwt.sign({ sub: userId }, ACCESS_SECRET, {
     ...JWT_OPTS,
     expiresIn: process.env.JWT_ACCESS_EXPIRES_IN || '15m',
   });
 }
 
 function signRefresh(userId) {
-  return jwt.sign({ sub: userId, jti: uuidv4() }, process.env.JWT_REFRESH_SECRET, {
+  return jwt.sign({ sub: userId, jti: uuidv4() }, REFRESH_SECRET, {
     ...JWT_OPTS,
     expiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '7d',
   });
@@ -108,7 +111,7 @@ router.post('/refresh', async (req, res, next) => {
 
     let payload;
     try {
-      payload = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET, {
+      payload = jwt.verify(refreshToken, REFRESH_SECRET, {
         algorithms: ['HS256'],
         issuer: 'scene-api',
         audience: 'scene-app',
