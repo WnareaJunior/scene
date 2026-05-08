@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__Claude_Preview__preview_start",
+      "Read(//Users/wnarea/Github/scene/frontend/scene/**)",
+      "Bash(/opt/homebrew/bin/npm install:*)",
+      "Bash(PATH=\"/opt/homebrew/bin:$PATH\" npm install)",
+      "Bash(PATH=\"/opt/homebrew/bin:$PATH\" npx expo install react-native-web react-dom @expo/metro-runtime)"
+    ]
+  }
+}

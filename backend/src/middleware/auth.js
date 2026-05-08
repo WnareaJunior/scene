@@ -1,5 +1,7 @@
 const jwt = require('jsonwebtoken');
 
+const ACCESS_SECRET = process.env.JWT_ACCESS_SECRET || process.env.JWT_SECRET;
+
 module.exports = function requireAuth(req, res, next) {
   const header = req.headers.authorization;
   if (!header || !header.startsWith('Bearer ')) {
@@ -7,7 +9,7 @@ module.exports = function requireAuth(req, res, next) {
   }
   const token = header.slice(7);
   try {
-    req.user = jwt.verify(token, process.env.JWT_ACCESS_SECRET, {
+    req.user = jwt.verify(token, ACCESS_SECRET, {
       algorithms: ['HS256'],
       issuer: 'scene-api',
       audience: 'scene-app',
