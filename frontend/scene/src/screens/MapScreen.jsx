@@ -9,6 +9,26 @@ const initialRegion = {
   latitudeDelta: 0.05, longitudeDelta: 0.05,
 };
 
+// Haversine distance between two lat/lng points, in kilometres.
+function haversineKm(lat1, lng1, lat2, lng2) {
+  const R = 6371;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLng = ((lng2 - lng1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+// Significant zoom change: delta ratio differs by more than 30%.
+function zoomChanged(prev, next) {
+  if (!prev) return true;
+  const ratio = next.latitudeDelta / prev.latitudeDelta;
+  return ratio > 1.3 || ratio < 0.77;
+}
+
 function regionToBounds(region) {
   const latD = region.latitudeDelta / 2;
   const lngD = region.longitudeDelta / 2;
@@ -20,10 +40,18 @@ function regionToBounds(region) {
   };
 }
 
+// Debounce delay in ms — matches SearchSheet's viewport debounce.
+const DEBOUNCE_MS = 400;
+// Minimum map-center movement (km) required to trigger a new pin fetch.
+const MIN_MOVE_KM = 0.5;
+
 export default function MapScreen({ onRegionChangeComplete }) {
   const [pins, setPins] = useState([]);
   const [fetchError, setFetchError] = useState(false);
   const mapRef = useRef(null);
+  // Refs for debounce and movement guard — never trigger re-renders.
+  const debounceRef = useRef(null);
+  const lastFetchRef = useRef(null); // { lat, lng, region }
 
   async function fetchPins(region) {
     try {
@@ -37,9 +65,25 @@ export default function MapScreen({ onRegionChangeComplete }) {
 
   useEffect(() => { fetchPins(initialRegion); }, []);
 
-  const handleRegionChange = useCallback(async (region) => {
+  const handleRegionChange = useCallback((region) => {
+    // Always notify the parent of the latest viewport (used by SearchSheet).
     onRegionChangeComplete(region);
-    fetchPins(region);
+
+    // Debounce + distance guard: cancel any pending fetch and start a new timer.
+    clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      const last = lastFetchRef.current;
+
+      if (last) {
+        const moved = haversineKm(last.lat, last.lng, region.latitude, region.longitude);
+        const zoomed = zoomChanged(last.region, region);
+        // Skip the fetch if the user only panned a tiny distance without zooming.
+        if (moved < MIN_MOVE_KM && !zoomed) return;
+      }
+
+      lastFetchRef.current = { lat: region.latitude, lng: region.longitude, region };
+      fetchPins(region);
+    }, DEBOUNCE_MS);
   }, [onRegionChangeComplete]);
 
   async function centerOnUser() {

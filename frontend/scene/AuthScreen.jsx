@@ -66,6 +66,8 @@ export default function AuthScreen({ onAuth }) {
           placeholderTextColor="#555"
           autoCapitalize="none"
           keyboardType="email-address"
+          textContentType="emailAddress"
+          autoComplete="email"
           value={email}
           onChangeText={setEmail}
         />
@@ -74,6 +76,8 @@ export default function AuthScreen({ onAuth }) {
           placeholder="password"
           placeholderTextColor="#555"
           secureTextEntry
+          textContentType={mode === 'login' ? 'password' : 'newPassword'}
+          autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
           value={password}
           onChangeText={setPassword}
         />

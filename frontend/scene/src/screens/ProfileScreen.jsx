@@ -1,17 +1,18 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
   Image,
-  ScrollView,
+  FlatList,
   TouchableOpacity,
   StyleSheet,
   StatusBar,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 
-import { users, auth, clearTokens } from '../api';
+import { users, auth } from '../api';
 
 // ============================================================================
 // Helpers
@@ -170,42 +171,55 @@ export default function ProfileScreen({ user, onSignOut }) {
       quality: 0.7,
     });
     if (result.canceled) return;
-    const updated = await users.uploadAvatar(result.assets[0].uri);
-    if (updated?.id) setProfileData((prev) => ({ ...prev, profile_picture: updated.profile_picture }));
+    try {
+      const updated = await users.uploadAvatar(result.assets[0].uri);
+      if (updated?.id) setProfileData((prev) => ({ ...prev, profile_picture: updated.profile_picture }));
+    } catch (err) {
+      Alert.alert('Upload failed', err.message || 'Could not update avatar.');
+    }
   }
 
   async function handleSignOut() {
+    // auth.logout() calls the server revoke endpoint AND clears tokens internally
     await auth.logout();
-    await clearTokens();
     onSignOut();
   }
+
+  // Stable renderItem — avoids re-creating the function on every profileData change
+  // by reading profileData from state (closure captures latest via re-render).
+  const renderItem = useCallback(({ item }) => (
+    <EventCard event={item} profileData={profileData} />
+  ), [profileData]);
+
+  const keyExtractor = useCallback((item) => item.id.toString(), []);
+
+  const ItemSeparator = useCallback(() => <View style={styles.divider} />, []);
+
+  // The profile header, sign-out button, and top divider live in ListHeaderComponent
+  // so they scroll together with the feed inside the single FlatList.
+  const ListHeader = useCallback(() => (
+    <>
+      <ProfileHeader profileData={profileData} onAvatarPress={handlePickAvatar} />
+      <TouchableOpacity style={styles.signOutBtn} onPress={handleSignOut}>
+        <Text style={styles.signOutText}>Sign out</Text>
+      </TouchableOpacity>
+      <View style={styles.divider} />
+    </>
+  ), [profileData]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="#000" />
-      <ScrollView
+      <FlatList
+        data={feed}
+        keyExtractor={keyExtractor}
+        renderItem={renderItem}
+        ListHeaderComponent={ListHeader}
+        ItemSeparatorComponent={ItemSeparator}
+        ListEmptyComponent={<Text style={styles.feedEmpty}>No events yet</Text>}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
-      >
-        <ProfileHeader profileData={profileData} onAvatarPress={handlePickAvatar} />
-
-        <TouchableOpacity style={styles.signOutBtn} onPress={handleSignOut}>
-          <Text style={styles.signOutText}>Sign out</Text>
-        </TouchableOpacity>
-
-        <View style={styles.divider} />
-
-        {feed.length === 0 ? (
-          <Text style={styles.feedEmpty}>No events yet</Text>
-        ) : (
-          feed.map((event, idx) => (
-            <React.Fragment key={event.id}>
-              <EventCard event={event} profileData={profileData} />
-              {idx < feed.length - 1 && <View style={styles.divider} />}
-            </React.Fragment>
-          ))
-        )}
-      </ScrollView>
+      />
     </SafeAreaView>
   );
 }

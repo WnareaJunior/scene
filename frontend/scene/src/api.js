@@ -1,28 +1,28 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as SecureStore from 'expo-secure-store';
 
 const BASE_URL = 'https://scene-19ss.onrender.com/api/v1';
 
-// ── Token storage ─────────────────────────────────────────────────────────────
+// ── Token storage (SecureStore — encrypted on-device) ─────────────────────────
 
 export async function saveTokens({ accessToken, refreshToken }) {
-  const ops = [AsyncStorage.setItem('accessToken', accessToken)];
-  if (refreshToken) ops.push(AsyncStorage.setItem('refreshToken', refreshToken));
+  const ops = [SecureStore.setItemAsync('accessToken', accessToken)];
+  if (refreshToken) ops.push(SecureStore.setItemAsync('refreshToken', refreshToken));
   await Promise.all(ops);
 }
 
 export async function clearTokens() {
   await Promise.all([
-    AsyncStorage.removeItem('accessToken'),
-    AsyncStorage.removeItem('refreshToken'),
+    SecureStore.deleteItemAsync('accessToken'),
+    SecureStore.deleteItemAsync('refreshToken'),
   ]);
 }
 
-async function getStoredToken() {
-  return AsyncStorage.getItem('accessToken');
+export async function getStoredToken() {
+  return SecureStore.getItemAsync('accessToken');
 }
 
 async function refreshAccessToken() {
-  const refreshToken = await AsyncStorage.getItem('refreshToken');
+  const refreshToken = await SecureStore.getItemAsync('refreshToken');
   if (!refreshToken) throw new Error('No refresh token');
 
   const res = await fetch(`${BASE_URL}/auth/refresh`, {
@@ -37,7 +37,7 @@ async function refreshAccessToken() {
   }
 
   const data = await res.json();
-  await AsyncStorage.setItem('accessToken', data.accessToken);
+  await SecureStore.setItemAsync('accessToken', data.accessToken);
   return data.accessToken;
 }
 
@@ -88,7 +88,7 @@ export const auth = {
     request('POST', '/auth/login', { email, password }),
 
   logout: async () => {
-    const refreshToken = await AsyncStorage.getItem('refreshToken');
+    const refreshToken = await SecureStore.getItemAsync('refreshToken');
     if (refreshToken) {
       await request('POST', '/auth/logout', { refreshToken }).catch(() => {});
     }
@@ -102,7 +102,7 @@ export const users = {
   me: () => request('GET', '/users/me'),
   update: (data) => request('PATCH', '/users/me', data),
   uploadAvatar: async (imageUri) => {
-    const token = await AsyncStorage.getItem('accessToken');
+    const token = await SecureStore.getItemAsync('accessToken');
     const filename = imageUri.split('/').pop();
     const match = /\.(\w+)$/.exec(filename);
     const type = match ? `image/${match[1]}` : 'image/jpeg';
@@ -113,6 +113,10 @@ export const users = {
       headers: { Authorization: `Bearer ${token}` },
       body: formData,
     });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Avatar upload failed');
+    }
     return res.json();
   },
   hostedEvents: (params = {}) => request('GET', `/users/me/hosted-events?${qs(params)}`),

@@ -1,13 +1,12 @@
 import 'react-native-gesture-handler';
 import React, { useState, useEffect } from 'react';
 import { View, ActivityIndicator, StyleSheet, Text, TouchableOpacity } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import AuthScreen from './AuthScreen';
 import Scene from './Scene';
-import { users, saveTokens } from './src/api';
+import { users, saveTokens, getStoredToken, clearTokens } from './src/api';
 
 class ErrorBoundary extends React.Component {
   state = { hasError: false };
@@ -44,17 +43,17 @@ export default function App() {
 
   async function bootstrap() {
     try {
-      const token = await AsyncStorage.getItem('accessToken');
+      const token = await getStoredToken();
       if (token) {
         const me = await users.me();
         if (me && me.id) {
           setUser(me);
         } else {
-          await AsyncStorage.multiRemove(['accessToken', 'refreshToken']);
+          await clearTokens();
         }
       }
     } catch {
-      await AsyncStorage.multiRemove(['accessToken', 'refreshToken']);
+      await clearTokens();
     } finally {
       setLoading(false);
     }
