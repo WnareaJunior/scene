@@ -10,8 +10,13 @@ router.get('/events', requireAuth, async (req, res, next) => {
     if (!swLat || !swLng || !neLat || !neLng) {
       return res.status(400).json({ error: 'swLat, swLng, neLat, neLng are required' });
     }
+    const swLatF = parseFloat(swLat), swLngF = parseFloat(swLng);
+    const neLatF = parseFloat(neLat), neLngF = parseFloat(neLng);
+    if (!Number.isFinite(swLatF) || !Number.isFinite(swLngF) || !Number.isFinite(neLatF) || !Number.isFinite(neLngF)) {
+      return res.status(400).json({ error: 'swLat, swLng, neLat, neLng must be finite numbers' });
+    }
 
-    const params = [swLng, swLat, neLng, neLat];
+    const params = [swLngF, swLatF, neLngF, neLatF];
     let hashtagFilter = '';
     if (hashtags) {
       const tags = hashtags.split(',').map(t => t.trim());
@@ -20,16 +25,18 @@ router.get('/events', requireAuth, async (req, res, next) => {
     }
 
     const { rows } = await db.query(
-      `SELECT id, title, latitude, longitude, hashtags,
-              start_time,
-              (SELECT count(*) FROM rsvps WHERE event_id = events.id AND status = 'going') AS going_count
-       FROM events
-       WHERE status = 'active'
-         AND is_private = false
-         AND start_time >= now()
-         AND ST_Within(location::geometry, ST_MakeEnvelope($1, $2, $3, $4, 4326))
+      `SELECT e.id, e.title, e.latitude, e.longitude, e.hashtags,
+              e.start_time,
+              COUNT(r.id) FILTER (WHERE r.status = 'going') AS going_count
+       FROM events e
+       LEFT JOIN rsvps r ON r.event_id = e.id
+       WHERE e.status = 'active'
+         AND e.is_private = false
+         AND e.start_time >= now()
+         AND ST_Within(e.location::geometry, ST_MakeEnvelope($1, $2, $3, $4, 4326))
          ${hashtagFilter}
-       ORDER BY start_time ASC
+       GROUP BY e.id
+       ORDER BY e.start_time ASC
        LIMIT 500`,
       params
     );

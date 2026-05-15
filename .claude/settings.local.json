@@ -69,7 +69,13 @@
       "Bash(grep -E \"\\\\.md$\")",
       "Bash(xargs ls -la)",
       "Bash(.venv/bin/ov *)",
-      "mcp__viking__list"
+      "mcp__viking__list",
+      "mcp__viking__read",
+      "mcp__viking__glob",
+      "mcp__viking__grep",
+      "Bash(npm audit *)",
+      "Bash(git -C /Users/wnarea/Github/scene status)",
+      "Bash(git -C /Users/wnarea/Github/scene diff --stat)"
     ]
   },
   "enabledPlugins": {

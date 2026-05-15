@@ -1,6 +1,5 @@
 const express = require('express');
 const cors = require('cors');
-const path = require('path');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 
@@ -45,15 +44,16 @@ const refreshLimiter = rateLimit({
   handler: rateLimitResponse,
 });
 
+const apiLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 200,
+  handler: rateLimitResponse,
+});
+
 const app = express();
 app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
 app.use(cors(corsOptions));
-app.use(express.json());
-app.use('/uploads', (req, res, next) => {
-  res.setHeader('Content-Disposition', 'attachment');
-  res.setHeader('X-Content-Type-Options', 'nosniff');
-  next();
-}, express.static(path.join(__dirname, '..', 'uploads')));
+app.use(express.json({ limit: '50kb' }));
 
 app.get('/health', (req, res) => res.json({ status: 'ok' }));
 
@@ -61,6 +61,7 @@ app.post('/api/v1/auth/login', authLimiter);
 app.post('/api/v1/auth/register', authLimiter);
 app.post('/api/v1/auth/refresh', refreshLimiter);
 
+app.use('/api/v1', apiLimiter);
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/users', userRoutes);
 app.use('/api/v1/events', eventRoutes);

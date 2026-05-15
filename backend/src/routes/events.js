@@ -38,24 +38,27 @@ router.post('/', requireAuth, async (req, res, next) => {
 // GET /events/feed
 router.get('/feed', requireAuth, async (req, res, next) => {
   try {
-    const { page = 1, limit = 20 } = req.query;
-    const offset = (page - 1) * Math.min(limit, 100);
+    const pageNum = Math.max(1, parseInt(req.query.page) || 1);
+    const limitNum = Math.min(parseInt(req.query.limit) || 20, 100);
+    const offset = (pageNum - 1) * limitNum;
 
     const { rows } = await db.query(
       `SELECT e.id, e.title, e.description, e.latitude, e.longitude, e.address,
               e.start_time, e.end_time, e.capacity, e.hashtags, e.is_private, e.show_attendees, e.status,
               e.host_id,
-              (SELECT count(*) FROM rsvps WHERE event_id = e.id AND status = 'going') AS going_count,
-              (SELECT count(*) FROM rsvps WHERE event_id = e.id AND status = 'interested') AS interested_count,
+              COUNT(r.id) FILTER (WHERE r.status = 'going') AS going_count,
+              COUNT(r.id) FILTER (WHERE r.status = 'interested') AS interested_count,
               u.username AS host_username, u.profile_picture AS host_picture
        FROM events e
        JOIN users u ON u.id = e.host_id
+       LEFT JOIN rsvps r ON r.event_id = e.id
        WHERE e.host_id IN (SELECT followed_id FROM follows WHERE follower_id = $1)
          AND e.status = 'active'
          AND e.start_time >= now()
+       GROUP BY e.id, u.username, u.profile_picture
        ORDER BY e.start_time ASC
        LIMIT $2 OFFSET $3`,
-      [req.user.sub, Math.min(limit, 100), offset]
+      [req.user.sub, limitNum, offset]
     );
     res.json(rows);
   } catch (err) {
@@ -86,15 +89,17 @@ router.get('/random', requireAuth, async (req, res, next) => {
     const { rows } = await db.query(
       `SELECT e.id, e.title, e.description, e.latitude, e.longitude, e.address,
               e.start_time, e.end_time, e.capacity, e.hashtags,
-              (SELECT count(*) FROM rsvps WHERE event_id = e.id AND status = 'going') AS going_count,
+              COUNT(r.id) FILTER (WHERE r.status = 'going') AS going_count,
               u.username AS host_username
        FROM events e
        JOIN users u ON u.id = e.host_id
+       LEFT JOIN rsvps r ON r.event_id = e.id
        WHERE e.status = 'active'
          AND e.is_private = false
          AND e.start_time >= now()
-         AND (e.capacity IS NULL OR (SELECT count(*) FROM rsvps WHERE event_id = e.id AND status = 'going') < e.capacity)
          ${geoFilter} ${hashtagFilter}
+       GROUP BY e.id, u.username
+       HAVING e.capacity IS NULL OR COUNT(r.id) FILTER (WHERE r.status = 'going') < e.capacity
        ORDER BY random()
        LIMIT 1`,
       params
@@ -127,7 +132,12 @@ router.get('/', requireAuth, async (req, res, next) => {
     const conditions = [`e.status = 'active'`, `e.is_private = false`];
 
     if (swLat && swLng && neLat && neLng) {
-      params.push(swLng, swLat, neLng, neLat);
+      const swLatF = parseFloat(swLat), swLngF = parseFloat(swLng);
+      const neLatF = parseFloat(neLat), neLngF = parseFloat(neLng);
+      if (!Number.isFinite(swLatF) || !Number.isFinite(swLngF) || !Number.isFinite(neLatF) || !Number.isFinite(neLngF)) {
+        return res.status(400).json({ error: 'swLat, swLng, neLat, neLng must be finite numbers' });
+      }
+      params.push(swLngF, swLatF, neLngF, neLatF);
       conditions.push(
         `ST_Within(location::geometry, ST_MakeEnvelope($${params.length - 3}, $${params.length - 2}, $${params.length - 1}, $${params.length}, 4326))`
       );
@@ -190,12 +200,14 @@ router.get('/', requireAuth, async (req, res, next) => {
     const { rows } = await db.query(
       `SELECT e.id, e.title, e.description, e.latitude, e.longitude, e.address,
               e.start_time, e.end_time, e.capacity, e.hashtags, e.show_attendees, e.host_id,
-              (SELECT count(*) FROM rsvps WHERE event_id = e.id AND status = 'going') AS going_count,
-              (SELECT count(*) FROM rsvps WHERE event_id = e.id AND status = 'interested') AS interested_count,
+              COUNT(r.id) FILTER (WHERE r.status = 'going') AS going_count,
+              COUNT(r.id) FILTER (WHERE r.status = 'interested') AS interested_count,
               u.username AS host_username, u.profile_picture AS host_picture
        FROM events e
        JOIN users u ON u.id = e.host_id
+       LEFT JOIN rsvps r ON r.event_id = e.id
        WHERE ${conditions.join(' AND ')}
+       GROUP BY e.id, u.username, u.profile_picture
        ORDER BY ${orderBy}
        LIMIT $${params.length - 1} OFFSET $${params.length}`,
       params
@@ -213,12 +225,14 @@ router.get('/:eventId', requireAuth, async (req, res, next) => {
       `SELECT e.id, e.title, e.description, e.latitude, e.longitude, e.address,
               e.start_time, e.end_time, e.capacity, e.hashtags, e.is_private, e.show_attendees, e.status,
               e.host_id,
-              (SELECT count(*) FROM rsvps WHERE event_id = e.id AND status = 'going') AS going_count,
-              (SELECT count(*) FROM rsvps WHERE event_id = e.id AND status = 'interested') AS interested_count,
+              COUNT(r.id) FILTER (WHERE r.status = 'going') AS going_count,
+              COUNT(r.id) FILTER (WHERE r.status = 'interested') AS interested_count,
               u.username AS host_username, u.profile_picture AS host_picture
        FROM events e
        JOIN users u ON u.id = e.host_id
-       WHERE e.id = $1`,
+       LEFT JOIN rsvps r ON r.event_id = e.id
+       WHERE e.id = $1
+       GROUP BY e.id, u.username, u.profile_picture`,
       [req.params.eventId]
     );
     if (!rows.length) return res.status(404).json({ error: 'Event not found' });
@@ -251,6 +265,15 @@ router.patch('/:eventId', requireAuth, async (req, res, next) => {
       title, description, address, startTime, endTime,
       capacity, hashtags, isPrivate, showAttendees,
     } = req.body;
+
+    if (startTime !== undefined) {
+      const d = new Date(startTime);
+      if (isNaN(d.getTime())) return res.status(400).json({ error: 'startTime must be a valid ISO 8601 date' });
+    }
+    if (endTime !== undefined) {
+      const d = new Date(endTime);
+      if (isNaN(d.getTime())) return res.status(400).json({ error: 'endTime must be a valid ISO 8601 date' });
+    }
 
     const { rows } = await db.query(
       `UPDATE events SET

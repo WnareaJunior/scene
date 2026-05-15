@@ -2,32 +2,27 @@ const router = require('express').Router();
 const db = require('../db');
 const requireAuth = require('../middleware/auth');
 const multer = require('multer');
-const path = require('path');
-const fs = require('fs');
+const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
 
-const uploadDir = path.join(__dirname, '../../uploads/avatars');
-fs.mkdirSync(uploadDir, { recursive: true });
+const s3 = new S3Client({ region: process.env.AWS_REGION });
 
-const ALLOWED_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
-const ALLOWED_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.webp'];
-const MIME_TO_EXT = {
-  'image/jpeg': '.jpg',
-  'image/png': '.png',
-  'image/webp': '.webp',
-};
+const ALLOWED_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
+const MIME_TO_EXT = { 'image/jpeg': '.jpg', 'image/png': '.png', 'image/webp': '.webp' };
+
+function detectMime(buf) {
+  if (buf.length < 12) return null;
+  if (buf[0] === 0xFF && buf[1] === 0xD8 && buf[2] === 0xFF) return 'image/jpeg';
+  if (buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4E && buf[3] === 0x47) return 'image/png';
+  if (buf[0] === 0x52 && buf[1] === 0x49 && buf[2] === 0x46 && buf[3] === 0x46 &&
+      buf[8] === 0x57 && buf[9] === 0x45 && buf[10] === 0x42 && buf[11] === 0x50) return 'image/webp';
+  return null;
+}
 
 const upload = multer({
-  storage: multer.diskStorage({
-    destination: uploadDir,
-    filename: (req, file, cb) => {
-      const ext = MIME_TO_EXT[file.mimetype];
-      cb(null, `${req.user.sub}-${Date.now()}${ext}`);
-    },
-  }),
+  storage: multer.memoryStorage(),
   limits: { fileSize: 5 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
-    const ext = path.extname(file.originalname).toLowerCase();
-    if (!ALLOWED_MIME_TYPES.includes(file.mimetype) || !ALLOWED_EXTENSIONS.includes(ext)) {
+    if (!ALLOWED_MIME_TYPES.has(file.mimetype)) {
       const err = new Error('Invalid file type. Only JPEG, PNG, and WebP images are allowed.');
       err.status = 400;
       return cb(err, false);
@@ -57,6 +52,15 @@ router.get('/me', requireAuth, async (req, res, next) => {
 router.patch('/me', requireAuth, async (req, res, next) => {
   try {
     const { bio, gender, interests, profilePicture } = req.body;
+    if (bio !== undefined && (typeof bio !== 'string' || bio.length > 500)) {
+      return res.status(400).json({ error: 'bio must be a string of 500 characters or fewer' });
+    }
+    if (gender !== undefined && typeof gender !== 'string') {
+      return res.status(400).json({ error: 'gender must be a string' });
+    }
+    if (interests !== undefined && (!Array.isArray(interests) || interests.length > 50 || interests.some(i => typeof i !== 'string'))) {
+      return res.status(400).json({ error: 'interests must be an array of up to 50 strings' });
+    }
     const { rows } = await db.query(
       `UPDATE users SET
          bio = COALESCE($1, bio),
@@ -78,7 +82,19 @@ router.patch('/me', requireAuth, async (req, res, next) => {
 router.post('/me/avatar', requireAuth, upload.single('avatar'), async (req, res, next) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
-    const url = `/uploads/avatars/${req.file.filename}`;
+    const detectedMime = detectMime(req.file.buffer);
+    if (!detectedMime || !ALLOWED_MIME_TYPES.has(detectedMime)) {
+      return res.status(400).json({ error: 'Invalid file type. Only JPEG, PNG, and WebP images are allowed.' });
+    }
+    const ext = MIME_TO_EXT[detectedMime];
+    const key = `avatars/${req.user.sub}-${Date.now()}${ext}`;
+    await s3.send(new PutObjectCommand({
+      Bucket: process.env.AWS_S3_BUCKET,
+      Key: key,
+      Body: req.file.buffer,
+      ContentType: detectedMime,
+    }));
+    const url = `https://${process.env.AWS_S3_BUCKET}.s3.${process.env.AWS_REGION}.amazonaws.com/${key}`;
     const { rows } = await db.query(
       `UPDATE users SET profile_picture = $1, updated_at = now() WHERE id = $2
        RETURNING id, email, username, bio, profile_picture`,
