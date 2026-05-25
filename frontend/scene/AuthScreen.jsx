@@ -90,8 +90,11 @@ export default function AuthScreen({ onAuth }) {
           )}
         </TouchableOpacity>
 
-        <TouchableOpacity onPress={() => setMode(mode === 'login' ? 'register' : 'login')}>
-          <Text style={styles.toggle}>
+        <TouchableOpacity
+          onPress={() => setMode(mode === 'login' ? 'register' : 'login')}
+          disabled={loading}
+        >
+          <Text style={[styles.toggle, loading && styles.toggleDisabled]}>
             {mode === 'login' ? "Don't have an account? Sign up" : 'Already have an account? Sign in'}
           </Text>
         </TouchableOpacity>
@@ -139,4 +142,5 @@ const styles = StyleSheet.create({
   },
   btnText: { color: '#fff', fontWeight: '700', fontSize: 16 },
   toggle: { color: '#666', textAlign: 'center', fontSize: 14 },
+  toggleDisabled: { opacity: 0.4 },
 });

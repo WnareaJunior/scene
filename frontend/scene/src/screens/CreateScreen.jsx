@@ -146,7 +146,12 @@ export default function CreateScreen({ viewport, onCreated }) {
           latitudeDelta: 0.01,
           longitudeDelta: 0.01,
         }, 600);
-      } catch {}
+      } catch {
+        // Intentionally silent: location is optional on the Create screen.
+        // The user can still set a location via the address autocomplete or by
+        // panning the embedded map — failing to get GPS coords is not an error
+        // the user needs to act on at this point.
+      }
     })();
   }, []);
 
@@ -190,6 +195,7 @@ export default function CreateScreen({ viewport, onCreated }) {
       return;
     }
     setCreating(true);
+    let created = false;
     try {
       const data = await events.create({
         title: form.title,
@@ -197,24 +203,30 @@ export default function CreateScreen({ viewport, onCreated }) {
         startTime: form.startTime.toISOString(),
         latitude: locationToSubmit.latitude,
         longitude: locationToSubmit.longitude,
-        capacity: form.capacity ? parseInt(form.capacity) : undefined,
+        capacity: form.capacity ? parseInt(form.capacity, 10) : undefined,
         hashtags,
       });
       if (data?.id) {
-        Alert.alert('Created!', `"${data.title}" is live.`);
+        created = true;
         setForm({ title: '', address: '', startTime: null, capacity: '' });
         setHashtags([]);
         setTagInput('');
         setSelectedLocation(null);
         placesRef.current?.setAddressText('');
+        // Navigate away first, then show confirmation so we don't update
+        // state on an unmounted component.
         onCreated();
+        Alert.alert('Created!', `"${data.title}" is live.`);
       } else {
         Alert.alert('Error', data?.error || 'Could not create event.');
       }
     } catch (err) {
-      Alert.alert('Error', err.message);
+      Alert.alert('Error', err.message || 'Something went wrong. Please try again.');
+    } finally {
+      // Only reset the loading spinner if we haven't navigated away,
+      // to avoid a state update on an unmounted component.
+      if (!created) setCreating(false);
     }
-    setCreating(false);
   }
 
   return (

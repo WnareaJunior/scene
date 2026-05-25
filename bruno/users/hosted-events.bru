@@ -1,0 +1,15 @@
+meta {
+  name: My Hosted Events
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{base_url}}/users/me/hosted-events?status=upcoming
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{access_token}}
+}

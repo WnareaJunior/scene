@@ -1,0 +1,25 @@
+meta {
+  name: RSVP to Event
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{base_url}}/events/:eventId/rsvp
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{access_token}}
+}
+
+params:path {
+  eventId: REPLACE_WITH_EVENT_ID
+}
+
+body:json {
+  {
+    "status": "going"
+  }
+}

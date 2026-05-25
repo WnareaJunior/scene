@@ -1,0 +1,15 @@
+meta {
+  name: My RSVPs
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{base_url}}/users/me/rsvps?status=going
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{access_token}}
+}

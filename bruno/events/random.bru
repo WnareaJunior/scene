@@ -1,0 +1,15 @@
+meta {
+  name: Random Nearby Event
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{base_url}}/events/random?lat=40.7128&lng=-74.0060&radius=5000
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{access_token}}
+}

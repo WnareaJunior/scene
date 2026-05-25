@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { View, TouchableOpacity, Text, StyleSheet } from 'react-native';
+import { View, TouchableOpacity, Text, StyleSheet, Alert } from 'react-native';
 import MapView, { Marker } from 'react-native-maps';
 import * as Location from 'expo-location';
 import { map as mapApi } from '../api';
@@ -89,7 +89,13 @@ export default function MapScreen({ onRegionChangeComplete }) {
   async function centerOnUser() {
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') return;
+      if (status !== 'granted') {
+        Alert.alert(
+          'Location access denied',
+          'Enable location in Settings to center the map on your position.',
+        );
+        return;
+      }
       const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
       mapRef.current?.animateToRegion({
         latitude: pos.coords.latitude,
@@ -97,7 +103,9 @@ export default function MapScreen({ onRegionChangeComplete }) {
         latitudeDelta: 0.01,
         longitudeDelta: 0.01,
       }, 600);
-    } catch {}
+    } catch {
+      Alert.alert('Location unavailable', 'Could not determine your current location.');
+    }
   }
 
   return (

@@ -1,0 +1,29 @@
+meta {
+  name: Create Event
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{base_url}}/events
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{access_token}}
+}
+
+body:json {
+  {
+    "title": "Rooftop Party",
+    "description": "Come hang out",
+    "latitude": 40.7128,
+    "longitude": -74.0060,
+    "startTime": "2026-06-01T20:00:00Z",
+    "endTime": "2026-06-01T23:00:00Z",
+    "hashtags": ["music", "rooftop"],
+    "capacity": 50,
+    "isPrivate": false
+  }
+}

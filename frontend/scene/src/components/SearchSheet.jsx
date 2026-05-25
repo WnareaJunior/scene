@@ -159,7 +159,7 @@ export default function SearchSheet({ slideX, screenW, viewport }) {
     }, 350);
 
     return () => clearTimeout(debounceRef.current);
-  }, [query]);
+  }, [query, loadFeed]);
 
   async function handleRsvp(eventId, status) {
     const prevEvent = results.find(ev => ev.id === eventId);

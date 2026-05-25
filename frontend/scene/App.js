@@ -6,7 +6,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import AuthScreen from './AuthScreen';
 import Scene from './Scene';
-import { users, saveTokens, getStoredToken, clearTokens } from './src/api';
+import { users, auth, saveTokens, getStoredToken, clearTokens } from './src/api';
 
 class ErrorBoundary extends React.Component {
   state = { hasError: false };
@@ -53,6 +53,10 @@ export default function App() {
         }
       }
     } catch {
+      // Intentionally silent: bootstrap runs before any UI is visible.
+      // Any error (network, SecureStore) simply means the stored session
+      // cannot be restored; clearing tokens and showing AuthScreen is the
+      // correct recovery — no Alert is appropriate at this point.
       await clearTokens();
     } finally {
       setLoading(false);
@@ -64,7 +68,10 @@ export default function App() {
     setUser(data.user);
   }
 
-  function handleSignOut() {
+  async function handleSignOut() {
+    // Ensure tokens are always wiped even if the caller already called
+    // auth.logout() — clearTokens() is idempotent.
+    await clearTokens();
     setUser(null);
   }
 

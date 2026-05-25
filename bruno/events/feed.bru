@@ -1,0 +1,15 @@
+meta {
+  name: Event Feed
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{base_url}}/events/feed
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{access_token}}
+}

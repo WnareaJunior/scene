@@ -29,16 +29,15 @@ module.exports = {
     // OTA update configuration via expo-updates.
     // EXPO_PUBLIC_UPDATE_URL is set in EAS Secrets / CI; leave blank for local dev.
     updates: {
-      enabled: true,
+      enabled: !!process.env.EXPO_PUBLIC_UPDATE_URL,
       fallbackToCacheTimeout: 0,
-      url: process.env.EXPO_PUBLIC_UPDATE_URL || '',
+      ...(process.env.EXPO_PUBLIC_UPDATE_URL ? { url: process.env.EXPO_PUBLIC_UPDATE_URL } : {}),
     },
-    // Runtime version policy: bump automatically whenever the native app version
-    // (version field above) changes, preventing stale OTA bundles from running on
-    // incompatible native code.
-    runtimeVersion: {
-      policy: 'appVersion',
-    },
+    // Only set runtimeVersion when OTA updates are active — expo-updates crashes
+    // at launch if runtimeVersion is present without a valid updates.url.
+    ...(process.env.EXPO_PUBLIC_UPDATE_URL
+      ? { runtimeVersion: { policy: 'appVersion' } }
+      : {}),
     splash: {
       image: './assets/splash.png',
       resizeMode: 'contain',
@@ -49,8 +48,12 @@ module.exports = {
       infoPlist: {
         NSLocationWhenInUseUsageDescription:
           'Scene uses your location to show nearby events.',
+        NSPhotoLibraryUsageDescription:
+          'Scene accesses your photo library so you can set a profile picture.',
+        NSPhotoLibraryAddUsageDescription:
+          'Scene saves photos to your library.',
       },
-      bundleIdentifier: 'ios.scene',
+      bundleIdentifier: 'com.scene.app',
       config: {
         googleMapsApiKey: iosKey,
       },
@@ -64,7 +67,7 @@ module.exports = {
       // requires Play Store approval and a compelling use-case justification that
       // Scene does not have.  Foreground-only location is sufficient.
       permissions: ['ACCESS_FINE_LOCATION', 'ACCESS_COARSE_LOCATION'],
-      package: 'android.scene',
+      package: 'com.scene.app',
       config: {
         googleMaps: {
           apiKey: androidKey,

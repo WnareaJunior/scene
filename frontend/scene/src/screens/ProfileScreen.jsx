@@ -8,6 +8,7 @@ import {
   StyleSheet,
   StatusBar,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
@@ -144,10 +145,20 @@ const EventCard = ({ event, profileData }) => {
 export default function ProfileScreen({ user, onSignOut }) {
   const [profileData, setProfileData] = useState(user);
   const [feed, setFeed] = useState([]);
+  const [feedLoading, setFeedLoading] = useState(true);
+  const [feedError, setFeedError] = useState(null);
 
   useEffect(() => {
-    users.me().then((d) => { if (d?.id) setProfileData(d); }).catch(() => {});
+    users.me()
+      .then((d) => { if (d?.id) setProfileData(d); })
+      .catch((err) => {
+        // Profile refresh failure is non-blocking — the user already has cached
+        // data from login. Show a subtle alert rather than crashing the screen.
+        Alert.alert('Profile', err.message || 'Could not refresh profile data.');
+      });
 
+    setFeedLoading(true);
+    setFeedError(null);
     Promise.all([users.hostedEvents(), users.myRsvps()])
       .then(([hosted, rsvps]) => {
         const map = new Map();
@@ -158,12 +169,21 @@ export default function ProfileScreen({ user, onSignOut }) {
         );
         setFeed(sorted);
       })
-      .catch(() => {});
+      .catch((err) => {
+        setFeedError(err.message || 'Could not load your events.');
+      })
+      .finally(() => setFeedLoading(false));
   }, []);
 
-  async function handlePickAvatar() {
+  const handlePickAvatar = useCallback(async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') return;
+    if (status !== 'granted') {
+      Alert.alert(
+        'Photos access denied',
+        'Enable photo library access in Settings to update your avatar.',
+      );
+      return;
+    }
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: true,
@@ -177,13 +197,13 @@ export default function ProfileScreen({ user, onSignOut }) {
     } catch (err) {
       Alert.alert('Upload failed', err.message || 'Could not update avatar.');
     }
-  }
+  }, []);
 
-  async function handleSignOut() {
-    // auth.logout() calls the server revoke endpoint AND clears tokens internally
+  const handleSignOut = useCallback(async () => {
+    // auth.logout() calls the server revoke endpoint AND clears tokens locally.
     await auth.logout();
     onSignOut();
-  }
+  }, [onSignOut]);
 
   // Stable renderItem — avoids re-creating the function on every profileData change
   // by reading profileData from state (closure captures latest via re-render).
@@ -205,7 +225,17 @@ export default function ProfileScreen({ user, onSignOut }) {
       </TouchableOpacity>
       <View style={styles.divider} />
     </>
-  ), [profileData]); // eslint-disable-line react-hooks/exhaustive-deps
+  ), [profileData, handlePickAvatar, handleSignOut]);
+
+  const FeedEmpty = useCallback(() => {
+    if (feedLoading) {
+      return <ActivityIndicator color="#a855f7" style={{ marginTop: 32 }} />;
+    }
+    if (feedError) {
+      return <Text style={styles.feedError}>{feedError}</Text>;
+    }
+    return <Text style={styles.feedEmpty}>No events yet</Text>;
+  }, [feedLoading, feedError]);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -216,7 +246,7 @@ export default function ProfileScreen({ user, onSignOut }) {
         renderItem={renderItem}
         ListHeaderComponent={ListHeader}
         ItemSeparatorComponent={ItemSeparator}
-        ListEmptyComponent={<Text style={styles.feedEmpty}>No events yet</Text>}
+        ListEmptyComponent={<FeedEmpty />}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       />
@@ -326,11 +356,17 @@ const styles = StyleSheet.create({
     marginVertical: 12,
   },
 
-  // Empty state
+  // Empty / error state
   feedEmpty: {
     color: '#444',
     textAlign: 'center',
     marginTop: 32,
+  },
+  feedError: {
+    color: '#e05050',
+    textAlign: 'center',
+    marginTop: 32,
+    paddingHorizontal: 24,
   },
 
   // Event card
