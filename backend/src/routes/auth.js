@@ -140,7 +140,7 @@ router.post('/logout', requireAuth, async (req, res, next) => {
     if (refreshToken) {
       await db.query(
         `DELETE FROM refresh_tokens WHERE token = $1 AND user_id = $2`,
-        [hashToken(refreshToken), req.user.id]
+        [hashToken(refreshToken), req.user.sub]
       );
     }
     res.status(204).end();
