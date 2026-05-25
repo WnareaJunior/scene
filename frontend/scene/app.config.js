@@ -77,5 +77,11 @@ module.exports = {
     web: {
       favicon: './assets/favicon.png',
     },
+    // Keys exposed to JS runtime via Constants.expoConfig.extra
+    // (platform-specific config blocks above are native-only and not readable at runtime)
+    extra: {
+      googleMapsApiKeyIos: iosKey,
+      googleMapsApiKeyAndroid: androidKey,
+    },
   },
 };
