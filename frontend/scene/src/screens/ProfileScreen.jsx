@@ -40,7 +40,12 @@ const ProfileHeader = ({ profileData, onAvatarPress }) => (
   <View style={styles.header}>
     <TouchableOpacity onPress={onAvatarPress} activeOpacity={0.8} style={styles.avatarWrap}>
       {profileData?.profile_picture ? (
-        <Image source={{ uri: profileData.profile_picture, cache: 'reload' }} style={styles.avatar} />
+        <Image
+          source={{ uri: profileData.profile_picture, cache: 'reload' }}
+          style={styles.avatar}
+          onError={(e) => console.log('[avatar] load error:', e.nativeEvent.error, profileData.profile_picture)}
+          onLoad={() => console.log('[avatar] loaded ok')}
+        />
       ) : (
         <View style={styles.avatarPlaceholder}>
           <Text style={styles.avatarInitial}>

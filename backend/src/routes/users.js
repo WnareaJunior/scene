@@ -108,7 +108,7 @@ router.post('/me/avatar', requireAuth, upload.single('avatar'), async (req, res,
       return res.status(400).json({ error: 'Invalid file type. Only JPEG, PNG, and WebP images are allowed.' });
     }
     const ext = MIME_TO_EXT[detectedMime];
-    const filename = `${req.user.sub}-${Date.now()}${ext}`;
+    const filename = `${req.user.sub}${ext}`;
     const url = await uploadToSupabase(req.file.buffer, filename, detectedMime);
     const { rows } = await db.query(
       `UPDATE users SET profile_picture = $1, updated_at = now() WHERE id = $2
