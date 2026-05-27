@@ -18,6 +18,7 @@ const SPRING = { damping: 40, stiffness: 200, mass: 1 };
 // slideX = -SCREEN_W*2 → profile
 export default function Scene({ user, onSignOut }) {
   const [viewport, setViewport] = useState(null);
+  const [profileRefreshKey, setProfileRefreshKey] = useState(0);
 
   const slideX = useSharedValue(-SCREEN_W);
   const startX = useSharedValue(0);
@@ -64,7 +65,10 @@ export default function Scene({ user, onSignOut }) {
         <View style={[styles.page, styles.darkPage]}>
           <CreateScreen
             viewport={viewport}
-            onCreated={() => { slideX.value = withSpring(-SCREEN_W, SPRING); }}
+            onCreated={() => {
+              slideX.value = withSpring(-SCREEN_W, SPRING);
+              setProfileRefreshKey((k) => k + 1);
+            }}
           />
           <GestureDetector gesture={panBackFromCreate}>
             <View style={styles.rightEdge} />
@@ -80,7 +84,7 @@ export default function Scene({ user, onSignOut }) {
         {/* page 2 — profile */}
         <GestureDetector gesture={panBackFromProfile}>
           <View style={[styles.page, styles.darkPage]}>
-            <ProfileScreen user={user} onSignOut={onSignOut} />
+            <ProfileScreen user={user} onSignOut={onSignOut} refreshKey={profileRefreshKey} />
           </View>
         </GestureDetector>
 

@@ -13,12 +13,11 @@ import Constants from 'expo-constants';
 
 import { events } from '../api';
 
-// Keys are exposed via app.config.js `extra` so they're readable at JS runtime.
-// The platform-specific config blocks (ios.config / android.config) are native-only.
+// EXPO_PUBLIC_ prefix causes Metro to inline these at bundle time — readable in Expo Go
 const GOOGLE_MAPS_API_KEY =
   Platform.OS === 'ios'
-    ? (Constants.expoConfig?.extra?.googleMapsApiKeyIos ?? '')
-    : (Constants.expoConfig?.extra?.googleMapsApiKeyAndroid ?? '');
+    ? (process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY_IOS ?? '')
+    : (process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY_ANDROID ?? '');
 
 function formatDate(date) {
   return date.toLocaleDateString('en-US', {
@@ -39,6 +38,7 @@ export default function CreateScreen({ viewport, onCreated }) {
   const [pickerDate, setPickerDate] = useState(new Date());
   const [creating, setCreating] = useState(false);
   const [selectedLocation, setSelectedLocation] = useState(null);
+  const [mapScrollLocked, setMapScrollLocked] = useState(false);
 
   const mapRef = useRef(null);
   const placesRef = useRef(null);
@@ -102,6 +102,7 @@ export default function CreateScreen({ viewport, onCreated }) {
 
   // Reverse-geocode a lat/lng via Google Geocoding API and update the address field.
   const reverseGeocode = useCallback(async (latitude, longitude) => {
+    console.log('[reverseGeocode] called with', latitude, longitude, 'key?', !!GOOGLE_MAPS_API_KEY);
     if (!GOOGLE_MAPS_API_KEY) return;
     try {
       const url = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${latitude},${longitude}&key=${GOOGLE_MAPS_API_KEY}`;
@@ -112,16 +113,14 @@ export default function CreateScreen({ viewport, onCreated }) {
         setField('address', formatted);
         placesRef.current?.setAddressText(formatted);
       }
-    } catch {
-      // Non-critical — user can still type an address manually.
+    } catch (e) {
+      console.log('[reverseGeocode] error:', e.message);
     }
   }, []);
 
-  // Debounced handler fired when the map comes to rest.
   const handleRegionChangeComplete = useCallback((region) => {
     const coords = { latitude: region.latitude, longitude: region.longitude };
     setSelectedLocation(coords);
-    // Debounce reverse-geocode so we only call the API once the map settles.
     if (reverseGeocodeTimeoutRef.current) clearTimeout(reverseGeocodeTimeoutRef.current);
     reverseGeocodeTimeoutRef.current = setTimeout(() => {
       reverseGeocode(coords.latitude, coords.longitude);
@@ -250,6 +249,7 @@ export default function CreateScreen({ viewport, onCreated }) {
         keyboardShouldPersistTaps="always"
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
+        scrollEnabled={!mapScrollLocked}
       >
         <Text style={styles.screenTitle}>create event</Text>
 
@@ -262,7 +262,12 @@ export default function CreateScreen({ viewport, onCreated }) {
         <View style={styles.autocompleteSpacer} />
 
         {/* Embedded location map */}
-        <View style={styles.mapContainer}>
+        <View
+          style={styles.mapContainer}
+          onTouchStart={() => setMapScrollLocked(true)}
+          onTouchEnd={() => setMapScrollLocked(false)}
+          onTouchCancel={() => setMapScrollLocked(false)}
+        >
           <MapView
             ref={mapRef}
             style={StyleSheet.absoluteFill}

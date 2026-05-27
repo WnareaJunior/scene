@@ -142,7 +142,7 @@ const EventCard = ({ event, profileData }) => {
 // ============================================================================
 // Main screen
 // ============================================================================
-export default function ProfileScreen({ user, onSignOut }) {
+export default function ProfileScreen({ user, onSignOut, refreshKey = 0 }) {
   const [profileData, setProfileData] = useState(user);
   const [feed, setFeed] = useState([]);
   const [feedLoading, setFeedLoading] = useState(true);
@@ -173,7 +173,7 @@ export default function ProfileScreen({ user, onSignOut }) {
         setFeedError(err.message || 'Could not load your events.');
       })
       .finally(() => setFeedLoading(false));
-  }, []);
+  }, [refreshKey]);
 
   const handlePickAvatar = useCallback(async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();

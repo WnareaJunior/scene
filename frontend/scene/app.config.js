@@ -7,12 +7,12 @@
 //   GOOGLE_MAPS_API_KEY_IOS     — key restricted to the iOS bundle identifier
 //   GOOGLE_MAPS_API_KEY_ANDROID — key restricted to the Android package name
 
-const iosKey = process.env.GOOGLE_MAPS_API_KEY_IOS;
-const androidKey = process.env.GOOGLE_MAPS_API_KEY_ANDROID;
+const iosKey = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY_IOS;
+const androidKey = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY_ANDROID;
 
 if (!iosKey || !androidKey) {
   console.warn(
-    '[app.config.js] GOOGLE_MAPS_API_KEY_IOS and/or GOOGLE_MAPS_API_KEY_ANDROID are not set. ' +
+    '[app.config.js] EXPO_PUBLIC_GOOGLE_MAPS_API_KEY_IOS and/or EXPO_PUBLIC_GOOGLE_MAPS_API_KEY_ANDROID are not set. ' +
       'Map rendering and Places autocomplete will not work. ' +
       'Copy .env.example to .env and fill in your keys.',
   );
