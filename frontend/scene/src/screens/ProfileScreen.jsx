@@ -43,8 +43,6 @@ const ProfileHeader = ({ profileData, onAvatarPress }) => (
         <Image
           source={{ uri: profileData.profile_picture, cache: 'reload' }}
           style={styles.avatar}
-          onError={(e) => console.log('[avatar] load error:', e.nativeEvent.error, profileData.profile_picture)}
-          onLoad={() => console.log('[avatar] loaded ok')}
         />
       ) : (
         <View style={styles.avatarPlaceholder}>
