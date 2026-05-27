@@ -2,9 +2,30 @@ const router = require('express').Router();
 const db = require('../db');
 const requireAuth = require('../middleware/auth');
 const multer = require('multer');
-const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
 
-const s3 = new S3Client({ region: process.env.AWS_REGION });
+const SUPABASE_URL = process.env.SUPABASE_URL;
+const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;
+const SUPABASE_BUCKET = process.env.SUPABASE_BUCKET;
+
+async function uploadToSupabase(buffer, filename, mimetype) {
+  const res = await fetch(
+    `${SUPABASE_URL}/storage/v1/object/${SUPABASE_BUCKET}/avatars/${filename}`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${SUPABASE_SERVICE_KEY}`,
+        'Content-Type': mimetype,
+        'x-upsert': 'true',
+      },
+      body: buffer,
+    }
+  );
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.message || `Storage upload failed: ${res.status}`);
+  }
+  return `${SUPABASE_URL}/storage/v1/object/public/${SUPABASE_BUCKET}/avatars/${filename}`;
+}
 
 const ALLOWED_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 const MIME_TO_EXT = { 'image/jpeg': '.jpg', 'image/png': '.png', 'image/webp': '.webp' };
@@ -87,14 +108,8 @@ router.post('/me/avatar', requireAuth, upload.single('avatar'), async (req, res,
       return res.status(400).json({ error: 'Invalid file type. Only JPEG, PNG, and WebP images are allowed.' });
     }
     const ext = MIME_TO_EXT[detectedMime];
-    const key = `avatars/${req.user.sub}-${Date.now()}${ext}`;
-    await s3.send(new PutObjectCommand({
-      Bucket: process.env.AWS_S3_BUCKET,
-      Key: key,
-      Body: req.file.buffer,
-      ContentType: detectedMime,
-    }));
-    const url = `https://${process.env.AWS_S3_BUCKET}.s3.${process.env.AWS_REGION}.amazonaws.com/${key}`;
+    const filename = `${req.user.sub}-${Date.now()}${ext}`;
+    const url = await uploadToSupabase(req.file.buffer, filename, detectedMime);
     const { rows } = await db.query(
       `UPDATE users SET profile_picture = $1, updated_at = now() WHERE id = $2
        RETURNING id, email, username, bio, profile_picture`,
