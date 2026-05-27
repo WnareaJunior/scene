@@ -3,13 +3,13 @@ import {
   View,
   Text,
   Image,
-  FlatList,
   TouchableOpacity,
   StyleSheet,
   StatusBar,
   Alert,
   ActivityIndicator,
 } from 'react-native';
+import { FlatList } from 'react-native-gesture-handler';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 
@@ -40,7 +40,7 @@ const ProfileHeader = ({ profileData, onAvatarPress }) => (
   <View style={styles.header}>
     <TouchableOpacity onPress={onAvatarPress} activeOpacity={0.8} style={styles.avatarWrap}>
       {profileData?.profile_picture ? (
-        <Image source={{ uri: profileData.profile_picture }} style={styles.avatar} />
+        <Image source={{ uri: profileData.profile_picture, cache: 'reload' }} style={styles.avatar} />
       ) : (
         <View style={styles.avatarPlaceholder}>
           <Text style={styles.avatarInitial}>
@@ -193,7 +193,7 @@ export default function ProfileScreen({ user, onSignOut, refreshKey = 0 }) {
     if (result.canceled) return;
     try {
       const updated = await users.uploadAvatar(result.assets[0].uri);
-      if (updated?.id) setProfileData((prev) => ({ ...prev, profile_picture: updated.profile_picture }));
+if (updated?.id) setProfileData((prev) => ({ ...prev, profile_picture: updated.profile_picture }));
     } catch (err) {
       Alert.alert('Upload failed', err.message || 'Could not update avatar.');
     }

@@ -82,11 +82,12 @@ export default function Scene({ user, onSignOut }) {
         </View>
 
         {/* page 2 — profile */}
-        <GestureDetector gesture={panBackFromProfile}>
-          <View style={[styles.page, styles.darkPage]}>
-            <ProfileScreen user={user} onSignOut={onSignOut} refreshKey={profileRefreshKey} />
-          </View>
-        </GestureDetector>
+        <View style={[styles.page, styles.darkPage]}>
+          <ProfileScreen user={user} onSignOut={onSignOut} refreshKey={profileRefreshKey} />
+          <GestureDetector gesture={panBackFromProfile}>
+            <View style={styles.leftEdge} />
+          </GestureDetector>
+        </View>
 
       </Animated.View>
     </View>
@@ -105,6 +106,13 @@ const styles = StyleSheet.create({
   rightEdge: {
     position: 'absolute',
     right: 0,
+    top: 0,
+    bottom: 0,
+    width: 28,
+  },
+  leftEdge: {
+    position: 'absolute',
+    left: 0,
     top: 0,
     bottom: 0,
     width: 28,
