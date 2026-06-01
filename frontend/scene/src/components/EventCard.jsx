@@ -12,8 +12,7 @@ export default function EventCard({ event, onRsvp }) {
   const isFull = event.capacity != null && goingCount >= event.capacity;
   const spotsLeft = event.capacity != null ? event.capacity - goingCount : null;
   const userStatus = event.user_rsvp ?? null;
-  const isGoing = userStatus === 'going';
-  const isInterested = userStatus === 'interested';
+  const hasRsvp = userStatus !== null;
 
   return (
     <View style={styles.card}>
@@ -34,25 +33,15 @@ export default function EventCard({ event, onRsvp }) {
               : null
           }
         </View>
-        <View style={styles.rsvpBtns}>
-          <TouchableOpacity
-            style={[styles.rsvpBtn, isGoing && styles.rsvpBtnActive, isFull && !isGoing && styles.rsvpBtnDisabled]}
-            onPress={() => (!isFull || isGoing) && onRsvp(event.id, 'going')}
-            disabled={isFull && !isGoing}
-          >
-            <Text style={[styles.rsvpBtnText, isFull && !isGoing && styles.rsvpBtnTextDisabled]}>
-              {isGoing ? '✓ Going' : 'Going'}
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.rsvpBtn, styles.rsvpBtnInterested, isInterested && styles.rsvpBtnInterestedActive]}
-            onPress={() => onRsvp(event.id, 'interested')}
-          >
-            <Text style={[styles.rsvpBtnText, styles.rsvpBtnTextInterested]}>
-              {isInterested ? '✓ Interested' : 'Interested'}
-            </Text>
-          </TouchableOpacity>
-        </View>
+        <TouchableOpacity
+          style={[styles.rsvpBtn, hasRsvp && styles.rsvpBtnActive, isFull && !hasRsvp && styles.rsvpBtnDisabled]}
+          onPress={() => (!isFull || hasRsvp) && onRsvp(event.id, 'going')}
+          disabled={isFull && !hasRsvp}
+        >
+          <Text style={[styles.rsvpBtnText, isFull && !hasRsvp && styles.rsvpBtnTextDisabled]}>
+            {hasRsvp ? "RSVP'd" : 'RSVP'}
+          </Text>
+        </TouchableOpacity>
       </View>
     </View>
   );
@@ -70,16 +59,12 @@ const styles = StyleSheet.create({
   cardMeta: { color: '#555', fontSize: 13, marginBottom: 10 },
   cardFooter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   cardCount: { color: '#666', fontSize: 13 },
-  rsvpBtns: { flexDirection: 'row', gap: 8 },
   rsvpBtn: {
     backgroundColor: '#a855f7', borderRadius: 8,
-    paddingHorizontal: 12, paddingVertical: 6,
+    paddingHorizontal: 14, paddingVertical: 6,
   },
-  rsvpBtnInterested: { backgroundColor: 'transparent', borderWidth: 1, borderColor: '#a855f7' },
   rsvpBtnText: { color: '#fff', fontSize: 13, fontWeight: '600' },
-  rsvpBtnTextInterested: { color: '#a855f7' },
   rsvpBtnActive: { backgroundColor: '#7c3aed' },
-  rsvpBtnInterestedActive: { backgroundColor: '#2d1b4e', borderColor: '#7c3aed' },
   rsvpBtnDisabled: { backgroundColor: '#333' },
   rsvpBtnTextDisabled: { color: '#666' },
   capacityFull: { color: '#ef4444', fontSize: 12, fontWeight: '600', marginTop: 2 },

@@ -63,7 +63,26 @@ export default function MapScreen({ onRegionChangeComplete }) {
     }
   }
 
-  useEffect(() => { fetchPins(initialRegion); }, []);
+  useEffect(() => {
+    (async () => {
+      try {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status === 'granted') {
+          const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+          const region = {
+            latitude: pos.coords.latitude,
+            longitude: pos.coords.longitude,
+            latitudeDelta: 0.05,
+            longitudeDelta: 0.05,
+          };
+          mapRef.current?.animateToRegion(region, 0);
+          fetchPins(region);
+          return;
+        }
+      } catch {}
+      fetchPins(initialRegion);
+    })();
+  }, []);
 
   const handleRegionChange = useCallback((region) => {
     // Always notify the parent of the latest viewport (used by SearchSheet).
