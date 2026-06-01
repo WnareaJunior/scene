@@ -196,8 +196,8 @@ router.get('/', requireAuth, async (req, res, next) => {
       return res.status(400).json({ error: 'lat and lng must be finite numbers' });
     }
 
-    const params = [];
-    const conditions = [`e.status = 'active'`, `e.is_private = false`];
+    const params = [req.user.sub];
+    const conditions = [`e.status = 'active'`, `e.is_private = false`, `e.host_id != $1`];
 
     if (swLat && swLng && neLat && neLng) {
       const swLatF = parseFloat(swLat), swLngF = parseFloat(swLng);
