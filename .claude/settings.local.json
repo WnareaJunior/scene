@@ -75,7 +75,25 @@
       "mcp__viking__grep",
       "Bash(npm audit *)",
       "Bash(git -C /Users/wnarea/Github/scene status)",
-      "Bash(git -C /Users/wnarea/Github/scene diff --stat)"
+      "Bash(git -C /Users/wnarea/Github/scene diff --stat)",
+      "mcp__viking__health",
+      "mcp__viking__store",
+      "Bash(timeout 10 npm run dev)",
+      "Bash(pg_isready *)",
+      "Bash(psql *)",
+      "Bash(npm install *)",
+      "Bash(timeout 8 npm run dev)",
+      "Bash(npm run *)",
+      "Bash(tee /tmp/ios_build.log)",
+      "Bash(echo \"EXIT: $?\")",
+      "Bash(npm --version)",
+      "Bash(npm ls *)",
+      "Bash(pod install *)",
+      "Bash(sort -t_ -k2)",
+      "Bash(xcrun simctl *)",
+      "Bash(git add *)",
+      "Bash(grep *)",
+      "Bash(git *)"
     ]
   },
   "enabledPlugins": {
