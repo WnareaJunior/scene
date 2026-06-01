@@ -93,7 +93,11 @@
       "Bash(xcrun simctl *)",
       "Bash(git add *)",
       "Bash(grep *)",
-      "Bash(git *)"
+      "Bash(git *)",
+      "Bash(ollama list *)",
+      "Bash(ovcli --help)",
+      "Bash(ov system *)",
+      "Bash(ov config *)"
     ]
   },
   "enabledPlugins": {
