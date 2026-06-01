@@ -1,6 +1,6 @@
-# OpenCrib — Backend
+# Scene — Backend
 
-Node.js + Express REST API. Serves `http://localhost:3000/api/v1`.
+Node.js + Express REST API. Serves `http://localhost:3000/api/v1` locally and `https://scene-19ss.onrender.com/api/v1` in production.
 
 ## Requirements
 
@@ -19,18 +19,24 @@ cp .env.example .env
 Edit `.env`:
 
 ```env
-DATABASE_URL=postgres://user:password@localhost:5432/opencrib_dev
+DATABASE_URL=postgres://user:password@localhost:5432/scene_dev
 JWT_SECRET=a_long_random_secret
 JWT_ACCESS_EXPIRES_IN=15m
 JWT_REFRESH_EXPIRES_IN=7d
 PORT=3000
+SUPABASE_URL=https://<project>.supabase.co
+SUPABASE_SERVICE_KEY=<service_role_key>
+SUPABASE_BUCKET=scene-images
 ```
 
 ### Database
 
 ```bash
-createdb opencrib_dev
-psql opencrib_dev < migrations/001_init.sql
+createdb scene_dev
+psql scene_dev < migrations/001_init.sql
+psql scene_dev < migrations/002_refresh_token_varchar.sql
+psql scene_dev < migrations/003_user_search.sql
+psql scene_dev < migrations/004_event_image.sql
 ```
 
 The migration enables `uuid-ossp` and `postgis`, creates all tables, and adds spatial + time indexes.
@@ -71,9 +77,11 @@ Authorization: Bearer <accessToken>
 | Method | Path | Description |
 |---|---|---|
 | GET | `/users/me` | Own profile |
-| PATCH | `/users/me` | Update bio, gender, interests, profilePicture |
+| PATCH | `/users/me` | Update bio, display_name, gender, interests, profilePicture |
+| POST | `/users/me/avatar` | Upload profile avatar (multipart/form-data `avatar`) |
 | GET | `/users/me/hosted-events` | Events you're hosting (`?status=upcoming\|past`) |
 | GET | `/users/me/rsvps` | Your RSVPs (`?status=going\|interested`) |
+| GET | `/users/search` | Search users by username or display_name (`?q=&limit=&offset=`) |
 | GET | `/users/:userId` | Public profile |
 | POST | `/users/:userId/follow` | Follow a user |
 | DELETE | `/users/:userId/follow` | Unfollow |
@@ -86,13 +94,16 @@ Authorization: Bearer <accessToken>
 
 | Method | Path | Description |
 |---|---|---|
-| POST | `/events` | Create event |
+| POST | `/events/image` | Upload event cover image → returns `imageUrl` (multipart/form-data `image`) |
+| POST | `/events` | Create event (pass `imageUrl` from prior upload) |
 | GET | `/events` | Discover — bbox or radius + hashtag/time filters |
 | GET | `/events/feed` | Events from people you follow |
 | GET | `/events/random` | One random nearby event |
 | GET | `/events/:eventId` | Full event detail |
 | PATCH | `/events/:eventId` | Update event (host only) |
 | DELETE | `/events/:eventId` | Cancel event (host only) |
+
+Image upload accepts JPEG, PNG, and WebP. Magic-byte validation is performed server-side. Files are stored in Supabase Storage and the public URL is returned for use in the create/update body.
 
 **Discover query params:**
 
@@ -142,11 +153,14 @@ backend/
 │   │   └── auth.js       JWT Bearer verification
 │   └── routes/
 │       ├── auth.js
-│       ├── events.js     CRUD + RSVPs + feed + random
+│       ├── events.js     CRUD + RSVPs + feed + random + image upload
 │       ├── map.js        Viewport pins
-│       └── users.js      Profile + social graph
+│       └── users.js      Profile + social graph + avatar + search
 ├── migrations/
-│   └── 001_init.sql      Schema (PostGIS, uuid-ossp, indexes)
+│   ├── 001_init.sql              Base schema (PostGIS, uuid-ossp, indexes)
+│   ├── 002_refresh_token_varchar.sql
+│   ├── 003_user_search.sql       display_name + pg_trgm trigram indexes
+│   └── 004_event_image.sql       image_url column on events
 └── .env.example
 ```
 
@@ -156,3 +170,15 @@ backend/
 - **Radius query** (discover, random): `ST_DWithin(location::geography, ST_SetSRID(ST_MakePoint(lng, lat), 4326)::geography, radius_meters)`
 - The `location` column is `GEOGRAPHY(POINT, 4326)`. `latitude` and `longitude` float columns are stored redundantly for cheap reads without PostGIS unpacking.
 - A GIST index on `location` keeps geo queries fast.
+
+## Image storage notes
+
+- Images are uploaded via `POST /events/image` or `POST /users/me/avatar` as `multipart/form-data`.
+- Server validates MIME type from magic bytes (not the `Content-Type` header) before accepting the file.
+- Files are stored in a Supabase Storage bucket (`SUPABASE_BUCKET` env var). The returned public URL is then stored in `events.image_url` or `users.profile_picture`.
+- Requires `SUPABASE_URL` and `SUPABASE_SERVICE_KEY` in `.env`.
+
+## Search notes
+
+- `GET /users/search?q=` queries both `username` and `display_name` using `ILIKE` backed by GIN trigram indexes (`pg_trgm`).
+- Migration `003_user_search.sql` installs the extension and creates the indexes.
