@@ -132,6 +132,24 @@ export const users = {
 // ── Events ────────────────────────────────────────────────────────────────────
 
 export const events = {
+  uploadImage: async (imageUri) => {
+    const token = await SecureStore.getItemAsync('accessToken');
+    const filename = imageUri.split('/').pop();
+    const match = /\.(\w+)$/.exec(filename);
+    const type = match ? `image/${match[1]}` : 'image/jpeg';
+    const formData = new FormData();
+    formData.append('image', { uri: imageUri, name: filename, type });
+    const res = await fetch(`${BASE_URL}/events/image`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+      body: formData,
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Image upload failed');
+    }
+    return res.json();
+  },
   create: (data) => request('POST', '/events', data),
   discover: (params = {}) => request('GET', `/events?${qs(params)}`),
   feed: (params = {}) => request('GET', `/events/feed?${qs(params)}`),

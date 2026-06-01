@@ -1,6 +1,72 @@
 const router = require('express').Router();
 const db = require('../db');
 const requireAuth = require('../middleware/auth');
+const multer = require('multer');
+const { v4: uuidv4 } = require('uuid');
+
+const SUPABASE_URL = process.env.SUPABASE_URL;
+const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;
+const SUPABASE_BUCKET = process.env.SUPABASE_BUCKET;
+
+const ALLOWED_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
+const MIME_TO_EXT = { 'image/jpeg': '.jpg', 'image/png': '.png', 'image/webp': '.webp' };
+
+function detectMime(buf) {
+  if (buf.length < 12) return null;
+  if (buf[0] === 0xFF && buf[1] === 0xD8 && buf[2] === 0xFF) return 'image/jpeg';
+  if (buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4E && buf[3] === 0x47) return 'image/png';
+  if (buf[0] === 0x52 && buf[1] === 0x49 && buf[2] === 0x46 && buf[3] === 0x46 &&
+      buf[8] === 0x57 && buf[9] === 0x45 && buf[10] === 0x42 && buf[11] === 0x50) return 'image/webp';
+  return null;
+}
+
+async function uploadToSupabase(buffer, filename, mimetype) {
+  const res = await fetch(
+    `${SUPABASE_URL}/storage/v1/object/${SUPABASE_BUCKET}/events/${filename}`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${SUPABASE_SERVICE_KEY}`,
+        'Content-Type': mimetype,
+        'x-upsert': 'true',
+      },
+      body: buffer,
+    }
+  );
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.message || `Storage upload failed: ${res.status}`);
+  }
+  return `${SUPABASE_URL}/storage/v1/object/public/${SUPABASE_BUCKET}/events/${filename}`;
+}
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 8 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    if (!ALLOWED_MIME_TYPES.has(file.mimetype)) {
+      const err = new Error('Invalid file type. Only JPEG, PNG, and WebP images are allowed.');
+      err.status = 400;
+      return cb(err, false);
+    }
+    cb(null, true);
+  },
+});
+
+// POST /events/image
+router.post('/image', requireAuth, upload.single('image'), async (req, res, next) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+    const detectedMime = detectMime(req.file.buffer);
+    if (!detectedMime || !ALLOWED_MIME_TYPES.has(detectedMime)) {
+      return res.status(400).json({ error: 'Invalid file type. Only JPEG, PNG, and WebP images are allowed.' });
+    }
+    const ext = MIME_TO_EXT[detectedMime];
+    const filename = `${uuidv4()}${ext}`;
+    const url = await uploadToSupabase(req.file.buffer, filename, detectedMime);
+    res.json({ url });
+  } catch (err) { next(err); }
+});
 
 // POST /events
 router.post('/', requireAuth, async (req, res, next) => {
@@ -8,6 +74,7 @@ router.post('/', requireAuth, async (req, res, next) => {
     const {
       title, description, latitude, longitude, address,
       startTime, endTime, capacity, hashtags, isPrivate, showAttendees,
+      imageUrl,
     } = req.body;
 
     if (!title || !latitude || !longitude || !startTime) {
@@ -17,16 +84,17 @@ router.post('/', requireAuth, async (req, res, next) => {
     const { rows } = await db.query(
       `INSERT INTO events
          (host_id, title, description, location, latitude, longitude, address,
-          start_time, end_time, capacity, hashtags, is_private, show_attendees)
+          start_time, end_time, capacity, hashtags, is_private, show_attendees, image_url)
        VALUES
          ($1, $2, $3, ST_SetSRID(ST_MakePoint($5, $4), 4326)::geography,
-          $4, $5, $6, $7, $8, $9, $10, $11, $12)
+          $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
        RETURNING *`,
       [
         req.user.sub, title, description || null,
         latitude, longitude, address || null,
         startTime, endTime || null, capacity || null,
         hashtags || [], isPrivate || false, showAttendees !== false,
+        imageUrl || null,
       ]
     );
     res.status(201).json(rows[0]);
@@ -45,7 +113,7 @@ router.get('/feed', requireAuth, async (req, res, next) => {
     const { rows } = await db.query(
       `SELECT e.id, e.title, e.description, e.latitude, e.longitude, e.address,
               e.start_time, e.end_time, e.capacity, e.hashtags, e.is_private, e.show_attendees, e.status,
-              e.host_id,
+              e.host_id, e.image_url,
               COUNT(r.id) FILTER (WHERE r.status = 'going') AS going_count,
               COUNT(r.id) FILTER (WHERE r.status = 'interested') AS interested_count,
               u.username AS host_username, u.profile_picture AS host_picture
@@ -88,7 +156,7 @@ router.get('/random', requireAuth, async (req, res, next) => {
 
     const { rows } = await db.query(
       `SELECT e.id, e.title, e.description, e.latitude, e.longitude, e.address,
-              e.start_time, e.end_time, e.capacity, e.hashtags,
+              e.start_time, e.end_time, e.capacity, e.hashtags, e.image_url,
               COUNT(r.id) FILTER (WHERE r.status = 'going') AS going_count,
               u.username AS host_username
        FROM events e
@@ -199,7 +267,7 @@ router.get('/', requireAuth, async (req, res, next) => {
 
     const { rows } = await db.query(
       `SELECT e.id, e.title, e.description, e.latitude, e.longitude, e.address,
-              e.start_time, e.end_time, e.capacity, e.hashtags, e.show_attendees, e.host_id,
+              e.start_time, e.end_time, e.capacity, e.hashtags, e.show_attendees, e.host_id, e.image_url,
               COUNT(r.id) FILTER (WHERE r.status = 'going') AS going_count,
               COUNT(r.id) FILTER (WHERE r.status = 'interested') AS interested_count,
               u.username AS host_username, u.profile_picture AS host_picture
@@ -224,7 +292,7 @@ router.get('/:eventId', requireAuth, async (req, res, next) => {
     const { rows } = await db.query(
       `SELECT e.id, e.title, e.description, e.latitude, e.longitude, e.address,
               e.start_time, e.end_time, e.capacity, e.hashtags, e.is_private, e.show_attendees, e.status,
-              e.host_id,
+              e.host_id, e.image_url,
               COUNT(r.id) FILTER (WHERE r.status = 'going') AS going_count,
               COUNT(r.id) FILTER (WHERE r.status = 'interested') AS interested_count,
               u.username AS host_username, u.profile_picture AS host_picture
@@ -264,6 +332,7 @@ router.patch('/:eventId', requireAuth, async (req, res, next) => {
     const {
       title, description, address, startTime, endTime,
       capacity, hashtags, isPrivate, showAttendees,
+      imageUrl,
     } = req.body;
 
     if (startTime !== undefined) {
@@ -286,10 +355,11 @@ router.patch('/:eventId', requireAuth, async (req, res, next) => {
          hashtags = COALESCE($7, hashtags),
          is_private = COALESCE($8, is_private),
          show_attendees = COALESCE($9, show_attendees),
+         image_url = COALESCE($10, image_url),
          updated_at = now()
-       WHERE id = $10
+       WHERE id = $11
        RETURNING *`,
-      [title, description, address, startTime, endTime, capacity, hashtags, isPrivate, showAttendees, req.params.eventId]
+      [title, description, address, startTime, endTime, capacity, hashtags, isPrivate, showAttendees, imageUrl ?? null, req.params.eventId]
     );
     res.json(rows[0]);
   } catch (err) {

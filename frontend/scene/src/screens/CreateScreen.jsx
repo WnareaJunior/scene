@@ -1,13 +1,14 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, TextInput,
-  Alert, ActivityIndicator, ScrollView, Platform,
+  Alert, ActivityIndicator, ScrollView, Platform, Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import MapView from 'react-native-maps';
 import { GooglePlacesAutocomplete } from 'react-native-google-places-autocomplete';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import * as Location from 'expo-location';
+import * as ImagePicker from 'expo-image-picker';
 
 import Constants from 'expo-constants';
 
@@ -39,6 +40,7 @@ export default function CreateScreen({ viewport, onCreated }) {
   const [creating, setCreating] = useState(false);
   const [selectedLocation, setSelectedLocation] = useState(null);
   const [mapScrollLocked, setMapScrollLocked] = useState(false);
+  const [partyImage, setPartyImage] = useState(null);
 
   const mapRef = useRef(null);
   const placesRef = useRef(null);
@@ -154,6 +156,23 @@ export default function CreateScreen({ viewport, onCreated }) {
     }
   }
 
+  async function pickImage() {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission needed', 'Allow photo access to add a party image.');
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [16, 9],
+      quality: 0.8,
+    });
+    if (!result.canceled) {
+      setPartyImage(result.assets[0].uri);
+    }
+  }
+
   function openDatePicker() {
     const base = form.startTime ?? new Date();
     setPickerDate(base);
@@ -173,6 +192,11 @@ export default function CreateScreen({ viewport, onCreated }) {
     setCreating(true);
     let created = false;
     try {
+      let imageUrl;
+      if (partyImage) {
+        const uploaded = await events.uploadImage(partyImage);
+        imageUrl = uploaded.url;
+      }
       const data = await events.create({
         title: form.title,
         address: form.address,
@@ -181,6 +205,7 @@ export default function CreateScreen({ viewport, onCreated }) {
         longitude: locationToSubmit.longitude,
         capacity: form.capacity ? parseInt(form.capacity, 10) : undefined,
         hashtags,
+        imageUrl,
       });
       if (data?.id) {
         created = true;
@@ -188,6 +213,7 @@ export default function CreateScreen({ viewport, onCreated }) {
         setHashtags([]);
         setTagInput('');
         setSelectedLocation(null);
+        setPartyImage(null);
         placesRef.current?.setAddressText('');
         // Navigate away first, then show confirmation so we don't update
         // state on an unmounted component.
@@ -260,6 +286,18 @@ export default function CreateScreen({ viewport, onCreated }) {
 
         {/* Spacer so the scroll content doesn't sit under the autocomplete */}
         <View style={styles.autocompleteSpacer} />
+
+        {/* Party image picker */}
+        <TouchableOpacity style={styles.imagePicker} onPress={pickImage} activeOpacity={0.8}>
+          {partyImage ? (
+            <Image source={{ uri: partyImage }} style={styles.partyImage} resizeMode="cover" />
+          ) : (
+            <View style={styles.imagePickerPlaceholder}>
+              <Text style={styles.imagePickerIcon}>+</Text>
+              <Text style={styles.imagePickerText}>add party photo</Text>
+            </View>
+          )}
+        </TouchableOpacity>
 
         {/* Embedded location map */}
         <View
@@ -358,7 +396,7 @@ const styles = StyleSheet.create({
 
   input: {
     backgroundColor: '#1a1a1a', borderRadius: 10,
-    padding: 13, fontSize: 15, marginBottom: 10,
+    padding: 13, fontSize: 15, marginBottom: 12,
     borderWidth: 1, borderColor: '#2a2a2a',
     justifyContent: 'center',
     color: '#fff',
@@ -377,6 +415,7 @@ const styles = StyleSheet.create({
   },
   autocompleteSpacer: {
     height: 58, // matches the autocomplete input height so content flows below it
+    marginBottom: 12,
   },
   placesInputContainer: {
     backgroundColor: 'transparent',
@@ -408,11 +447,40 @@ const styles = StyleSheet.create({
   placesDescription: { color: '#ccc', fontSize: 14 },
   placesSeparator: { backgroundColor: '#2a2a2a', height: 1 },
 
+  imagePicker: {
+    height: 160,
+    borderRadius: 12,
+    overflow: 'hidden',
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#2a2a2a',
+    backgroundColor: '#1a1a1a',
+  },
+  partyImage: {
+    width: '100%',
+    height: '100%',
+  },
+  imagePickerPlaceholder: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  imagePickerIcon: {
+    color: '#555',
+    fontSize: 32,
+    lineHeight: 36,
+  },
+  imagePickerText: {
+    color: '#555',
+    fontSize: 14,
+  },
+
   mapContainer: {
     height: 200,
     borderRadius: 12,
     overflow: 'hidden',
-    marginBottom: 10,
+    marginBottom: 12,
     borderWidth: 1,
     borderColor: '#2a2a2a',
     zIndex: 1,
@@ -443,7 +511,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#a855f7',
   },
 
-  chipsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 10, marginTop: -2 },
+  chipsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 },
   chip: {
     flexDirection: 'row', alignItems: 'center', gap: 5,
     backgroundColor: '#2a1a3e', borderRadius: 20,
@@ -455,7 +523,7 @@ const styles = StyleSheet.create({
 
   createBtn: {
     backgroundColor: '#a855f7', borderRadius: 10,
-    padding: 15, alignItems: 'center', marginTop: 8,
+    padding: 15, alignItems: 'center', marginTop: 12,
   },
   createBtnText: { color: '#fff', fontWeight: '700', fontSize: 16 },
 });
