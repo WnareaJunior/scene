@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, TextInput,
   Alert, ActivityIndicator, ScrollView, Platform, Image,
@@ -10,15 +10,11 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import * as Location from 'expo-location';
 import * as ImagePicker from 'expo-image-picker';
 
-import Constants from 'expo-constants';
-
 import { events } from '../api';
+import { darkMapStyle } from '../constants/mapStyles';
+import { GOOGLE_MAPS_API_KEY } from '../constants/config';
 
-// EXPO_PUBLIC_ prefix causes Metro to inline these at bundle time — readable in Expo Go
-const GOOGLE_MAPS_API_KEY =
-  Platform.OS === 'ios'
-    ? (process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY_IOS ?? '')
-    : (process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY_ANDROID ?? '');
+const GAP = 14;
 
 function formatDate(date) {
   return date.toLocaleDateString('en-US', {
@@ -38,6 +34,7 @@ export default function CreateScreen({ viewport, onCreated }) {
   // Temp date used while the native picker is open on Android (two-step flow)
   const [pickerDate, setPickerDate] = useState(new Date());
   const [creating, setCreating] = useState(false);
+  const [posted, setPosted] = useState(false);
   const [selectedLocation, setSelectedLocation] = useState(null);
   const [mapScrollLocked, setMapScrollLocked] = useState(false);
   const [partyImage, setPartyImage] = useState(null);
@@ -73,19 +70,14 @@ export default function CreateScreen({ viewport, onCreated }) {
     })();
   }, []);
 
-  const initialRegion = (() => {
+  // Cleanup reverse-geocode timeout on unmount.
+  useEffect(() => () => clearTimeout(reverseGeocodeTimeoutRef.current), []);
+
+  const initialRegion = useMemo(() => {
     const center = selectedLocation ?? viewport;
-    if (!center) return {
-      latitude: 40.7128, longitude: -74.006,
-      latitudeDelta: 0.01, longitudeDelta: 0.01,
-    };
-    return {
-      latitude: center.latitude,
-      longitude: center.longitude,
-      latitudeDelta: 0.01,
-      longitudeDelta: 0.01,
-    };
-  })();
+    if (!center) return { latitude: 40.7128, longitude: -74.006, latitudeDelta: 0.01, longitudeDelta: 0.01 };
+    return { latitude: center.latitude, longitude: center.longitude, latitudeDelta: 0.01, longitudeDelta: 0.01 };
+  }, [selectedLocation, viewport]);
 
   function setField(key, value) {
     setForm((f) => ({ ...f, [key]: value }));
@@ -189,8 +181,17 @@ export default function CreateScreen({ viewport, onCreated }) {
       Alert.alert('Location needed', 'Search an address or pan the map to set event location.');
       return;
     }
+    let capacity;
+    if (form.capacity) {
+      const parsed = parseInt(form.capacity, 10);
+      if (Number.isNaN(parsed) || parsed < 1) {
+        Alert.alert('Invalid capacity', 'Capacity must be a positive number.');
+        return;
+      }
+      capacity = parsed;
+    }
+
     setCreating(true);
-    let created = false;
     try {
       let imageUrl;
       if (partyImage) {
@@ -203,70 +204,70 @@ export default function CreateScreen({ viewport, onCreated }) {
         startTime: form.startTime.toISOString(),
         latitude: locationToSubmit.latitude,
         longitude: locationToSubmit.longitude,
-        capacity: form.capacity ? parseInt(form.capacity, 10) : undefined,
+        capacity,
         hashtags,
         imageUrl,
       });
       if (data?.id) {
-        created = true;
         setForm({ title: '', address: '', startTime: null, capacity: '' });
         setHashtags([]);
         setTagInput('');
         setSelectedLocation(null);
         setPartyImage(null);
         placesRef.current?.setAddressText('');
-        // Navigate away first, then show confirmation so we don't update
-        // state on an unmounted component.
+        setPosted(true);
         onCreated();
-        Alert.alert('Created!', `"${data.title}" is live.`);
+        setTimeout(() => setPosted(false), 2500);
       } else {
         Alert.alert('Error', data?.error || 'Could not create event.');
       }
     } catch (err) {
       Alert.alert('Error', err.message || 'Something went wrong. Please try again.');
     } finally {
-      // Only reset the loading spinner if we haven't navigated away,
-      // to avoid a state update on an unmounted component.
-      if (!created) setCreating(false);
+      setCreating(false);
     }
   }
 
   return (
     <SafeAreaView style={styles.safeContent}>
-      {/* Autocomplete lives OUTSIDE the ScrollView so its dropdown is never clipped */}
-      <View style={styles.autocompleteWrapper}>
+      {/* Title sits above everything — no zIndex so it never gets overlapped */}
+      <View style={styles.titleRow}>
+        <Text style={styles.screenTitle}>create event</Text>
+      </View>
+      {/* Address autocomplete is its own row outside the ScrollView so its dropdown isn't clipped */}
+      <View style={styles.addressRow}>
         <GooglePlacesAutocomplete
-          ref={placesRef}
-          placeholder="address"
-          fetchDetails
-          onPress={(data, details) => {
-            const lat = details?.geometry?.location?.lat;
-            const lng = details?.geometry?.location?.lng;
-            if (lat && lng) {
-              const coords = { latitude: lat, longitude: lng };
-              setSelectedLocation(coords);
-              setField('address', data.description);
-              mapRef.current?.animateToRegion({
-                ...coords,
-                latitudeDelta: 0.005,
-                longitudeDelta: 0.005,
-              }, 600);
-            }
-          }}
-          query={{ key: GOOGLE_MAPS_API_KEY, language: 'en' }}
-          styles={{
-            textInputContainer: styles.placesInputContainer,
-            textInput: styles.placesInput,
-            listView: styles.placesList,
-            row: styles.placesRow,
-            description: styles.placesDescription,
-            separator: styles.placesSeparator,
-            poweredContainer: { display: 'none' },
-          }}
-          enablePoweredByContainer={false}
-          minLength={2}
-          debounce={300}
-          keyboardShouldPersistTaps="always"
+            ref={placesRef}
+            placeholder="address"
+            fetchDetails
+            onPress={(data, details) => {
+              const lat = details?.geometry?.location?.lat;
+              const lng = details?.geometry?.location?.lng;
+              if (lat && lng) {
+                const coords = { latitude: lat, longitude: lng };
+                setSelectedLocation(coords);
+                setField('address', data.description);
+                mapRef.current?.animateToRegion({
+                  ...coords,
+                  latitudeDelta: 0.005,
+                  longitudeDelta: 0.005,
+                }, 600);
+              }
+            }}
+            query={{ key: GOOGLE_MAPS_API_KEY, language: 'en' }}
+            styles={{
+              textInputContainer: styles.placesInputContainer,
+              textInput: styles.placesInput,
+              listView: styles.placesList,
+              row: styles.placesRow,
+              description: styles.placesDescription,
+              separator: styles.placesSeparator,
+              poweredContainer: { display: 'none' },
+            }}
+            enablePoweredByContainer={false}
+            minLength={2}
+            debounce={300}
+            keyboardShouldPersistTaps="always"
           textInputProps={{ placeholderTextColor: '#555' }}
         />
       </View>
@@ -277,15 +278,10 @@ export default function CreateScreen({ viewport, onCreated }) {
         showsVerticalScrollIndicator={false}
         scrollEnabled={!mapScrollLocked}
       >
-        <Text style={styles.screenTitle}>create event</Text>
-
         <TextInput
           style={styles.input} placeholder="title" placeholderTextColor="#555"
           value={form.title} onChangeText={(v) => setField('title', v)}
         />
-
-        {/* Spacer so the scroll content doesn't sit under the autocomplete */}
-        <View style={styles.autocompleteSpacer} />
 
         {/* Party image picker */}
         <TouchableOpacity style={styles.imagePicker} onPress={pickImage} activeOpacity={0.8}>
@@ -378,10 +374,14 @@ export default function CreateScreen({ viewport, onCreated }) {
           </View>
         )}
 
-        <TouchableOpacity style={styles.createBtn} onPress={handleSubmit} disabled={creating}>
+        <TouchableOpacity
+          style={[styles.createBtn, posted && styles.createBtnPosted]}
+          onPress={handleSubmit}
+          disabled={creating || posted}
+        >
           {creating
             ? <ActivityIndicator color="#fff" />
-            : <Text style={styles.createBtnText}>Post event</Text>
+            : <Text style={styles.createBtnText}>{posted ? 'event posted!' : 'Post event'}</Text>
           }
         </TouchableOpacity>
       </ScrollView>
@@ -391,12 +391,23 @@ export default function CreateScreen({ viewport, onCreated }) {
 
 const styles = StyleSheet.create({
   safeContent: { flex: 1 },
+  titleRow: {
+    paddingHorizontal: 24,
+    paddingTop: 16,
+    paddingBottom: GAP,
+  },
+  screenTitle: { color: '#fff', fontSize: 28, fontWeight: '800' },
+  addressRow: {
+    paddingHorizontal: 24,
+    paddingBottom: GAP,
+    zIndex: 100,
+    elevation: 100,
+  },
   scrollContent: { paddingHorizontal: 24, paddingBottom: 40 },
-  screenTitle: { color: '#fff', fontSize: 28, fontWeight: '800', marginBottom: 20, marginTop: 16 },
 
   input: {
     backgroundColor: '#1a1a1a', borderRadius: 10,
-    padding: 13, fontSize: 15, marginBottom: 12,
+    padding: 13, fontSize: 15, marginBottom: GAP,
     borderWidth: 1, borderColor: '#2a2a2a',
     justifyContent: 'center',
     color: '#fff',
@@ -404,19 +415,6 @@ const styles = StyleSheet.create({
   inputText: { color: '#fff', fontSize: 15 },
   inputPlaceholder: { color: '#555', fontSize: 15 },
 
-  // Autocomplete floats above the ScrollView so its dropdown is never clipped
-  autocompleteWrapper: {
-    position: 'absolute',
-    top: 80, // sits just below the screen title area
-    left: 24,
-    right: 24,
-    zIndex: 100,
-    elevation: 100,
-  },
-  autocompleteSpacer: {
-    height: 58, // matches the autocomplete input height so content flows below it
-    marginBottom: 12,
-  },
   placesInputContainer: {
     backgroundColor: 'transparent',
     borderTopWidth: 0,
@@ -429,8 +427,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#2a2a2a',
     color: '#fff',
-    height: 48,
-    paddingHorizontal: 13,
+    padding: 13,
   },
   placesList: {
     backgroundColor: '#1a1a1a',
@@ -448,10 +445,10 @@ const styles = StyleSheet.create({
   placesSeparator: { backgroundColor: '#2a2a2a', height: 1 },
 
   imagePicker: {
-    height: 160,
+    height: 120,
     borderRadius: 12,
     overflow: 'hidden',
-    marginBottom: 12,
+    marginBottom: GAP,
     borderWidth: 1,
     borderColor: '#2a2a2a',
     backgroundColor: '#1a1a1a',
@@ -477,10 +474,10 @@ const styles = StyleSheet.create({
   },
 
   mapContainer: {
-    height: 200,
+    height: 160,
     borderRadius: 12,
     overflow: 'hidden',
-    marginBottom: 12,
+    marginBottom: GAP,
     borderWidth: 1,
     borderColor: '#2a2a2a',
     zIndex: 1,
@@ -511,7 +508,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#a855f7',
   },
 
-  chipsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 },
+  chipsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: GAP },
   chip: {
     flexDirection: 'row', alignItems: 'center', gap: 5,
     backgroundColor: '#2a1a3e', borderRadius: 20,
@@ -523,19 +520,10 @@ const styles = StyleSheet.create({
 
   createBtn: {
     backgroundColor: '#a855f7', borderRadius: 10,
-    padding: 15, alignItems: 'center', marginTop: 12,
+    padding: 15, alignItems: 'center',
+  },
+  createBtnPosted: {
+    backgroundColor: '#22c55e',
   },
   createBtnText: { color: '#fff', fontWeight: '700', fontSize: 16 },
 });
-
-
-const darkMapStyle = [
-  { elementType: 'geometry', stylers: [{ color: '#0a0a0a' }] },
-  { elementType: 'labels.text.fill', stylers: [{ color: '#444' }] },
-  { elementType: 'labels.text.stroke', stylers: [{ color: '#0a0a0a' }] },
-  { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#1a1a1a' }] },
-  { featureType: 'road', elementType: 'geometry.stroke', stylers: [{ color: '#111' }] },
-  { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#050505' }] },
-  { featureType: 'poi', stylers: [{ visibility: 'off' }] },
-  { featureType: 'transit', stylers: [{ visibility: 'off' }] },
-];

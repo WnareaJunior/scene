@@ -1,29 +1,17 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View, TextInput, StyleSheet, Dimensions,
-  ScrollView, Text, TouchableOpacity, ActivityIndicator, Alert,
+  FlatList, Text, TouchableOpacity, ActivityIndicator, Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { GestureDetector, Gesture } from 'react-native-gesture-handler';
 import Animated, {
-  useSharedValue, useAnimatedStyle, withSpring,
+  useSharedValue, useAnimatedStyle, withSpring, runOnJS,
 } from 'react-native-reanimated';
 
 import { events, users } from '../api';
 import EventCard from './EventCard';
-
-// Haversine distance between two lat/lng points, in kilometres.
-function haversineKm(lat1, lng1, lat2, lng2) {
-  const R = 6371;
-  const dLat = ((lat2 - lat1) * Math.PI) / 180;
-  const dLng = ((lng2 - lng1) * Math.PI) / 180;
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos((lat1 * Math.PI) / 180) *
-      Math.cos((lat2 * Math.PI) / 180) *
-      Math.sin(dLng / 2) ** 2;
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
+import { haversineKm } from '../utils/geo';
 
 const { height: SCREEN_H } = Dimensions.get('window');
 
@@ -31,7 +19,7 @@ const HEADER_H = 110;
 const SPRING_V = { damping: 50, stiffness: 180, mass: 1.2 };
 const SPRING_H = { damping: 40, stiffness: 200, mass: 1 };
 
-export default function SearchSheet({ slideX, screenW, viewport }) {
+export default function SearchSheet({ slideX, screenW, viewport, onNavigate }) {
   const { top: safeTop, bottom: safeBottom } = useSafeAreaInsets();
 
   const SNAP_FULL = safeTop + 16;
@@ -223,7 +211,11 @@ export default function SearchSheet({ slideX, screenW, viewport }) {
       if (didSwipe) {
         const dir = e.translationX < 0 ? -1 : 1;
         const target = Math.max(-screenW * 2, Math.min(0, startX.value + dir * screenW));
-        slideX.value = withSpring(target, SPRING_H);
+        // Determine which named page the target corresponds to and delegate to parent.
+        if (target === 0) runOnJS(onNavigate)('create');
+        else if (target === -screenW) runOnJS(onNavigate)('map');
+        else if (target === -screenW * 2) runOnJS(onNavigate)('profile');
+        else slideX.value = withSpring(target, SPRING_H);
       } else {
         slideX.value = withSpring(startX.value, SPRING_H);
       }
@@ -266,25 +258,25 @@ export default function SearchSheet({ slideX, screenW, viewport }) {
               {query.startsWith('@') ? 'no users found' : 'no events nearby'}
             </Text>
           ) : (
-            <ScrollView
+            <FlatList
+              data={results}
+              keyExtractor={(item) => item.id.toString()}
               style={styles.list}
               contentContainerStyle={styles.listContent}
               showsVerticalScrollIndicator={false}
               keyboardShouldPersistTaps="handled"
-            >
-              {mode === 'users'
-                ? results.map((u) => (
-                    <View key={u.id} style={styles.userCard}>
-                      <Text style={styles.userName}>@{u.username}</Text>
-                      {u.bio ? <Text style={styles.userBio} numberOfLines={1}>{u.bio}</Text> : null}
-                      <Text style={styles.userMeta}>{u.followers_count ?? 0} followers</Text>
-                    </View>
-                  ))
-                : results.map((ev) => (
-                    <EventCard key={ev.id} event={ev} onRsvp={handleRsvp} />
-                  ))
+              renderItem={({ item }) =>
+                mode === 'users' ? (
+                  <View style={styles.userCard}>
+                    <Text style={styles.userName}>@{item.username}</Text>
+                    {item.bio ? <Text style={styles.userBio} numberOfLines={1}>{item.bio}</Text> : null}
+                    <Text style={styles.userMeta}>{item.followers_count ?? 0} followers</Text>
+                  </View>
+                ) : (
+                  <EventCard event={item} onRsvp={handleRsvp} />
+                )
               }
-            </ScrollView>
+            />
           )}
         </View>
       </GestureDetector>

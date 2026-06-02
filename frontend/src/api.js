@@ -65,8 +65,33 @@ async function request(method, path, body, retry = true) {
 
   if (res.status === 204) return null;
   if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.error || 'Request failed');
+    const errorBody = await res.json().catch(() => ({}));
+    throw new Error(errorBody.error || 'Request failed');
+  }
+  return res.json();
+}
+
+// ── Shared multipart upload (handles 401 token refresh) ──────────────────────
+
+async function uploadFile(path, fieldName, imageUri, retry = true) {
+  let token = await getStoredToken();
+  const filename = imageUri.split('/').pop();
+  const match = /\.(\w+)$/.exec(filename);
+  const type = match ? `image/${match[1]}` : 'image/jpeg';
+  const formData = new FormData();
+  formData.append(fieldName, { uri: imageUri, name: filename, type });
+  const res = await fetch(`${BASE_URL}${path}`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: formData,
+  });
+  if (res.status === 401 && retry) {
+    token = await refreshAccessToken();
+    return uploadFile(path, fieldName, imageUri, false);
+  }
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || 'Upload failed');
   }
   return res.json();
 }
@@ -101,24 +126,7 @@ export const auth = {
 export const users = {
   me: () => request('GET', '/users/me'),
   update: (data) => request('PATCH', '/users/me', data),
-  uploadAvatar: async (imageUri) => {
-    const token = await SecureStore.getItemAsync('accessToken');
-    const filename = imageUri.split('/').pop();
-    const match = /\.(\w+)$/.exec(filename);
-    const type = match ? `image/${match[1]}` : 'image/jpeg';
-    const formData = new FormData();
-    formData.append('avatar', { uri: imageUri, name: filename, type });
-    const res = await fetch(`${BASE_URL}/users/me/avatar`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${token}` },
-      body: formData,
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.error || 'Avatar upload failed');
-    }
-    return res.json();
-  },
+  uploadAvatar: (imageUri) => uploadFile('/users/me/avatar', 'avatar', imageUri),
   hostedEvents: (params = {}) => request('GET', `/users/me/hosted-events?${qs(params)}`),
   myRsvps: (params = {}) => request('GET', `/users/me/rsvps?${qs(params)}`),
   getUser: (userId) => request('GET', `/users/${userId}`),
@@ -132,24 +140,7 @@ export const users = {
 // ── Events ────────────────────────────────────────────────────────────────────
 
 export const events = {
-  uploadImage: async (imageUri) => {
-    const token = await SecureStore.getItemAsync('accessToken');
-    const filename = imageUri.split('/').pop();
-    const match = /\.(\w+)$/.exec(filename);
-    const type = match ? `image/${match[1]}` : 'image/jpeg';
-    const formData = new FormData();
-    formData.append('image', { uri: imageUri, name: filename, type });
-    const res = await fetch(`${BASE_URL}/events/image`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${token}` },
-      body: formData,
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.error || 'Image upload failed');
-    }
-    return res.json();
-  },
+  uploadImage: (imageUri) => uploadFile('/events/image', 'image', imageUri),
   create: (data) => request('POST', '/events', data),
   discover: (params = {}) => request('GET', `/events?${qs(params)}`),
   feed: (params = {}) => request('GET', `/events/feed?${qs(params)}`),

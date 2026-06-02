@@ -90,7 +90,7 @@ const StatusBadge = ({ status }) => {
 const STATE_COLORS = { live: '#22c55e', upcoming: '#a855f7', past: '#555' };
 const STATE_LABELS = { live: 'Live', upcoming: 'Upcoming', past: 'Past' };
 
-const EventCard = ({ event, profileData }) => {
+const ProfileEventCard = ({ event, profileData }) => {
   const state = getEventState(event);
   const status = event.source === 'hosting' ? 'hosting' : 'going';
   const formattedDate = new Date(event.start_time).toLocaleDateString('en-US', {
@@ -152,9 +152,12 @@ export default function ProfileScreen({ user, onSignOut, refreshKey = 0 }) {
   const [feedError, setFeedError] = useState(null);
 
   useEffect(() => {
+    let cancelled = false;
+
     users.me()
-      .then((d) => { if (d?.id) setProfileData(d); })
+      .then((d) => { if (!cancelled && d?.id) setProfileData(d); })
       .catch((err) => {
+        if (cancelled) return;
         // Profile refresh failure is non-blocking — the user already has cached
         // data from login. Show a subtle alert rather than crashing the screen.
         Alert.alert('Profile', err.message || 'Could not refresh profile data.');
@@ -164,6 +167,7 @@ export default function ProfileScreen({ user, onSignOut, refreshKey = 0 }) {
     setFeedError(null);
     Promise.all([users.hostedEvents(), users.myRsvps()])
       .then(([hosted, rsvps]) => {
+        if (cancelled) return;
         const map = new Map();
         (hosted ?? []).forEach((e) => map.set(e.id, { ...e, source: 'hosting' }));
         (rsvps ?? []).forEach((e) => { if (!map.has(e.id)) map.set(e.id, { ...e, source: 'rsvp' }); });
@@ -173,9 +177,11 @@ export default function ProfileScreen({ user, onSignOut, refreshKey = 0 }) {
         setFeed(sorted);
       })
       .catch((err) => {
-        setFeedError(err.message || 'Could not load your events.');
+        if (!cancelled) setFeedError(err.message || 'Could not load your events.');
       })
-      .finally(() => setFeedLoading(false));
+      .finally(() => { if (!cancelled) setFeedLoading(false); });
+
+    return () => { cancelled = true; };
   }, [refreshKey]);
 
   const handlePickAvatar = useCallback(async () => {
@@ -211,12 +217,12 @@ if (updated?.id) setProfileData((prev) => ({ ...prev, profile_picture: updated.p
   // Stable renderItem — avoids re-creating the function on every profileData change
   // by reading profileData from state (closure captures latest via re-render).
   const renderItem = useCallback(({ item }) => (
-    <EventCard event={item} profileData={profileData} />
+    <ProfileEventCard event={item} profileData={profileData} />
   ), [profileData]);
 
   const keyExtractor = useCallback((item) => item.id.toString(), []);
 
-  const ItemSeparator = useCallback(() => <View style={styles.divider} />, []);
+  function ItemSeparator() { return <View style={styles.divider} />; }
 
   // The profile header, sign-out button, and top divider live in ListHeaderComponent
   // so they scroll together with the feed inside the single FlatList.
@@ -230,7 +236,7 @@ if (updated?.id) setProfileData((prev) => ({ ...prev, profile_picture: updated.p
     </>
   ), [profileData, handlePickAvatar, handleSignOut]);
 
-  const FeedEmpty = useCallback(() => {
+  function FeedEmpty() {
     if (feedLoading) {
       return <ActivityIndicator color="#a855f7" style={{ marginTop: 32 }} />;
     }
@@ -238,7 +244,7 @@ if (updated?.id) setProfileData((prev) => ({ ...prev, profile_picture: updated.p
       return <Text style={styles.feedError}>{feedError}</Text>;
     }
     return <Text style={styles.feedEmpty}>No events yet</Text>;
-  }, [feedLoading, feedError]);
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -249,7 +255,7 @@ if (updated?.id) setProfileData((prev) => ({ ...prev, profile_picture: updated.p
         renderItem={renderItem}
         ListHeaderComponent={ListHeader}
         ItemSeparatorComponent={ItemSeparator}
-        ListEmptyComponent={<FeedEmpty />}
+        ListEmptyComponent={FeedEmpty}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       />

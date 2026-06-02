@@ -3,24 +3,13 @@ import { View, TouchableOpacity, Text, StyleSheet, Alert } from 'react-native';
 import MapView, { Marker } from 'react-native-maps';
 import * as Location from 'expo-location';
 import { map as mapApi } from '../api';
+import { haversineKm } from '../utils/geo';
+import { darkMapStyle } from '../constants/mapStyles';
 
 const initialRegion = {
   latitude: 40.7128, longitude: -74.006,
   latitudeDelta: 0.05, longitudeDelta: 0.05,
 };
-
-// Haversine distance between two lat/lng points, in kilometres.
-function haversineKm(lat1, lng1, lat2, lng2) {
-  const R = 6371;
-  const dLat = ((lat2 - lat1) * Math.PI) / 180;
-  const dLng = ((lng2 - lng1) * Math.PI) / 180;
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos((lat1 * Math.PI) / 180) *
-      Math.cos((lat2 * Math.PI) / 180) *
-      Math.sin(dLng / 2) ** 2;
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
 
 // Significant zoom change: delta ratio differs by more than 30%.
 function zoomChanged(prev, next) {
@@ -53,7 +42,7 @@ export default function MapScreen({ onRegionChangeComplete }) {
   const debounceRef = useRef(null);
   const lastFetchRef = useRef(null); // { lat, lng, region }
 
-  async function fetchPins(region) {
+  const fetchPins = useCallback(async (region) => {
     try {
       const data = await mapApi.eventPins(regionToBounds(region));
       setPins(Array.isArray(data) ? data : []);
@@ -61,7 +50,7 @@ export default function MapScreen({ onRegionChangeComplete }) {
     } catch {
       setFetchError(true);
     }
-  }
+  }, []);
 
   useEffect(() => {
     (async () => {
@@ -82,7 +71,7 @@ export default function MapScreen({ onRegionChangeComplete }) {
       } catch {}
       fetchPins(initialRegion);
     })();
-  }, []);
+  }, [fetchPins]);
 
   const handleRegionChange = useCallback((region) => {
     // Always notify the parent of the latest viewport (used by SearchSheet).
@@ -103,7 +92,7 @@ export default function MapScreen({ onRegionChangeComplete }) {
       lastFetchRef.current = { lat: region.latitude, lng: region.longitude, region };
       fetchPins(region);
     }, DEBOUNCE_MS);
-  }, [onRegionChangeComplete]);
+  }, [onRegionChangeComplete, fetchPins]);
 
   async function centerOnUser() {
     try {
@@ -197,13 +186,3 @@ const styles = StyleSheet.create({
   },
 });
 
-const darkMapStyle = [
-  { elementType: 'geometry', stylers: [{ color: '#0a0a0a' }] },
-  { elementType: 'labels.text.fill', stylers: [{ color: '#444' }] },
-  { elementType: 'labels.text.stroke', stylers: [{ color: '#0a0a0a' }] },
-  { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#1a1a1a' }] },
-  { featureType: 'road', elementType: 'geometry.stroke', stylers: [{ color: '#111' }] },
-  { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#050505' }] },
-  { featureType: 'poi', stylers: [{ visibility: 'off' }] },
-  { featureType: 'transit', stylers: [{ visibility: 'off' }] },
-];

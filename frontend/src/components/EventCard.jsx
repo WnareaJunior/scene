@@ -8,7 +8,7 @@ export default function EventCard({ event, onRsvp }) {
       })
     : '';
 
-  const goingCount = parseInt(event.going_count ?? 0);
+  const goingCount = Number(event.going_count ?? 0);
   const isFull = event.capacity != null && goingCount >= event.capacity;
   const spotsLeft = event.capacity != null ? event.capacity - goingCount : null;
   const userStatus = event.user_rsvp ?? null;
