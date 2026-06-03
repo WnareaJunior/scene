@@ -211,13 +211,16 @@ router.get('/:userId/hosted-events', requireAuth, async (req, res, next) => {
     if (status === 'upcoming') filter = `AND start_time >= now()`;
     else if (status === 'past') filter = `AND start_time < now()`;
 
+    // Only the host may see their own private events here; for everyone else this
+    // is a public profile view, so private events are excluded.
     const { rows } = await db.query(
       `SELECT id, title, description, latitude, longitude, address, start_time, end_time,
               capacity, hashtags, is_private, show_attendees, status, created_at
        FROM events
-       WHERE host_id = $1 AND status != 'cancelled' ${filter}
+       WHERE host_id = $1 AND status != 'cancelled'
+         AND (is_private = false OR host_id = $2) ${filter}
        ORDER BY start_time DESC`,
-      [req.params.userId]
+      [req.params.userId, req.user.sub]
     );
     res.json(rows);
   } catch (err) {
