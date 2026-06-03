@@ -11,6 +11,7 @@ import Animated, {
 
 import { events, users } from '../api';
 import EventCard from './EventCard';
+import EventDetailSheet from './EventDetailSheet';
 import { haversineKm } from '../utils/geo';
 import UserProfileSheet from './UserProfileSheet';
 
@@ -41,6 +42,7 @@ export default function SearchSheet({ slideX, screenW, viewport, onNavigate }) {
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState(null);
   const [viewingUserId, setViewingUserId] = useState(null);
+  const [selectedEvent, setSelectedEvent] = useState(null);
   const debounceRef           = useRef(null);
   const viewportTimerRef      = useRef(null);
   const feedGenRef            = useRef(0);
@@ -279,7 +281,11 @@ export default function SearchSheet({ slideX, screenW, viewport, onNavigate }) {
                     <Text style={styles.userMeta}>{item.followers_count ?? 0} followers</Text>
                   </TouchableOpacity>
                 ) : (
-                  <EventCard event={item} onRsvp={handleRsvp} />
+                  <EventCard
+                    event={item}
+                    onRsvp={handleRsvp}
+                    onPress={() => setSelectedEvent(item)}
+                  />
                 )
               }
             />
@@ -290,6 +296,28 @@ export default function SearchSheet({ slideX, screenW, viewport, onNavigate }) {
       <UserProfileSheet
         userId={viewingUserId}
         onClose={() => setViewingUserId(null)}
+      />
+
+      <EventDetailSheet
+        event={selectedEvent}
+        onClose={() => setSelectedEvent(null)}
+        onRsvp={(eventId, status) => {
+          handleRsvp(eventId, status);
+          setSelectedEvent((prev) =>
+            prev?.id === eventId
+              ? {
+                  ...prev,
+                  user_rsvp: prev.user_rsvp === status ? null : status,
+                  going_count: Number(prev.going_count ?? 0) +
+                    (prev.user_rsvp === status ? -1 : prev.user_rsvp != null ? 0 : 1),
+                }
+              : prev
+          );
+        }}
+        onHostPress={(hostId) => {
+          setSelectedEvent(null);
+          setViewingUserId(hostId);
+        }}
       />
     </Animated.View>
   );

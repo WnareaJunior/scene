@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 
-export default function EventCard({ event, onRsvp }) {
+export default function EventCard({ event, onRsvp, onPress }) {
   const date = event.start_time
     ? new Date(event.start_time).toLocaleDateString('en-US', {
         month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
@@ -14,8 +14,8 @@ export default function EventCard({ event, onRsvp }) {
   const userStatus = event.user_rsvp ?? null;
   const hasRsvp = userStatus !== null;
 
-  return (
-    <View style={styles.card}>
+  const inner = (
+    <>
       <View style={styles.cardHeader}>
         <Text style={styles.cardTitle} numberOfLines={1}>{event.title}</Text>
         {event.hashtags?.length > 0 && (
@@ -43,8 +43,17 @@ export default function EventCard({ event, onRsvp }) {
           </Text>
         </TouchableOpacity>
       </View>
-    </View>
+    </>
   );
+
+  if (onPress) {
+    return (
+      <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.85}>
+        {inner}
+      </TouchableOpacity>
+    );
+  }
+  return <View style={styles.card}>{inner}</View>;
 }
 
 const styles = StyleSheet.create({
