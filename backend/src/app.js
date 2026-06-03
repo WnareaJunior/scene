@@ -8,6 +8,13 @@ const userRoutes = require('./routes/users');
 const eventRoutes = require('./routes/events');
 const mapRoutes = require('./routes/map');
 
+// Fail fast at boot if no JWT secret is configured. The auth route and middleware
+// both resolve `JWT_ACCESS_SECRET || JWT_SECRET`; without one, tokens are signed
+// with `undefined` and every protected request 401s. Surface that at startup.
+if (!process.env.JWT_ACCESS_SECRET && !process.env.JWT_SECRET) {
+  throw new Error('Missing JWT secret: set JWT_ACCESS_SECRET (preferred) or JWT_SECRET');
+}
+
 const allowedOrigins = (process.env.ALLOWED_ORIGINS || '')
   .split(',')
   .map(o => o.trim())
