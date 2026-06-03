@@ -201,15 +201,43 @@ router.get('/search', requireAuth, async (req, res, next) => {
   }
 });
 
+// GET /users/:userId/hosted-events
+// Mirrors GET /me/hosted-events (same row shape) but keyed on the :userId param,
+// so other users' profiles can list the events they host.
+router.get('/:userId/hosted-events', requireAuth, async (req, res, next) => {
+  try {
+    const { status } = req.query;
+    let filter = '';
+    if (status === 'upcoming') filter = `AND start_time >= now()`;
+    else if (status === 'past') filter = `AND start_time < now()`;
+
+    // Only the host may see their own private events here; for everyone else this
+    // is a public profile view, so private events are excluded.
+    const { rows } = await db.query(
+      `SELECT id, title, description, latitude, longitude, address, start_time, end_time,
+              capacity, hashtags, is_private, show_attendees, status, created_at
+       FROM events
+       WHERE host_id = $1 AND status != 'cancelled'
+         AND (is_private = false OR host_id = $2) ${filter}
+       ORDER BY start_time DESC`,
+      [req.params.userId, req.user.sub]
+    );
+    res.json(rows);
+  } catch (err) {
+    next(err);
+  }
+});
+
 // GET /users/:userId
 router.get('/:userId', requireAuth, async (req, res, next) => {
   try {
     const { rows } = await db.query(
       `SELECT id, username, bio, gender, interests, profile_picture, created_at,
               (SELECT count(*) FROM follows WHERE followed_id = users.id) AS followers_count,
-              (SELECT count(*) FROM follows WHERE follower_id = users.id) AS following_count
+              (SELECT count(*) FROM follows WHERE follower_id = users.id) AS following_count,
+              EXISTS(SELECT 1 FROM follows WHERE follower_id = $2 AND followed_id = users.id) AS is_following
        FROM users WHERE id = $1`,
-      [req.params.userId]
+      [req.params.userId, req.user.sub]
     );
     if (!rows.length) return res.status(404).json({ error: 'User not found' });
     res.json(rows[0]);
