@@ -97,7 +97,14 @@
       "Bash(ollama list *)",
       "Bash(ovcli --help)",
       "Bash(ov system *)",
-      "Bash(ov config *)"
+      "Bash(ov config *)",
+      "Bash(ov add-resource *)",
+      "Bash(ov write *)",
+      "Bash(ov wait *)",
+      "Bash(ov status *)",
+      "Bash(awk '{print $4, $6}')",
+      "Bash(ov mkdir *)",
+      "Bash(awk '{print $4+$6}')"
     ]
   },
   "enabledPlugins": {

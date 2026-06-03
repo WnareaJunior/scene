@@ -5,7 +5,9 @@
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
-    "dev": "nodemon index.js"
+    "dev": "nodemon index.js",
+    "seed": "node scripts/seed.js",
+    "unseed": "node scripts/seed.js --unseed"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1053.0",
