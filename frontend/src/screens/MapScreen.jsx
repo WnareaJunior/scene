@@ -122,6 +122,7 @@ export default function MapScreen({ onRegionChangeComplete }) {
         ref={mapRef}
         style={StyleSheet.absoluteFill}
         customMapStyle={darkMapStyle}
+        userInterfaceStyle="dark"
         initialRegion={initialRegion}
         onRegionChangeComplete={handleRegionChange}
         showsUserLocation

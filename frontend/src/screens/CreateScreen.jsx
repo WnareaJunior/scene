@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, TextInput,
-  Alert, ActivityIndicator, ScrollView, Platform, Image,
+  Alert, ActivityIndicator, ScrollView, Platform, Image, KeyboardAvoidingView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import MapView from 'react-native-maps';
@@ -143,8 +143,9 @@ export default function CreateScreen({ viewport, onCreated }) {
         setPickerMode(null);
       }
     } else {
-      // iOS: single spinner returns a full datetime.
+      // iOS: datetime mode returns a full date+time value.
       setField('startTime', selected);
+      setPickerMode(null);
     }
   }
 
@@ -168,7 +169,7 @@ export default function CreateScreen({ viewport, onCreated }) {
   function openDatePicker() {
     const base = form.startTime ?? new Date();
     setPickerDate(base);
-    setPickerMode('date');
+    setPickerMode(Platform.OS === 'ios' ? 'datetime' : 'date');
   }
 
   async function handleSubmit() {
@@ -230,180 +231,177 @@ export default function CreateScreen({ viewport, onCreated }) {
 
   return (
     <SafeAreaView style={styles.safeContent}>
-      {/* Title sits above everything — no zIndex so it never gets overlapped */}
-      <View style={styles.titleRow}>
-        <Text style={styles.screenTitle}>create event</Text>
-      </View>
-      {/* Address autocomplete is its own row outside the ScrollView so its dropdown isn't clipped */}
-      <View style={styles.addressRow}>
-        <GooglePlacesAutocomplete
-            ref={placesRef}
-            placeholder="address"
-            fetchDetails
-            onPress={(data, details) => {
-              const lat = details?.geometry?.location?.lat;
-              const lng = details?.geometry?.location?.lng;
-              if (lat && lng) {
-                const coords = { latitude: lat, longitude: lng };
-                setSelectedLocation(coords);
-                setField('address', data.description);
-                mapRef.current?.animateToRegion({
-                  ...coords,
-                  latitudeDelta: 0.005,
-                  longitudeDelta: 0.005,
-                }, 600);
-              }
-            }}
-            query={{ key: GOOGLE_MAPS_API_KEY, language: 'en' }}
-            styles={{
-              textInputContainer: styles.placesInputContainer,
-              textInput: styles.placesInput,
-              listView: styles.placesList,
-              row: styles.placesRow,
-              description: styles.placesDescription,
-              separator: styles.placesSeparator,
-              poweredContainer: { display: 'none' },
-            }}
-            enablePoweredByContainer={false}
-            minLength={2}
-            debounce={300}
-            keyboardShouldPersistTaps="always"
-          textInputProps={{ placeholderTextColor: '#555' }}
-        />
-      </View>
-
-      <ScrollView
-        keyboardShouldPersistTaps="always"
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-        scrollEnabled={!mapScrollLocked}
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
-        <TextInput
-          style={styles.input} placeholder="title" placeholderTextColor="#555"
-          value={form.title} onChangeText={(v) => setField('title', v)}
-        />
+        <ScrollView
+          keyboardShouldPersistTaps="always"
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+          scrollEnabled={!mapScrollLocked}
+        >
+          <Text style={styles.screenTitle}>create event</Text>
 
-        {/* Party image picker */}
-        <TouchableOpacity style={styles.imagePicker} onPress={pickImage} activeOpacity={0.8}>
-          {partyImage ? (
-            <Image source={{ uri: partyImage }} style={styles.partyImage} resizeMode="cover" />
-          ) : (
-            <View style={styles.imagePickerPlaceholder}>
-              <Text style={styles.imagePickerIcon}>+</Text>
-              <Text style={styles.imagePickerText}>add party photo</Text>
+          {/* Address autocomplete — zIndex lets dropdown overlay elements below */}
+          <View style={styles.autocompleteContainer}>
+            <GooglePlacesAutocomplete
+              ref={placesRef}
+              placeholder="address"
+              fetchDetails
+              onPress={(data, details) => {
+                const lat = details?.geometry?.location?.lat;
+                const lng = details?.geometry?.location?.lng;
+                if (lat && lng) {
+                  const coords = { latitude: lat, longitude: lng };
+                  setSelectedLocation(coords);
+                  setField('address', data.description);
+                  mapRef.current?.animateToRegion(
+                    { ...coords, latitudeDelta: 0.005, longitudeDelta: 0.005 },
+                    600,
+                  );
+                }
+              }}
+              query={{ key: GOOGLE_MAPS_API_KEY, language: 'en' }}
+              styles={{
+                textInputContainer: styles.placesInputContainer,
+                textInput: styles.placesInput,
+                listView: styles.placesList,
+                row: styles.placesRow,
+                description: styles.placesDescription,
+                separator: styles.placesSeparator,
+                poweredContainer: { display: 'none' },
+              }}
+              enablePoweredByContainer={false}
+              minLength={2}
+              debounce={300}
+              keyboardShouldPersistTaps="always"
+              textInputProps={{ placeholderTextColor: '#555' }}
+            />
+          </View>
+
+          <TextInput
+            style={styles.input}
+            placeholder="title"
+            placeholderTextColor="#555"
+            value={form.title}
+            onChangeText={(v) => setField('title', v)}
+          />
+
+          {/* Party image picker */}
+          <TouchableOpacity style={styles.imagePicker} onPress={pickImage} activeOpacity={0.8}>
+            {partyImage ? (
+              <Image source={{ uri: partyImage }} style={styles.partyImage} resizeMode="cover" />
+            ) : (
+              <View style={styles.imagePickerPlaceholder}>
+                <Text style={styles.imagePickerIcon}>+</Text>
+                <Text style={styles.imagePickerText}>add party photo</Text>
+              </View>
+            )}
+          </TouchableOpacity>
+
+          {/* Embedded location map */}
+          <View
+            style={styles.mapContainer}
+            onTouchStart={() => setMapScrollLocked(true)}
+            onTouchEnd={() => setMapScrollLocked(false)}
+            onTouchCancel={() => setMapScrollLocked(false)}
+          >
+            <MapView
+              ref={mapRef}
+              style={StyleSheet.absoluteFill}
+              customMapStyle={darkMapStyle}
+              userInterfaceStyle="dark"
+              initialRegion={initialRegion}
+              onRegionChangeComplete={handleRegionChangeComplete}
+              showsUserLocation
+              showsMyLocationButton={false}
+              scrollEnabled
+              zoomEnabled
+            />
+            <View style={styles.crosshairOuter} pointerEvents="none">
+              <View style={styles.crosshairH} />
+              <View style={styles.crosshairV} />
+              <View style={styles.crosshairDot} />
+            </View>
+          </View>
+
+          {/* Start time */}
+          <TouchableOpacity style={styles.input} onPress={openDatePicker} activeOpacity={0.7}>
+            <Text style={form.startTime ? styles.inputText : styles.inputPlaceholder}>
+              {form.startTime ? formatDate(form.startTime) : 'start time'}
+            </Text>
+          </TouchableOpacity>
+          {pickerMode !== null && (
+            <DateTimePicker
+              value={pickerDate}
+              mode={pickerMode}
+              display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+              minimumDate={new Date()}
+              onChange={handleDateChange}
+              themeVariant="dark"
+            />
+          )}
+
+          <TextInput
+            style={styles.input}
+            placeholder="capacity (optional)"
+            placeholderTextColor="#555"
+            keyboardType="number-pad"
+            value={form.capacity}
+            onChangeText={(v) => setField('capacity', v)}
+          />
+
+          <TextInput
+            style={styles.input}
+            placeholder={hashtags.length >= 5 ? 'max 5 tags' : 'add tag (e.g. music)'}
+            placeholderTextColor="#555"
+            autoCapitalize="none"
+            autoCorrect={false}
+            returnKeyType="done"
+            value={tagInput}
+            onChangeText={setTagInput}
+            onSubmitEditing={addTag}
+            editable={hashtags.length < 5}
+          />
+          {hashtags.length > 0 && (
+            <View style={styles.chipsRow}>
+              {hashtags.map((tag) => (
+                <View key={tag} style={styles.chip}>
+                  <Text style={styles.chipText}>#{tag}</Text>
+                  <TouchableOpacity onPress={() => removeTag(tag)} hitSlop={8}>
+                    <Text style={styles.chipRemove}>×</Text>
+                  </TouchableOpacity>
+                </View>
+              ))}
             </View>
           )}
-        </TouchableOpacity>
 
-        {/* Embedded location map */}
-        <View
-          style={styles.mapContainer}
-          onTouchStart={() => setMapScrollLocked(true)}
-          onTouchEnd={() => setMapScrollLocked(false)}
-          onTouchCancel={() => setMapScrollLocked(false)}
-        >
-          <MapView
-            ref={mapRef}
-            style={StyleSheet.absoluteFill}
-            customMapStyle={darkMapStyle}
-            initialRegion={initialRegion}
-            onRegionChangeComplete={handleRegionChangeComplete}
-            showsUserLocation
-            showsMyLocationButton={false}
-            scrollEnabled
-            zoomEnabled
-          />
-          {/* Crosshair overlay */}
-          <View style={styles.crosshairOuter} pointerEvents="none">
-            <View style={styles.crosshairH} />
-            <View style={styles.crosshairV} />
-            <View style={styles.crosshairDot} />
-          </View>
-        </View>
-
-        {/* Start time picker — single tap opens the native date/time picker */}
-        <TouchableOpacity
-          style={styles.input}
-          onPress={openDatePicker}
-          activeOpacity={0.7}
-        >
-          <Text style={form.startTime ? styles.inputText : styles.inputPlaceholder}>
-            {form.startTime ? formatDate(form.startTime) : 'start time'}
-          </Text>
-        </TouchableOpacity>
-        {pickerMode !== null && (
-          <DateTimePicker
-            value={pickerDate}
-            mode={pickerMode}
-            display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-            minimumDate={new Date()}
-            onChange={handleDateChange}
-            themeVariant="dark"
-          />
-        )}
-
-        <TextInput
-          style={styles.input} placeholder="capacity (optional)" placeholderTextColor="#555"
-          keyboardType="number-pad"
-          value={form.capacity} onChangeText={(v) => setField('capacity', v)}
-        />
-
-        {/* Tags input */}
-        <TextInput
-          style={styles.input}
-          placeholder={hashtags.length >= 5 ? 'max 5 tags' : 'add tag (e.g. music)'}
-          placeholderTextColor="#555"
-          autoCapitalize="none"
-          autoCorrect={false}
-          returnKeyType="done"
-          value={tagInput}
-          onChangeText={setTagInput}
-          onSubmitEditing={addTag}
-          editable={hashtags.length < 5}
-        />
-        {hashtags.length > 0 && (
-          <View style={styles.chipsRow}>
-            {hashtags.map((tag) => (
-              <View key={tag} style={styles.chip}>
-                <Text style={styles.chipText}>#{tag}</Text>
-                <TouchableOpacity onPress={() => removeTag(tag)} hitSlop={8}>
-                  <Text style={styles.chipRemove}>×</Text>
-                </TouchableOpacity>
-              </View>
-            ))}
-          </View>
-        )}
-
-        <TouchableOpacity
-          style={[styles.createBtn, posted && styles.createBtnPosted]}
-          onPress={handleSubmit}
-          disabled={creating || posted}
-        >
-          {creating
-            ? <ActivityIndicator color="#fff" />
-            : <Text style={styles.createBtnText}>{posted ? 'event posted!' : 'Post event'}</Text>
-          }
-        </TouchableOpacity>
-      </ScrollView>
+          <TouchableOpacity
+            style={[styles.createBtn, posted && styles.createBtnPosted]}
+            onPress={handleSubmit}
+            disabled={creating || posted}
+          >
+            {creating
+              ? <ActivityIndicator color="#fff" />
+              : <Text style={styles.createBtnText}>{posted ? 'event posted!' : 'Post event'}</Text>
+            }
+          </TouchableOpacity>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   safeContent: { flex: 1 },
-  titleRow: {
-    paddingHorizontal: 24,
-    paddingTop: 16,
-    paddingBottom: GAP,
-  },
-  screenTitle: { color: '#fff', fontSize: 28, fontWeight: '800' },
-  addressRow: {
-    paddingHorizontal: 24,
-    paddingBottom: GAP,
+  scrollContent: { paddingHorizontal: 24, paddingTop: 16, paddingBottom: 40 },
+  screenTitle: { color: '#fff', fontSize: 28, fontWeight: '800', marginBottom: GAP },
+  autocompleteContainer: {
     zIndex: 100,
     elevation: 100,
+    marginBottom: GAP,
   },
-  scrollContent: { paddingHorizontal: 24, paddingBottom: 40 },
 
   input: {
     backgroundColor: '#1a1a1a', borderRadius: 10,

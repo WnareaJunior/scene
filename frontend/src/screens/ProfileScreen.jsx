@@ -8,6 +8,7 @@ import {
   StatusBar,
   Alert,
   ActivityIndicator,
+  Modal,
 } from 'react-native';
 import { FlatList } from 'react-native-gesture-handler';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -36,7 +37,7 @@ function getEventState(event) {
 // ============================================================================
 // Subcomponents
 // ============================================================================
-const ProfileHeader = ({ profileData, onAvatarPress }) => (
+const ProfileHeader = ({ profileData, onAvatarPress, onFollowingPress, onFollowersPress }) => (
   <View style={styles.header}>
     <TouchableOpacity onPress={onAvatarPress} activeOpacity={0.8} style={styles.avatarWrap}>
       {profileData?.profile_picture ? (
@@ -64,12 +65,16 @@ const ProfileHeader = ({ profileData, onAvatarPress }) => (
         <Text style={styles.bio}>{profileData?.email}</Text>
       )}
       <View style={styles.statsRow}>
-        <Text style={styles.statText}>
-          <Text style={styles.statNumber}>{formatCount(profileData?.following_count)}</Text> Following
-        </Text>
-        <Text style={styles.statText}>
-          <Text style={styles.statNumber}>{formatCount(profileData?.followers_count)}</Text> Followers
-        </Text>
+        <TouchableOpacity onPress={onFollowingPress} activeOpacity={0.7}>
+          <Text style={styles.statText}>
+            <Text style={styles.statNumber}>{formatCount(profileData?.following_count)}</Text> Following
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={onFollowersPress} activeOpacity={0.7}>
+          <Text style={styles.statText}>
+            <Text style={styles.statNumber}>{formatCount(profileData?.followers_count)}</Text> Followers
+          </Text>
+        </TouchableOpacity>
       </View>
     </View>
   </View>
@@ -150,6 +155,9 @@ export default function ProfileScreen({ user, onSignOut, refreshKey = 0 }) {
   const [feed, setFeed] = useState([]);
   const [feedLoading, setFeedLoading] = useState(true);
   const [feedError, setFeedError] = useState(null);
+  const [listSheet, setListSheet] = useState(null); // null | 'followers' | 'following'
+  const [listData, setListData] = useState([]);
+  const [listLoading, setListLoading] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -183,6 +191,25 @@ export default function ProfileScreen({ user, onSignOut, refreshKey = 0 }) {
 
     return () => { cancelled = true; };
   }, [refreshKey]);
+
+  const openList = useCallback(async (type) => {
+    if (!profileData?.id) return;
+    setListSheet(type);
+    setListData([]);
+    setListLoading(true);
+    try {
+      const data = type === 'followers'
+        ? await users.followers(profileData.id)
+        : await users.following(profileData.id);
+      setListData(Array.isArray(data) ? data : []);
+    } catch {
+      setListData([]);
+    } finally {
+      setListLoading(false);
+    }
+  }, [profileData?.id]);
+
+  const closeList = useCallback(() => setListSheet(null), []);
 
   const handlePickAvatar = useCallback(async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -228,13 +255,18 @@ if (updated?.id) setProfileData((prev) => ({ ...prev, profile_picture: updated.p
   // so they scroll together with the feed inside the single FlatList.
   const ListHeader = useCallback(() => (
     <>
-      <ProfileHeader profileData={profileData} onAvatarPress={handlePickAvatar} />
+      <ProfileHeader
+        profileData={profileData}
+        onAvatarPress={handlePickAvatar}
+        onFollowingPress={() => openList('following')}
+        onFollowersPress={() => openList('followers')}
+      />
       <TouchableOpacity style={styles.signOutBtn} onPress={handleSignOut}>
         <Text style={styles.signOutText}>Sign out</Text>
       </TouchableOpacity>
       <View style={styles.divider} />
     </>
-  ), [profileData, handlePickAvatar, handleSignOut]);
+  ), [profileData, handlePickAvatar, handleSignOut, openList]);
 
   function FeedEmpty() {
     if (feedLoading) {
@@ -259,7 +291,71 @@ if (updated?.id) setProfileData((prev) => ({ ...prev, profile_picture: updated.p
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       />
+      <FollowListSheet
+        visible={listSheet !== null}
+        type={listSheet}
+        data={listData}
+        loading={listLoading}
+        onClose={closeList}
+      />
     </SafeAreaView>
+  );
+}
+
+// ============================================================================
+// Follow list bottom sheet
+// ============================================================================
+function FollowListSheet({ visible, type, data, loading, onClose }) {
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="slide"
+      onRequestClose={onClose}
+    >
+      <TouchableOpacity style={sheetStyles.backdrop} activeOpacity={1} onPress={onClose} />
+      <View style={sheetStyles.sheet}>
+        <View style={sheetStyles.handle} />
+        <View style={sheetStyles.header}>
+          <Text style={sheetStyles.title}>
+            {type === 'followers' ? 'Followers' : 'Following'}
+          </Text>
+          <TouchableOpacity onPress={onClose} hitSlop={12}>
+            <Text style={sheetStyles.closeBtn}>✕</Text>
+          </TouchableOpacity>
+        </View>
+        {loading ? (
+          <ActivityIndicator color="#a855f7" style={{ marginTop: 32 }} />
+        ) : (
+          <FlatList
+            data={data}
+            keyExtractor={(item) => item.id.toString()}
+            renderItem={({ item }) => (
+              <View style={sheetStyles.userRow}>
+                {item.profile_picture ? (
+                  <Image source={{ uri: item.profile_picture }} style={sheetStyles.avatar} />
+                ) : (
+                  <View style={[sheetStyles.avatar, sheetStyles.avatarPlaceholder]}>
+                    <Text style={sheetStyles.avatarInitial}>
+                      {item.username?.[0]?.toUpperCase() ?? '?'}
+                    </Text>
+                  </View>
+                )}
+                <View>
+                  <Text style={sheetStyles.username}>@{item.username}</Text>
+                  <Text style={sheetStyles.meta}>{item.followers_count ?? 0} followers</Text>
+                </View>
+              </View>
+            )}
+            ListEmptyComponent={
+              <Text style={sheetStyles.empty}>No users yet</Text>
+            }
+            contentContainerStyle={{ paddingBottom: 40 }}
+            showsVerticalScrollIndicator={false}
+          />
+        )}
+      </View>
+    </Modal>
   );
 }
 
@@ -464,4 +560,55 @@ const styles = StyleSheet.create({
     paddingVertical: 3,
   },
   statePillText: { fontSize: 12, fontWeight: '600' },
+});
+
+const sheetStyles = StyleSheet.create({
+  backdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+  },
+  sheet: {
+    backgroundColor: '#111',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: '75%',
+    paddingHorizontal: 16,
+    paddingBottom: 0,
+  },
+  handle: {
+    width: 40, height: 5, borderRadius: 3,
+    backgroundColor: '#444',
+    alignSelf: 'center',
+    marginVertical: 12,
+  },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  title: { color: '#fff', fontSize: 17, fontWeight: '700' },
+  closeBtn: { color: '#666', fontSize: 18 },
+  userRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    gap: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#1c1c1e',
+  },
+  avatar: {
+    width: 40, height: 40, borderRadius: 20, backgroundColor: '#333',
+  },
+  avatarPlaceholder: {
+    backgroundColor: '#2a1a3e',
+    borderWidth: 1,
+    borderColor: '#a855f7',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarInitial: { color: '#a855f7', fontSize: 16, fontWeight: '700' },
+  username: { color: '#fff', fontSize: 15, fontWeight: '600' },
+  meta: { color: '#666', fontSize: 12, marginTop: 2 },
+  empty: { color: '#444', textAlign: 'center', marginTop: 32 },
 });
