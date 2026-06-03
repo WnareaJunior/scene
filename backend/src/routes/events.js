@@ -116,7 +116,8 @@ router.get('/feed', requireAuth, async (req, res, next) => {
               e.host_id, e.image_url,
               COUNT(r.id) FILTER (WHERE r.status = 'going') AS going_count,
               COUNT(r.id) FILTER (WHERE r.status = 'interested') AS interested_count,
-              u.username AS host_username, u.profile_picture AS host_picture
+              u.username AS host_username, u.profile_picture AS host_picture,
+              (SELECT status FROM rsvps WHERE event_id = e.id AND user_id = $1) AS user_rsvp
        FROM events e
        JOIN users u ON u.id = e.host_id
        LEFT JOIN rsvps r ON r.event_id = e.id
@@ -270,7 +271,8 @@ router.get('/', requireAuth, async (req, res, next) => {
               e.start_time, e.end_time, e.capacity, e.hashtags, e.show_attendees, e.host_id, e.image_url,
               COUNT(r.id) FILTER (WHERE r.status = 'going') AS going_count,
               COUNT(r.id) FILTER (WHERE r.status = 'interested') AS interested_count,
-              u.username AS host_username, u.profile_picture AS host_picture
+              u.username AS host_username, u.profile_picture AS host_picture,
+              (SELECT status FROM rsvps WHERE event_id = e.id AND user_id = $1) AS user_rsvp
        FROM events e
        JOIN users u ON u.id = e.host_id
        LEFT JOIN rsvps r ON r.event_id = e.id
@@ -295,13 +297,14 @@ router.get('/:eventId', requireAuth, async (req, res, next) => {
               e.host_id, e.image_url,
               COUNT(r.id) FILTER (WHERE r.status = 'going') AS going_count,
               COUNT(r.id) FILTER (WHERE r.status = 'interested') AS interested_count,
-              u.username AS host_username, u.profile_picture AS host_picture
+              u.username AS host_username, u.profile_picture AS host_picture,
+              (SELECT status FROM rsvps WHERE event_id = e.id AND user_id = $2) AS user_rsvp
        FROM events e
        JOIN users u ON u.id = e.host_id
        LEFT JOIN rsvps r ON r.event_id = e.id
        WHERE e.id = $1
        GROUP BY e.id, u.username, u.profile_picture`,
-      [req.params.eventId]
+      [req.params.eventId, req.user.sub]
     );
     if (!rows.length) return res.status(404).json({ error: 'Event not found' });
 
