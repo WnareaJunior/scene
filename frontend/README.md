@@ -1,4 +1,4 @@
-# OpenCrib — Frontend
+# Scene — Frontend
 
 React Native (Expo) app. Dark-mode, map-first event discovery.
 
@@ -11,7 +11,7 @@ React Native (Expo) app. Dark-mode, map-first event discovery.
 ## Setup
 
 ```bash
-cd frontend/scene
+cd frontend
 npm install
 ```
 
@@ -40,12 +40,16 @@ npm run android    # Android Emulator
 ## App structure
 
 ```
-frontend/scene/
-├── App.js              Auth gate — bootstraps session, renders AuthScreen or Scene
-├── AuthScreen.jsx      Login / register screen
-├── Scene.jsx           Main app: map, bottom sheet, event creation, profile
+frontend/
+├── App.js                  Auth gate — bootstraps session, renders AuthScreen or Scene
 ├── src/
-│   └── api.js          Typed API client (all backend calls go through here)
+│   ├── AuthScreen.jsx      Login / register screen
+│   ├── Scene.jsx           Main app: map, bottom sheet, event creation, profile
+│   ├── api.js              Typed API client (all backend calls go through here)
+│   ├── screens/            MapScreen, CreateScreen, ProfileScreen
+│   ├── components/         SearchSheet, EventCard, EventDetailSheet, UserProfileSheet, …
+│   ├── constants/          Shared style/config constants (e.g. dark map style)
+│   └── utils/              Shared helpers (e.g. geo/haversine)
 └── package.json
 ```
 
@@ -63,15 +67,15 @@ The app uses a swipe-based navigation model — no navigator library.
 
 ### Map screen
 
-- Renders live event pins from `GET /map/events` — updates on every pan/zoom via `onRegionChangeComplete`.
-- Tap a pin to see event detail and RSVP.
+- Renders live event pins from `GET /map/events` — updates on every pan/zoom via `onRegionChangeComplete` (debounced, with a movement guard).
+- Tap a pin to open the event detail sheet (fetches the full event by id) and RSVP. From the detail sheet, tapping the host opens their profile.
 
 ### Bottom sheet
 
-- Draggable sheet with three snap positions (peek, half, full).
+- Draggable sheet with snap positions (peek, half, full).
 - Fetches events from `GET /events` using the current map viewport bbox.
-- Category pills filter by hashtag.
-- Each event card has Going and Interested RSVP buttons.
+- Search nearby, or `@username` to find people.
+- Each event card has a single RSVP ("Going") button; tapping a card opens the detail sheet.
 
 ### Create Event
 
@@ -94,7 +98,7 @@ All network calls go through a single `request()` function that:
 2. On 401, automatically refreshes the access token via `POST /auth/refresh`.
 3. On refresh failure, clears tokens and throws `'Session expired'` — `App.js` catches this and returns to the auth screen.
 
-Tokens are stored in `@react-native-async-storage/async-storage`.
+Tokens are stored encrypted on-device via `expo-secure-store`.
 
 ---
 
@@ -107,4 +111,5 @@ Tokens are stored in `@react-native-async-storage/async-storage`.
 | `react-native-gesture-handler` | Pan gestures for swipe nav + bottom sheet |
 | `react-native-reanimated` | Spring animations |
 | `react-native-safe-area-context` | Notch/inset handling |
-| `@react-native-async-storage/async-storage` | Token persistence |
+| `expo-secure-store` | Encrypted on-device token storage |
+| `expo-location` | User location for map centering |

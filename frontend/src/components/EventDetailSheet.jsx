@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Modal, View, Text, Image, TouchableOpacity,
-  ScrollView, StyleSheet, Platform,
+  ScrollView, StyleSheet, Platform, ActivityIndicator,
 } from 'react-native';
+import { events as eventsApi } from '../api';
 
 const STATE_COLORS = { live: '#22c55e', upcoming: '#a855f7', past: '#555' };
 
@@ -15,8 +16,39 @@ function getState(event) {
   return 'past';
 }
 
-export default function EventDetailSheet({ event, onClose, onRsvp, onHostPress }) {
-  if (!event) return null;
+// A "thin" event is a list/pin item missing the host fields the sheet renders.
+// Discover rows include host_picture (possibly null); feed rows and map pins omit
+// it entirely (undefined) and have no host_id. Detect that so we can refetch.
+function isThin(event) {
+  return event != null && (event.host_id == null || event.host_picture === undefined);
+}
+
+export default function EventDetailSheet({ event: eventProp, onClose, onRsvp, onHostPress }) {
+  const [full, setFull] = useState(null);
+  const [loading, setLoading] = useState(false);
+
+  // Self-heal: when opened with a thin item, refetch the full event by id so the
+  // host row, description, and counts render instead of "@undefined".
+  useEffect(() => {
+    let cancelled = false;
+    if (eventProp && isThin(eventProp)) {
+      setFull(null);
+      setLoading(true);
+      eventsApi.get(eventProp.id)
+        .then((data) => { if (!cancelled) setFull(data); })
+        .catch(() => { /* fall back to the thin item below */ })
+        .finally(() => { if (!cancelled) setLoading(false); });
+    } else {
+      setFull(null);
+      setLoading(false);
+    }
+    return () => { cancelled = true; };
+  }, [eventProp?.id]);
+
+  if (!eventProp) return null;
+
+  const event = full || eventProp;
+  const showLoading = loading && !full;
 
   const goingCount = Number(event.going_count ?? 0);
   const isFull = event.capacity != null && goingCount >= event.capacity;
@@ -33,7 +65,7 @@ export default function EventDetailSheet({ event, onClose, onRsvp, onHostPress }
 
   return (
     <Modal
-      visible={event !== null}
+      visible
       transparent
       animationType="slide"
       onRequestClose={onClose}
@@ -48,102 +80,111 @@ export default function EventDetailSheet({ event, onClose, onRsvp, onHostPress }
           <Text style={styles.closeBtnText}>✕</Text>
         </TouchableOpacity>
 
-        {/* Scrollable content */}
-        <ScrollView
-          style={styles.scroll}
-          contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}
-          bounces={false}
-        >
-          {/* Hero image */}
-          {event.image_url ? (
-            <Image source={{ uri: event.image_url }} style={styles.hero} />
-          ) : (
-            <View style={styles.heroPlaceholder}>
-              <Text style={styles.heroPlaceholderText}>{event.title?.[0] ?? '?'}</Text>
-            </View>
-          )}
+        {showLoading ? (
+          <View style={styles.loadingBox}>
+            <ActivityIndicator color="#a855f7" />
+          </View>
+        ) : (
+          <>
+            {/* Scrollable content */}
+            <ScrollView
+              style={styles.scroll}
+              contentContainerStyle={styles.scrollContent}
+              showsVerticalScrollIndicator={false}
+              bounces={false}
+            >
+              {/* Hero image */}
+              {event.image_url ? (
+                <Image source={{ uri: event.image_url }} style={styles.hero} />
+              ) : (
+                <View style={styles.heroPlaceholder}>
+                  <Text style={styles.heroPlaceholderText}>{event.title?.[0] ?? '?'}</Text>
+                </View>
+              )}
 
-          {/* Host row — tappable */}
-          <TouchableOpacity
-            style={styles.hostRow}
-            onPress={() => onHostPress(event.host_id)}
-            activeOpacity={0.7}
-          >
-            {event.host_picture ? (
-              <Image source={{ uri: event.host_picture }} style={styles.hostAvatar} />
-            ) : (
-              <View style={[styles.hostAvatar, styles.hostAvatarPlaceholder]}>
-                <Text style={styles.hostAvatarInitial}>
-                  {event.host_username?.[0]?.toUpperCase() ?? '?'}
+              {/* Host row — tappable (guarded against a missing host id) */}
+              <TouchableOpacity
+                style={styles.hostRow}
+                onPress={() => event.host_id != null && onHostPress(event.host_id)}
+                disabled={event.host_id == null}
+                activeOpacity={0.7}
+              >
+                {event.host_picture ? (
+                  <Image source={{ uri: event.host_picture }} style={styles.hostAvatar} />
+                ) : (
+                  <View style={[styles.hostAvatar, styles.hostAvatarPlaceholder]}>
+                    <Text style={styles.hostAvatarInitial}>
+                      {event.host_username?.[0]?.toUpperCase() ?? '?'}
+                    </Text>
+                  </View>
+                )}
+                <View>
+                  <Text style={styles.hostLabel}>hosted by</Text>
+                  <Text style={styles.hostName}>@{event.host_username ?? '…'}</Text>
+                </View>
+              </TouchableOpacity>
+
+              {/* Title */}
+              <Text style={styles.title}>{event.title}</Text>
+
+              {/* State pill */}
+              <View style={[styles.statePill, { borderColor: STATE_COLORS[state] }]}>
+                <Text style={[styles.statePillText, { color: STATE_COLORS[state] }]}>
+                  {state.charAt(0).toUpperCase() + state.slice(1)}
                 </Text>
               </View>
-            )}
-            <View>
-              <Text style={styles.hostLabel}>hosted by</Text>
-              <Text style={styles.hostName}>@{event.host_username}</Text>
-            </View>
-          </TouchableOpacity>
 
-          {/* Title */}
-          <Text style={styles.title}>{event.title}</Text>
+              {/* Date + address */}
+              <Text style={styles.meta}>{date}</Text>
+              {event.address ? <Text style={styles.meta}>{event.address}</Text> : null}
 
-          {/* State pill */}
-          <View style={[styles.statePill, { borderColor: STATE_COLORS[state] }]}>
-            <Text style={[styles.statePillText, { color: STATE_COLORS[state] }]}>
-              {state.charAt(0).toUpperCase() + state.slice(1)}
-            </Text>
-          </View>
+              {/* Description */}
+              {event.description ? (
+                <Text style={styles.description}>{event.description}</Text>
+              ) : null}
 
-          {/* Date + address */}
-          <Text style={styles.meta}>{date}</Text>
-          {event.address ? <Text style={styles.meta}>{event.address}</Text> : null}
-
-          {/* Description */}
-          {event.description ? (
-            <Text style={styles.description}>{event.description}</Text>
-          ) : null}
-
-          {/* Hashtags */}
-          {event.hashtags?.length > 0 && (
-            <View style={styles.tagsRow}>
-              {event.hashtags.map((tag) => (
-                <View key={tag} style={styles.tag}>
-                  <Text style={styles.tagText}>#{tag}</Text>
+              {/* Hashtags */}
+              {event.hashtags?.length > 0 && (
+                <View style={styles.tagsRow}>
+                  {event.hashtags.map((tag) => (
+                    <View key={tag} style={styles.tag}>
+                      <Text style={styles.tagText}>#{tag}</Text>
+                    </View>
+                  ))}
                 </View>
-              ))}
+              )}
+
+              {/* Capacity */}
+              <View style={styles.capacityRow}>
+                <Text style={styles.goingText}>{goingCount} going</Text>
+                {isFull
+                  ? <Text style={styles.full}>Full</Text>
+                  : spotsLeft != null && spotsLeft <= 10
+                    ? <Text style={styles.low}>{spotsLeft} spot{spotsLeft !== 1 ? 's' : ''} left</Text>
+                    : null
+                }
+              </View>
+            </ScrollView>
+
+            {/* Sticky RSVP button */}
+            <View style={styles.footer}>
+              <TouchableOpacity
+                style={[
+                  styles.rsvpBtn,
+                  hasRsvp && styles.rsvpBtnActive,
+                  isFull && !hasRsvp && styles.rsvpBtnDisabled,
+                ]}
+                onPress={() => (!isFull || hasRsvp) && onRsvp(event.id, 'going')}
+                disabled={isFull && !hasRsvp}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.rsvpBtnText, isFull && !hasRsvp && styles.rsvpBtnTextDisabled]}>
+                  {isFull && !hasRsvp ? 'Event Full' : hasRsvp ? "RSVP'd ✓" : 'RSVP'}
+                </Text>
+              </TouchableOpacity>
             </View>
-          )}
-
-          {/* Capacity */}
-          <View style={styles.capacityRow}>
-            <Text style={styles.goingText}>{goingCount} going</Text>
-            {isFull
-              ? <Text style={styles.full}>Full</Text>
-              : spotsLeft != null && spotsLeft <= 10
-                ? <Text style={styles.low}>{spotsLeft} spot{spotsLeft !== 1 ? 's' : ''} left</Text>
-                : null
-            }
-          </View>
-        </ScrollView>
-
-        {/* Sticky RSVP button */}
-        <View style={styles.footer}>
-          <TouchableOpacity
-            style={[
-              styles.rsvpBtn,
-              hasRsvp && styles.rsvpBtnActive,
-              isFull && !hasRsvp && styles.rsvpBtnDisabled,
-            ]}
-            onPress={() => (!isFull || hasRsvp) && onRsvp(event.id, 'going')}
-            disabled={isFull && !hasRsvp}
-            activeOpacity={0.8}
-          >
-            <Text style={[styles.rsvpBtnText, isFull && !hasRsvp && styles.rsvpBtnTextDisabled]}>
-              {isFull && !hasRsvp ? 'Event Full' : hasRsvp ? "RSVP'd ✓" : 'RSVP'}
-            </Text>
-          </TouchableOpacity>
-        </View>
+          </>
+        )}
       </View>
     </Modal>
   );
@@ -163,6 +204,8 @@ const styles = StyleSheet.create({
   },
   closeBtn: { position: 'absolute', top: 14, right: 16 },
   closeBtnText: { color: '#555', fontSize: 18 },
+
+  loadingBox: { paddingVertical: 80, alignItems: 'center', justifyContent: 'center' },
 
   scroll: { flex: 0 },
   scrollContent: { paddingBottom: 8 },
