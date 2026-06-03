@@ -135,6 +135,7 @@ export const users = {
   unfollow: (userId) => request('DELETE', `/users/${userId}/follow`),
   followers: (userId, params = {}) => request('GET', `/users/${userId}/followers?${qs(params)}`),
   following: (userId, params = {}) => request('GET', `/users/${userId}/following?${qs(params)}`),
+  userEvents: (userId, params = {}) => request('GET', `/users/${userId}/hosted-events?${qs(params)}`),
 };
 
 // ── Events ────────────────────────────────────────────────────────────────────

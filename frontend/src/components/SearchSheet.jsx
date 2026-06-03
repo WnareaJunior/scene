@@ -12,6 +12,7 @@ import Animated, {
 import { events, users } from '../api';
 import EventCard from './EventCard';
 import { haversineKm } from '../utils/geo';
+import UserProfileSheet from './UserProfileSheet';
 
 const { height: SCREEN_H } = Dimensions.get('window');
 
@@ -39,6 +40,7 @@ export default function SearchSheet({ slideX, screenW, viewport, onNavigate }) {
   const [mode, setMode]       = useState('events'); // 'events' | 'users'
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState(null);
+  const [viewingUserId, setViewingUserId] = useState(null);
   const debounceRef           = useRef(null);
   const viewportTimerRef      = useRef(null);
   const feedGenRef            = useRef(0);
@@ -267,11 +269,15 @@ export default function SearchSheet({ slideX, screenW, viewport, onNavigate }) {
               keyboardShouldPersistTaps="handled"
               renderItem={({ item }) =>
                 mode === 'users' ? (
-                  <View style={styles.userCard}>
+                  <TouchableOpacity
+                    style={styles.userCard}
+                    onPress={() => setViewingUserId(item.id)}
+                    activeOpacity={0.7}
+                  >
                     <Text style={styles.userName}>@{item.username}</Text>
                     {item.bio ? <Text style={styles.userBio} numberOfLines={1}>{item.bio}</Text> : null}
                     <Text style={styles.userMeta}>{item.followers_count ?? 0} followers</Text>
-                  </View>
+                  </TouchableOpacity>
                 ) : (
                   <EventCard event={item} onRsvp={handleRsvp} />
                 )
@@ -281,6 +287,10 @@ export default function SearchSheet({ slideX, screenW, viewport, onNavigate }) {
         </View>
       </GestureDetector>
 
+      <UserProfileSheet
+        userId={viewingUserId}
+        onClose={() => setViewingUserId(null)}
+      />
     </Animated.View>
   );
 }

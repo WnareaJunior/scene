@@ -15,6 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 
 import { users, auth } from '../api';
+import UserProfileSheet from '../components/UserProfileSheet';
 
 // ============================================================================
 // Helpers
@@ -158,6 +159,7 @@ export default function ProfileScreen({ user, onSignOut, refreshKey = 0 }) {
   const [listSheet, setListSheet] = useState(null); // null | 'followers' | 'following'
   const [listData, setListData] = useState([]);
   const [listLoading, setListLoading] = useState(false);
+  const [viewingUserId, setViewingUserId] = useState(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -297,6 +299,11 @@ if (updated?.id) setProfileData((prev) => ({ ...prev, profile_picture: updated.p
         data={listData}
         loading={listLoading}
         onClose={closeList}
+        onUserPress={(id) => setViewingUserId(id)}
+      />
+      <UserProfileSheet
+        userId={viewingUserId}
+        onClose={() => setViewingUserId(null)}
       />
     </SafeAreaView>
   );
@@ -305,7 +312,7 @@ if (updated?.id) setProfileData((prev) => ({ ...prev, profile_picture: updated.p
 // ============================================================================
 // Follow list bottom sheet
 // ============================================================================
-function FollowListSheet({ visible, type, data, loading, onClose }) {
+function FollowListSheet({ visible, type, data, loading, onClose, onUserPress }) {
   return (
     <Modal
       visible={visible}
@@ -331,7 +338,11 @@ function FollowListSheet({ visible, type, data, loading, onClose }) {
             data={data}
             keyExtractor={(item) => item.id.toString()}
             renderItem={({ item }) => (
-              <View style={sheetStyles.userRow}>
+              <TouchableOpacity
+                style={sheetStyles.userRow}
+                onPress={() => onUserPress(item.id)}
+                activeOpacity={0.7}
+              >
                 {item.profile_picture ? (
                   <Image source={{ uri: item.profile_picture }} style={sheetStyles.avatar} />
                 ) : (
@@ -345,7 +356,7 @@ function FollowListSheet({ visible, type, data, loading, onClose }) {
                   <Text style={sheetStyles.username}>@{item.username}</Text>
                   <Text style={sheetStyles.meta}>{item.followers_count ?? 0} followers</Text>
                 </View>
-              </View>
+              </TouchableOpacity>
             )}
             ListEmptyComponent={
               <Text style={sheetStyles.empty}>No users yet</Text>
