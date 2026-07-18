@@ -14,10 +14,10 @@ dist/
 build/
 coverage/
 
-# NOTE: .env is intentionally NOT ignored — it only contains EXPO_PUBLIC_*
-# values (inlined into the public JS bundle anyway) and uploading it lets
-# builds work before EAS env vars are configured. If you ever add a truly
-# secret var to .env, add ".env" here and use `eas env:create` instead.
+# Env files never leave this machine — provide build-time values via
+# `eas env:create` / the expo.dev dashboard instead.
+.env
+.env.*
 
 # Unused icon size matrix (Expo generates all sizes from assets/icon.png)
 assets/icon-*.png
