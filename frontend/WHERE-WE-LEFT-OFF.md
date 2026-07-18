@@ -31,7 +31,9 @@ were being woken from pause for on-device testing.
   Splash/adaptive background color in config is `#000000` to match the art.
 - **Env vars**: `.env.example` and `app.config.js` agree on
   `EXPO_PUBLIC_GOOGLE_MAPS_API_KEY_IOS` / `_ANDROID`. Local `.env` has real
-  values. The successful build got keys via the uploaded `.env` (see TODO 2).
+  values. The successful build got keys via the uploaded `.env`, but
+  `.easignore` now excludes `.env` from uploads (commit 8d151db) — so
+  TODO 2 is REQUIRED before the next build or maps will be keyless.
 - **API**: `src/api.js` hardcodes `https://scene-19ss.onrender.com/api/v1`.
   Render free tier: expect 30–60 s cold starts after idle.
 - **`.easignore`** added — first upload was 176 MB (stale local native dirs);
@@ -41,8 +43,9 @@ were being woken from pause for on-device testing.
 
 1. **Finish on-device testing** (login, map tiles, Places autocomplete,
    event feed) and **merge PR #32**.
-2. **Move Maps keys into EAS env vars** so builds don't depend on the local
-   `.env` upload (run per environment: `preview`, `production`):
+2. **Move Maps keys into EAS env vars** — REQUIRED before the next build:
+   `.env` no longer uploads, so without these the next build ships without
+   Maps keys (run per environment: `preview`, `production`):
    ```
    eas env:create --scope project --name EXPO_PUBLIC_GOOGLE_MAPS_API_KEY_IOS \
      --value <ios-key> --environment production --visibility plaintext
