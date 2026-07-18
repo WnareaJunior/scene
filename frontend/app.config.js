@@ -56,7 +56,9 @@ module.exports = {
         NSPhotoLibraryAddUsageDescription:
           'Scene saves photos to your library.',
       },
-      bundleIdentifier: 'com.scene.app',
+      // NOTE: com.scene.app is taken globally on Apple's registry — bundle IDs
+      // are unique across all Apple developer accounts.
+      bundleIdentifier: 'com.wilsonnarea.scene',
       config: {
         googleMapsApiKey: iosKey,
       },
@@ -70,7 +72,7 @@ module.exports = {
       // requires Play Store approval and a compelling use-case justification that
       // Scene does not have.  Foreground-only location is sufficient.
       permissions: ['ACCESS_FINE_LOCATION', 'ACCESS_COARSE_LOCATION'],
-      package: 'com.scene.app',
+      package: 'com.wilsonnarea.scene',
       config: {
         googleMaps: {
           apiKey: androidKey,
