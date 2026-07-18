@@ -1,0 +1,29 @@
+# Files excluded from the EAS Build upload archive.
+# When .easignore exists, EAS uses it (instead of .gitignore) to decide
+# what to upload — so this must cover everything .gitignore does plus
+# local-only bulk that the build servers regenerate themselves.
+
+# Regenerated on the build server
+node_modules/
+ios/
+android/
+
+# Local dev state
+.expo/
+dist/
+build/
+coverage/
+
+# NOTE: .env is intentionally NOT ignored — it only contains EXPO_PUBLIC_*
+# values (inlined into the public JS bundle anyway) and uploading it lets
+# builds work before EAS env vars are configured. If you ever add a truly
+# secret var to .env, add ".env" here and use `eas env:create` instead.
+
+# Unused icon size matrix (Expo generates all sizes from assets/icon.png)
+assets/icon-*.png
+
+# OS / editor junk
+.DS_Store
+*.log
+.vscode/
+.idea/
