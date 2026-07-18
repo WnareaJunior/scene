@@ -42,7 +42,9 @@ module.exports = {
     splash: {
       image: './assets/splash.png',
       resizeMode: 'contain',
-      backgroundColor: '#0a0a0a',
+      // Pure black to match the padded background baked into splash.png —
+      // any other value would show a visible seam around the image.
+      backgroundColor: '#000000',
     },
     ios: {
       supportsTablet: false,
@@ -62,7 +64,7 @@ module.exports = {
     android: {
       adaptiveIcon: {
         foregroundImage: './assets/adaptive-icon.png',
-        backgroundColor: '#0a0a0a',
+        backgroundColor: '#000000',
       },
       // ACCESS_BACKGROUND_LOCATION is intentionally excluded — requesting it
       // requires Play Store approval and a compelling use-case justification that
