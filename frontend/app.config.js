@@ -3,9 +3,9 @@
 // committed to source control.  Set them in a .env file (gitignored) or in
 // your CI / EAS Secrets dashboard.
 //
-// Required env vars:
-//   GOOGLE_MAPS_API_KEY_IOS     — key restricted to the iOS bundle identifier
-//   GOOGLE_MAPS_API_KEY_ANDROID — key restricted to the Android package name
+// Required env vars (EXPO_PUBLIC_ prefix is required for Expo to inline them):
+//   EXPO_PUBLIC_GOOGLE_MAPS_API_KEY_IOS     — key restricted to the iOS bundle identifier
+//   EXPO_PUBLIC_GOOGLE_MAPS_API_KEY_ANDROID — key restricted to the Android package name
 
 const iosKey = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY_IOS;
 const androidKey = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY_ANDROID;
@@ -20,6 +20,7 @@ if (!iosKey || !androidKey) {
 
 module.exports = {
   expo: {
+    owner: "wnareajunior",
     name: 'Scene',
     slug: 'scene',
     version: '1.0.0',
@@ -82,6 +83,9 @@ module.exports = {
     extra: {
       googleMapsApiKeyIos: iosKey,
       googleMapsApiKeyAndroid: androidKey,
+      eas: {
+      projectId: "36db5545-5a17-42d4-a9ea-cb8fe9b75178",
+    },
     },
   },
 };
