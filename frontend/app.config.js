@@ -59,9 +59,10 @@ module.exports = {
       // NOTE: com.scene.app is taken globally on Apple's registry — bundle IDs
       // are unique across all Apple developer accounts.
       bundleIdentifier: 'com.wilsonnarea.scene',
-      config: {
-        googleMapsApiKey: iosKey,
-      },
+      // No ios.config.googleMapsApiKey here: it makes prebuild link the
+      // react-native-google-maps pod, which react-native-maps no longer ships
+      // (pod install fails). iOS renders Apple Maps — no provider prop is set —
+      // and the JS Places/Geocoding calls read the key from process.env.
     },
     android: {
       adaptiveIcon: {

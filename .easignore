@@ -1,0 +1,32 @@
+# Files excluded from the EAS Build upload archive.
+# EAS archives from the GIT REPO ROOT (monorepo layout) and only reads
+# .easignore from here — a frontend/.easignore is silently ignored. When this
+# file exists, EAS uses it (instead of .gitignore) to decide what to upload,
+# so it must cover everything .gitignore does plus local-only bulk that the
+# build servers regenerate themselves.
+
+# Regenerated on the build server
+node_modules/
+frontend/ios/
+frontend/android/
+
+# Backend never ships in an app build
+backend/
+
+# Local dev / tooling state
+.expo/
+dist/
+build/
+coverage/
+.claude/
+
+# Env files never leave this machine — provide build-time values via
+# `eas env:create` / the expo.dev dashboard instead.
+.env
+.env.*
+
+# OS / editor junk
+.DS_Store
+*.log
+.vscode/
+.idea/
