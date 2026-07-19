@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View, TextInput, StyleSheet, Dimensions,
-  FlatList, Text, TouchableOpacity, ActivityIndicator, Alert,
+  FlatList, Text, TouchableOpacity, ActivityIndicator, Alert, RefreshControl,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { GestureDetector, Gesture } from 'react-native-gesture-handler';
@@ -49,6 +49,7 @@ export default function SearchSheet({ slideX, screenW, viewport, onNavigate }) {
   const [results, setResults] = useState([]);
   const [mode, setMode]       = useState('events'); // 'events' | 'users'
   const [loading, setLoading] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [errorMsg, setErrorMsg] = useState(null);
   const [viewingUserId, setViewingUserId] = useState(null);
   const [selectedEvent, setSelectedEvent] = useState(null);
@@ -128,6 +129,15 @@ export default function SearchSheet({ slideX, screenW, viewport, onNavigate }) {
       if (gen === feedGenRef.current) setLoading(false);
     }
   }, []);
+
+  const handleRefresh = useCallback(async () => {
+    setIsRefreshing(true);
+    try {
+      await loadFeed();
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, [loadFeed]);
 
   // Debounced viewport effect: wait 400 ms after panning stops, then skip the
   // fetch entirely if the map center moved less than 0.5 km since the last one.
@@ -307,7 +317,7 @@ export default function SearchSheet({ slideX, screenW, viewport, onNavigate }) {
           {errorMsg && !loading && (
             <Text style={styles.errorText}>{errorMsg}</Text>
           )}
-          {loading ? (
+          {loading && !isRefreshing ? (
             <ActivityIndicator color="#a855f7" style={styles.spinner} />
           ) : errorMsg ? null : results.length === 0 ? (
             <Text style={styles.empty}>
@@ -321,6 +331,13 @@ export default function SearchSheet({ slideX, screenW, viewport, onNavigate }) {
               contentContainerStyle={styles.listContent}
               showsVerticalScrollIndicator={false}
               keyboardShouldPersistTaps="handled"
+              refreshControl={
+                <RefreshControl
+                  refreshing={isRefreshing}
+                  onRefresh={handleRefresh}
+                  tintColor="#a855f7"
+                />
+              }
               renderItem={({ item }) =>
                 mode === 'users' ? (
                   <TouchableOpacity
