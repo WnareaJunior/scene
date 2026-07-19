@@ -2,6 +2,28 @@ import * as SecureStore from 'expo-secure-store';
 
 const BASE_URL = 'https://scene-19ss.onrender.com/api/v1';
 
+// ── Fetch with retry ──────────────────────────────────────────────────────────
+// Render free tier spins the server down when idle; the first request during a
+// cold start can be dropped at the proxy (iOS: "The network connection was
+// lost"). Network-level failures mean the request never reached the app, so
+// retrying is safe even for non-idempotent calls.
+
+const NETWORK_RETRIES = 2;
+const RETRY_DELAY_MS = 2000;
+
+async function fetchWithRetry(url, options) {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await fetch(url, options);
+    } catch (err) {
+      if (attempt >= NETWORK_RETRIES) {
+        throw new Error('Could not reach the server — it may be waking up. Please try again.');
+      }
+      await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS * (attempt + 1)));
+    }
+  }
+}
+
 // ── Token storage (SecureStore — encrypted on-device) ─────────────────────────
 
 export async function saveTokens({ accessToken, refreshToken }) {
@@ -25,7 +47,7 @@ async function refreshAccessToken() {
   const refreshToken = await SecureStore.getItemAsync('refreshToken');
   if (!refreshToken) throw new Error('No refresh token');
 
-  const res = await fetch(`${BASE_URL}/auth/refresh`, {
+  const res = await fetchWithRetry(`${BASE_URL}/auth/refresh`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ refreshToken }),
@@ -48,7 +70,7 @@ async function request(method, path, body, retry = true) {
   const headers = { 'Content-Type': 'application/json' };
   if (token) headers['Authorization'] = `Bearer ${token}`;
 
-  const res = await fetch(`${BASE_URL}${path}`, {
+  const res = await fetchWithRetry(`${BASE_URL}${path}`, {
     method,
     headers,
     body: body !== undefined ? JSON.stringify(body) : undefined,
@@ -80,7 +102,7 @@ async function uploadFile(path, fieldName, imageUri, retry = true) {
   const type = match ? `image/${match[1]}` : 'image/jpeg';
   const formData = new FormData();
   formData.append(fieldName, { uri: imageUri, name: filename, type });
-  const res = await fetch(`${BASE_URL}${path}`, {
+  const res = await fetchWithRetry(`${BASE_URL}${path}`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${token}` },
     body: formData,
