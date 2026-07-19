@@ -1,4 +1,5 @@
 import * as SecureStore from 'expo-secure-store';
+import { File } from 'expo-file-system';
 
 const BASE_URL = 'https://scene-19ss.onrender.com/api/v1';
 
@@ -97,11 +98,11 @@ async function request(method, path, body, retry = true) {
 
 async function uploadFile(path, fieldName, imageUri, retry = true) {
   let token = await getStoredToken();
-  const filename = imageUri.split('/').pop();
-  const match = /\.(\w+)$/.exec(filename);
-  const type = match ? `image/${match[1]}` : 'image/jpeg';
+  // SDK 54+ global fetch is Expo's WinterCG fetch, which rejects React Native's
+  // proprietary {uri, name, type} FormData parts ("Unsupported FormDataPart
+  // implementation"). expo-file-system's File implements Blob, which it accepts.
   const formData = new FormData();
-  formData.append(fieldName, { uri: imageUri, name: filename, type });
+  formData.append(fieldName, new File(imageUri));
   const res = await fetchWithRetry(`${BASE_URL}${path}`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${token}` },

@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Modal, View, Text, Image, TouchableOpacity,
   ScrollView, StyleSheet, Platform, ActivityIndicator,
+  Animated, PanResponder,
 } from 'react-native';
 import { events as eventsApi } from '../api';
 
@@ -26,6 +27,37 @@ function isThin(event) {
 export default function EventDetailSheet({ event: eventProp, onClose, onRsvp, onHostPress }) {
   const [full, setFull] = useState(null);
   const [loading, setLoading] = useState(false);
+
+  // Swipe-down to dismiss: follow the finger when a downward drag starts while
+  // the content is scrolled to the top, then close past the threshold.
+  const translateY = useRef(new Animated.Value(0)).current;
+  const scrollOffsetRef = useRef(0);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+  const panResponder = useRef(
+    PanResponder.create({
+      // Capture phase so the drag wins over the ScrollView when it's at the top.
+      onMoveShouldSetPanResponderCapture: (_, g) =>
+        scrollOffsetRef.current <= 0 && g.dy > 8 && Math.abs(g.dy) > Math.abs(g.dx) * 1.5,
+      onPanResponderMove: (_, g) => {
+        if (g.dy > 0) translateY.setValue(g.dy);
+      },
+      onPanResponderRelease: (_, g) => {
+        if (g.dy > 120 || g.vy > 0.8) {
+          Animated.timing(translateY, { toValue: 800, duration: 180, useNativeDriver: true })
+            .start(() => {
+              translateY.setValue(0);
+              onCloseRef.current();
+            });
+        } else {
+          Animated.spring(translateY, { toValue: 0, useNativeDriver: true }).start();
+        }
+      },
+      onPanResponderTerminate: () => {
+        Animated.spring(translateY, { toValue: 0, useNativeDriver: true }).start();
+      },
+    })
+  ).current;
 
   // Self-heal: when opened with a thin item, refetch the full event by id so the
   // host row, description, and counts render instead of "@undefined".
@@ -71,7 +103,10 @@ export default function EventDetailSheet({ event: eventProp, onClose, onRsvp, on
       onRequestClose={onClose}
     >
       <TouchableOpacity style={styles.backdrop} activeOpacity={1} onPress={onClose} />
-      <View style={styles.sheet}>
+      <Animated.View
+        style={[styles.sheet, { transform: [{ translateY }] }]}
+        {...panResponder.panHandlers}
+      >
         {/* Handle */}
         <View style={styles.handle} />
 
@@ -92,6 +127,8 @@ export default function EventDetailSheet({ event: eventProp, onClose, onRsvp, on
               contentContainerStyle={styles.scrollContent}
               showsVerticalScrollIndicator={false}
               bounces={false}
+              onScroll={(e) => { scrollOffsetRef.current = e.nativeEvent.contentOffset.y; }}
+              scrollEventThrottle={16}
             >
               {/* Hero image */}
               {event.image_url ? (
@@ -185,7 +222,7 @@ export default function EventDetailSheet({ event: eventProp, onClose, onRsvp, on
             </View>
           </>
         )}
-      </View>
+      </Animated.View>
     </Modal>
   );
 }
@@ -197,13 +234,19 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     maxHeight: '90%',
+    overflow: 'hidden',
   },
   handle: {
     width: 40, height: 5, borderRadius: 3, backgroundColor: '#333',
     alignSelf: 'center', marginVertical: 12,
   },
-  closeBtn: { position: 'absolute', top: 14, right: 16 },
-  closeBtnText: { color: '#555', fontSize: 18 },
+  closeBtn: {
+    position: 'absolute', top: 12, right: 14, zIndex: 10,
+    width: 30, height: 30, borderRadius: 15,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  closeBtnText: { color: '#ccc', fontSize: 16 },
 
   loadingBox: { paddingVertical: 80, alignItems: 'center', justifyContent: 'center' },
 

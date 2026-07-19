@@ -249,19 +249,39 @@ export default function CreateScreen({ viewport, onCreated }) {
               ref={placesRef}
               placeholder="address"
               fetchDetails
-              onPress={(data, details) => {
-                const lat = details?.geometry?.location?.lat;
-                const lng = details?.geometry?.location?.lng;
-                if (lat && lng) {
-                  const coords = { latitude: lat, longitude: lng };
+              onPress={async (data, details) => {
+                setField('address', data.description);
+                let loc = details?.geometry?.location;
+                if (!loc?.lat || !loc?.lng) {
+                  // Place Details failed or came back thin — geocode the
+                  // description so the tap still lands somewhere.
+                  try {
+                    const res = await fetch(
+                      `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(data.description)}&key=${GOOGLE_MAPS_API_KEY}`,
+                    );
+                    const json = await res.json();
+                    loc = json?.results?.[0]?.geometry?.location;
+                  } catch {
+                    // fall through to the alert below
+                  }
+                }
+                if (loc?.lat && loc?.lng) {
+                  const coords = { latitude: loc.lat, longitude: loc.lng };
                   setSelectedLocation(coords);
-                  setField('address', data.description);
                   mapRef.current?.animateToRegion(
                     { ...coords, latitudeDelta: 0.005, longitudeDelta: 0.005 },
                     600,
                   );
+                } else {
+                  Alert.alert(
+                    'Location lookup failed',
+                    'Could not get coordinates for that address. Pan the map to set the location instead.',
+                  );
                 }
               }}
+              onFail={(error) => Alert.alert('Address search failed', String(error))}
+              onNotFound={(resp) => Alert.alert('Address search failed', `Google returned: ${resp?.status ?? 'no results'}`)}
+              onTimeout={() => Alert.alert('Address search failed', 'The request timed out.')}
               query={{ key: GOOGLE_MAPS_API_KEY, language: 'en' }}
               styles={{
                 textInputContainer: styles.placesInputContainer,
