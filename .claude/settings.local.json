@@ -104,7 +104,9 @@
       "Bash(ov status *)",
       "Bash(awk '{print $4, $6}')",
       "Bash(ov mkdir *)",
-      "Bash(awk '{print $4+$6}')"
+      "Bash(awk '{print $4+$6}')",
+      "Bash(./node_modules/.bin/babel src/components/SearchSheet.jsx)",
+      "mcp__viking__add_resource"
     ]
   },
   "enabledPlugins": {
