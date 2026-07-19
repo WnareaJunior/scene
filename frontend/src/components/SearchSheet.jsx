@@ -21,6 +21,15 @@ const HEADER_H = 110;
 const SPRING_V = { damping: 50, stiffness: 180, mass: 1.2 };
 const SPRING_H = { damping: 40, stiffness: 200, mass: 1 };
 
+// Feed widening: if the current map area surfaces fewer than MIN_FEED_RESULTS
+// parties, progressively scan a larger radius (up to MAX_FEED_RADIUS_MILES)
+// centered on the viewport until we reach the target or the ladder runs out.
+const MIN_FEED_RESULTS = 10;
+const MAX_FEED_RADIUS_MILES = 30;
+const MILES_TO_KM = 1.60934;
+// Radius ladder (miles); steps at or below the current viewport are skipped.
+const WIDEN_LADDER_MILES = [5, 10, 20, MAX_FEED_RADIUS_MILES];
+
 export default function SearchSheet({ slideX, screenW, viewport, onNavigate }) {
   const { top: safeTop, bottom: safeBottom } = useSafeAreaInsets();
 
@@ -61,18 +70,56 @@ export default function SearchSheet({ slideX, screenW, viewport, onNavigate }) {
     setErrorMsg(null);
     try {
       const vp = viewportRef.current;
-      const params = { limit: 20, startAfter: new Date().toISOString() };
-      if (vp) {
-        const latD = vp.latitudeDelta / 2;
-        const lngD = vp.longitudeDelta / 2;
-        params.swLat = vp.latitude - latD;
-        params.swLng = vp.longitude - lngD;
-        params.neLat = vp.latitude + latD;
-        params.neLng = vp.longitude + lngD;
+      const base = { limit: 20, startAfter: new Date().toISOString() };
+
+      // No viewport yet (location unresolved) — plain chronological feed.
+      if (!vp) {
+        const data = await events.discover(base);
+        if (gen !== feedGenRef.current) return; // stale — a newer fetch is in flight
+        setResults(Array.isArray(data) ? data : []);
+        return;
       }
-      const data = await events.discover(params);
+
+      const latD = vp.latitudeDelta / 2;
+      const lngD = vp.longitudeDelta / 2;
+      const neLat = vp.latitude + latD;
+      const neLng = vp.longitude + lngD;
+
+      // 1) Rank parties within the current map area. Passing the center (lat/lng)
+      //    alongside the bounding box makes the backend sort by relevance
+      //    (proximity + start time) instead of chronologically.
+      const data = await events.discover({
+        ...base,
+        swLat: vp.latitude - latD, swLng: vp.longitude - lngD,
+        neLat, neLng,
+        lat: vp.latitude, lng: vp.longitude,
+      });
       if (gen !== feedGenRef.current) return; // stale — a newer fetch is in flight
-      setResults(Array.isArray(data) ? data : []);
+      let list = Array.isArray(data) ? data : [];
+
+      // 2) Sparse area — progressively widen the search radius (up to
+      //    MAX_FEED_RADIUS_MILES) until at least MIN_FEED_RESULTS parties show
+      //    up or the ladder is exhausted. Each step is a superset, ranked by
+      //    relevance, so nearby parties still surface first.
+      if (list.length < MIN_FEED_RESULTS) {
+        const viewportRadiusMiles =
+          haversineKm(vp.latitude, vp.longitude, neLat, neLng) / MILES_TO_KM;
+
+        for (const miles of WIDEN_LADDER_MILES) {
+          if (miles <= viewportRadiusMiles) continue; // already covered by the box
+          const wide = await events.discover({
+            ...base,
+            lat: vp.latitude, lng: vp.longitude,
+            radius: Math.round(miles * MILES_TO_KM * 1000), // meters
+          });
+          if (gen !== feedGenRef.current) return;
+          const wideList = Array.isArray(wide) ? wide : [];
+          if (wideList.length > list.length) list = wideList;
+          if (list.length >= MIN_FEED_RESULTS) break;
+        }
+      }
+
+      setResults(list);
     } catch {
       if (gen !== feedGenRef.current) return;
       setResults([]);

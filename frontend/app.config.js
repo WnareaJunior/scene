@@ -3,9 +3,9 @@
 // committed to source control.  Set them in a .env file (gitignored) or in
 // your CI / EAS Secrets dashboard.
 //
-// Required env vars:
-//   GOOGLE_MAPS_API_KEY_IOS     — key restricted to the iOS bundle identifier
-//   GOOGLE_MAPS_API_KEY_ANDROID — key restricted to the Android package name
+// Required env vars (EXPO_PUBLIC_ prefix is required for Expo to inline them):
+//   EXPO_PUBLIC_GOOGLE_MAPS_API_KEY_IOS     — key restricted to the iOS bundle identifier
+//   EXPO_PUBLIC_GOOGLE_MAPS_API_KEY_ANDROID — key restricted to the Android package name
 
 const iosKey = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY_IOS;
 const androidKey = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY_ANDROID;
@@ -20,6 +20,7 @@ if (!iosKey || !androidKey) {
 
 module.exports = {
   expo: {
+    owner: "wnareajunior",
     name: 'Scene',
     slug: 'scene',
     version: '1.0.0',
@@ -41,7 +42,9 @@ module.exports = {
     splash: {
       image: './assets/splash.png',
       resizeMode: 'contain',
-      backgroundColor: '#0a0a0a',
+      // Pure black to match the padded background baked into splash.png —
+      // any other value would show a visible seam around the image.
+      backgroundColor: '#000000',
     },
     ios: {
       supportsTablet: false,
@@ -53,7 +56,9 @@ module.exports = {
         NSPhotoLibraryAddUsageDescription:
           'Scene saves photos to your library.',
       },
-      bundleIdentifier: 'com.scene.app',
+      // NOTE: com.scene.app is taken globally on Apple's registry — bundle IDs
+      // are unique across all Apple developer accounts.
+      bundleIdentifier: 'com.wilsonnarea.scene',
       config: {
         googleMapsApiKey: iosKey,
       },
@@ -61,13 +66,13 @@ module.exports = {
     android: {
       adaptiveIcon: {
         foregroundImage: './assets/adaptive-icon.png',
-        backgroundColor: '#0a0a0a',
+        backgroundColor: '#000000',
       },
       // ACCESS_BACKGROUND_LOCATION is intentionally excluded — requesting it
       // requires Play Store approval and a compelling use-case justification that
       // Scene does not have.  Foreground-only location is sufficient.
       permissions: ['ACCESS_FINE_LOCATION', 'ACCESS_COARSE_LOCATION'],
-      package: 'com.scene.app',
+      package: 'com.wilsonnarea.scene',
       config: {
         googleMaps: {
           apiKey: androidKey,
@@ -82,6 +87,9 @@ module.exports = {
     extra: {
       googleMapsApiKeyIos: iosKey,
       googleMapsApiKeyAndroid: androidKey,
+      eas: {
+      projectId: "36db5545-5a17-42d4-a9ea-cb8fe9b75178",
+    },
     },
   },
 };

@@ -10,7 +10,7 @@
     {
       "name": "Frontend (Expo)",
       "runtimeExecutable": "/bin/sh",
-      "runtimeArgs": ["-c", "cd /Users/wnarea/Github/scene/frontend/scene && /opt/homebrew/bin/node node_modules/.bin/expo start --ios"],
+      "runtimeArgs": ["-c", "cd /Users/wnarea/Github/scene/frontend && /opt/homebrew/bin/node node_modules/.bin/expo start --ios"],
       "port": 8081
     }
   ]

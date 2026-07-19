@@ -12,7 +12,7 @@
       "name": "Frontend (Expo)",
       "runtimeExecutable": "npm",
       "runtimeArgs": ["start"],
-      "cwd": "frontend/scene",
+      "cwd": "frontend",
       "port": 8081
     }
   ]

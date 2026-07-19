@@ -249,6 +249,10 @@ router.get('/', requireAuth, async (req, res, next) => {
     const limitNum = Math.min(parseInt(limit) || 20, 100);
     const offset = (pageNum - 1) * limitNum;
     params.push(limitNum, offset);
+    // Capture these indices now — the relevance sort below pushes more params,
+    // which would otherwise shift LIMIT/OFFSET onto the wrong placeholders.
+    const limitIdx = params.length - 1;
+    const offsetIdx = params.length;
 
     // relevance sort when a center point is available, otherwise chronological
     let orderBy;
@@ -279,7 +283,7 @@ router.get('/', requireAuth, async (req, res, next) => {
        WHERE ${conditions.join(' AND ')}
        GROUP BY e.id, u.username, u.profile_picture
        ORDER BY ${orderBy}
-       LIMIT $${params.length - 1} OFFSET $${params.length}`,
+       LIMIT $${limitIdx} OFFSET $${offsetIdx}`,
       params
     );
     res.json(rows);
