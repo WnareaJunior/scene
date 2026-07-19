@@ -324,7 +324,7 @@ export default function SearchSheet({ slideX, screenW, viewport, onNavigate }) {
             <Text style={styles.errorText}>{errorMsg}</Text>
           )}
           {loading && !isRefreshing ? (
-            <ActivityIndicator color="#a855f7" style={styles.spinner} />
+            <ActivityIndicator color="#ffa028" style={styles.spinner} />
           ) : errorMsg ? null : results.length === 0 ? (
             <Text style={styles.empty}>
               {query.startsWith('@') ? 'no one by that username' : 'nothing nearby yet — swipe right to post the first party'}
@@ -341,7 +341,7 @@ export default function SearchSheet({ slideX, screenW, viewport, onNavigate }) {
                 <RefreshControl
                   refreshing={isRefreshing}
                   onRefresh={handleRefresh}
-                  tintColor="#a855f7"
+                  tintColor="#ffa028"
                 />
               }
               renderItem={({ item }) =>

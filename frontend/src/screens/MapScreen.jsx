@@ -239,7 +239,7 @@ const styles = StyleSheet.create({
   markerChip: {
     backgroundColor: '#1a1a1a',
     borderWidth: 1.5,
-    borderColor: '#a855f7',
+    borderColor: '#ffa028',
     borderRadius: 14,
     paddingVertical: 5,
     paddingHorizontal: 10,
@@ -258,7 +258,7 @@ const styles = StyleSheet.create({
     borderTopWidth: 6,
     borderLeftColor: 'transparent',
     borderRightColor: 'transparent',
-    borderTopColor: '#a855f7',
+    borderTopColor: '#ffa028',
   },
   locBtn: {
     position: 'absolute',
@@ -274,7 +274,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   locBtnText: {
-    color: '#a855f7',
+    color: '#ffa028',
     fontSize: 20,
     lineHeight: 24,
   },

@@ -6,7 +6,7 @@ import {
 } from 'react-native';
 import { events as eventsApi } from '../api';
 
-const STATE_COLORS = { live: '#22c55e', upcoming: '#a855f7', past: '#555' };
+const STATE_COLORS = { live: '#22c55e', upcoming: '#ffa028', past: '#555' };
 
 function getState(event) {
   const now = Date.now();
@@ -117,7 +117,7 @@ export default function EventDetailSheet({ event: eventProp, onClose, onRsvp, on
 
         {showLoading ? (
           <View style={styles.loadingBox}>
-            <ActivityIndicator color="#a855f7" />
+            <ActivityIndicator color="#ffa028" />
           </View>
         ) : (
           <>
@@ -266,12 +266,12 @@ const styles = StyleSheet.create({
   },
   hostAvatar: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#333' },
   hostAvatarPlaceholder: {
-    backgroundColor: '#2a1a3e', borderWidth: 1, borderColor: '#a855f7',
+    backgroundColor: '#2b1d0a', borderWidth: 1, borderColor: '#ffa028',
     alignItems: 'center', justifyContent: 'center',
   },
-  hostAvatarInitial: { color: '#a855f7', fontSize: 14, fontWeight: '700' },
+  hostAvatarInitial: { color: '#ffa028', fontSize: 14, fontWeight: '700' },
   hostLabel: { color: '#555', fontSize: 11 },
-  hostName: { color: '#a855f7', fontSize: 14, fontWeight: '600' },
+  hostName: { color: '#ffa028', fontSize: 14, fontWeight: '600' },
 
   title: {
     color: '#fff', fontSize: 22, fontWeight: '800',
@@ -295,27 +295,27 @@ const styles = StyleSheet.create({
   tag: {
     backgroundColor: '#1a1a2e', borderRadius: 20,
     paddingVertical: 4, paddingHorizontal: 10,
-    borderWidth: 1, borderColor: '#a855f7',
+    borderWidth: 1, borderColor: '#ffa028',
   },
-  tagText: { color: '#a855f7', fontSize: 12, fontWeight: '600' },
+  tagText: { color: '#ffa028', fontSize: 12, fontWeight: '600' },
   capacityRow: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
     paddingHorizontal: 16, marginTop: 14, marginBottom: 4,
   },
   goingText: { color: '#555', fontSize: 13 },
   full: { color: '#ef4444', fontSize: 12, fontWeight: '600' },
-  low: { color: '#f97316', fontSize: 12, fontWeight: '600' },
+  low: { color: '#ffa028', fontSize: 12, fontWeight: '600' },
 
   footer: {
     paddingHorizontal: 16, paddingTop: 12, paddingBottom: Platform.OS === 'ios' ? 32 : 16,
     borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: '#1c1c1e',
   },
   rsvpBtn: {
-    backgroundColor: '#a855f7', borderRadius: 12,
+    backgroundColor: '#ffa028', borderRadius: 12,
     paddingVertical: 15, alignItems: 'center',
   },
-  rsvpBtnActive: { backgroundColor: '#7c3aed' },
+  rsvpBtnActive: { backgroundColor: '#e08010' },
   rsvpBtnDisabled: { backgroundColor: '#1a1a1a', borderWidth: 1, borderColor: '#2a2a2a' },
-  rsvpBtnText: { color: '#fff', fontSize: 16, fontWeight: '700' },
+  rsvpBtnText: { color: '#1a0d00', fontSize: 16, fontWeight: '700' },
   rsvpBtnTextDisabled: { color: '#444' },
 });
