@@ -1,0 +1,114 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-07-19T05:30:00Z",
+  "title": "Design System: Scene",
+  "extensions": {
+    "colorMeta": {
+      "sodium-amber": { "role": "primary", "displayName": "Sodium Amber", "canonical": "#ffa028", "tonalRamp": ["#331c02", "#5c3305", "#8a4d08", "#b8680d", "#e08010", "#ffa028", "#ffbd5e", "#ffdca3"] },
+      "asphalt": { "role": "neutral", "displayName": "Asphalt", "canonical": "#0a0a0a", "tonalRamp": ["#000000", "#0a0a0a", "#111111", "#1a1a1a", "#2a2a2a", "#555555", "#8e8e93", "#ffffff"] },
+      "live-green": { "role": "tertiary", "displayName": "Live Green", "canonical": "#22c55e", "tonalRamp": ["#052e14", "#0a5c28", "#118a3c", "#18a34e", "#22c55e", "#4ade80", "#86efac", "#dcfce7"] },
+      "error-red": { "role": "tertiary", "displayName": "Error Red", "canonical": "#ef4444", "tonalRamp": ["#450a0a", "#7f1d1d", "#b91c1c", "#dc2626", "#ef4444", "#f87171", "#fca5a5", "#fee2e2"] }
+    },
+    "typographyMeta": {
+      "title": { "displayName": "Title", "purpose": "Screen titles and event names; lowercase voice, weight 800." },
+      "body": { "displayName": "Body", "purpose": "Descriptions, addresses, form values." }
+    },
+    "shadows": [],
+    "motion": [
+      { "name": "sheet-spring", "value": "spring(damping 40-50, stiffness 180-200)", "purpose": "Sheet snaps and page slides; transforms only, never layout props." },
+      { "name": "press-fade", "value": "150ms ease-out", "purpose": "Button/row press feedback (activeOpacity 0.7-0.8)." }
+    ],
+    "breakpoints": []
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Full-width screen action (RSVP, Post event).",
+      "html": "<button class=\"ds-btn-primary\">RSVP</button>",
+      "css": ".ds-btn-primary { background: #ffa028; color: #1a0d00; border: none; border-radius: 10px; padding: 15px 16px; width: 100%; font-weight: 700; font-size: 16px; transition: background 150ms ease-out; } .ds-btn-primary:hover { background: #e08010; } .ds-btn-primary:focus-visible { outline: 2px solid #ffa028; outline-offset: 2px; }"
+    },
+    {
+      "name": "Disabled Button",
+      "kind": "button",
+      "refersTo": "button-disabled",
+      "description": "Event Full / unavailable action.",
+      "html": "<button class=\"ds-btn-disabled\" disabled>Event Full</button>",
+      "css": ".ds-btn-disabled { background: #1a1a1a; color: #666666; border: 1px solid #2a2a2a; border-radius: 10px; padding: 15px 16px; width: 100%; font-weight: 700; font-size: 16px; }"
+    },
+    {
+      "name": "Input",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Form field (title, address, capacity).",
+      "html": "<input class=\"ds-input\" placeholder=\"address\" />",
+      "css": ".ds-input { background: #1a1a1a; color: #ffffff; border: 1px solid #2a2a2a; border-radius: 10px; padding: 13px; font-size: 15px; width: 100%; } .ds-input::placeholder { color: #555555; } .ds-input:focus { border-color: #ffa028; outline: none; }"
+    },
+    {
+      "name": "Event Card",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "Feed row: title, meta, RSVP.",
+      "html": "<div class=\"ds-card\"><div class=\"ds-card-title\">rooftop thing</div><div class=\"ds-card-meta\">Sat, Jul 25 · 10:00 PM · 0.4 mi</div><button class=\"ds-card-rsvp\">RSVP</button></div>",
+      "css": ".ds-card { background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 12px; padding: 14px; } .ds-card-title { color: #ffffff; font-size: 16px; font-weight: 600; margin-bottom: 4px; } .ds-card-meta { color: #8e8e93; font-size: 13px; margin-bottom: 10px; } .ds-card-rsvp { background: #ffa028; color: #1a0d00; border: none; border-radius: 8px; padding: 6px 14px; font-size: 13px; font-weight: 600; } .ds-card-rsvp:hover { background: #e08010; }"
+    },
+    {
+      "name": "Tag Chip",
+      "kind": "chip",
+      "refersTo": "chip",
+      "description": "Hashtag / filter pill.",
+      "html": "<span class=\"ds-chip\">#music</span>",
+      "css": ".ds-chip { background: #2b1d0a; color: #ffa028; border: 1px solid rgba(255,160,40,0.4); border-radius: 20px; padding: 5px 10px; font-size: 13px; font-weight: 600; display: inline-block; }"
+    },
+    {
+      "name": "State Pill",
+      "kind": "custom",
+      "refersTo": "chip",
+      "description": "Live / Upcoming / Past border-only status pill.",
+      "html": "<span class=\"ds-pill-live\">Live</span> <span class=\"ds-pill-upcoming\">Upcoming</span>",
+      "css": ".ds-pill-live, .ds-pill-upcoming { border-radius: 6px; padding: 3px 8px; font-size: 12px; font-weight: 600; background: transparent; display: inline-block; margin-right: 8px; } .ds-pill-live { border: 1px solid #22c55e; color: #22c55e; } .ds-pill-upcoming { border: 1px solid #ffa028; color: #ffa028; }"
+    },
+    {
+      "name": "Map Pin Chip",
+      "kind": "custom",
+      "refersTo": "chip",
+      "description": "The label IS the marker — event title chip with pointer.",
+      "html": "<div class=\"ds-pin\"><div class=\"ds-pin-chip\">rooftop thing</div><div class=\"ds-pin-point\"></div></div>",
+      "css": ".ds-pin { display: inline-flex; flex-direction: column; align-items: center; } .ds-pin-chip { background: #1a1a1a; border: 1.5px solid #ffa028; border-radius: 14px; padding: 5px 12px; color: #ffffff; font-size: 13px; font-weight: 600; max-width: 140px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .ds-pin-point { width: 0; height: 0; border-left: 6px solid transparent; border-right: 6px solid transparent; border-top: 7px solid #ffa028; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Unlisted Map",
+    "overview": "Scene's interface is a city map at 2am crossed with an address that was never posted publicly. The world is near-black asphalt; the only light is Sodium Amber — the color of streetlights and open-late signs — and it appears exclusively on the things that matter right now. Components are barely there: flat dark surfaces, borderless where possible, content floating on black.",
+    "keyCharacteristics": [
+      "One accent, used like a streetlight: sparse, warm, meaningful",
+      "Tonal depth (black → asphalt → card) instead of shadows",
+      "Hairline borders (#2a2a2a) as the only edge treatment",
+      "System typography, heavy at the top (800 titles), quiet everywhere else",
+      "Gesture-first surfaces: sheets and swipes, not chrome and buttons"
+    ],
+    "rules": [
+      { "name": "The One Streetlight Rule", "body": "Sodium Amber appears on at most 10% of any screen. If two large amber elements are visible at once, one of them is wrong.", "section": "colors" },
+      { "name": "The No-Purple Rule", "body": "The legacy accent #a855f7 (and #7c3aed, #2a1a3e) is retired. Replace on sight; never introduce it in new work.", "section": "colors" },
+      { "name": "The Scarcity-Is-Amber Rule", "body": "Low-capacity warnings use Sodium Amber, not a separate orange — scarcity is the glow, not an alarm.", "section": "colors" },
+      { "name": "The No-Display-Font Rule", "body": "No custom display faces, no letterspaced-uppercase eyebrows. Weight and size carry the hierarchy alone.", "section": "typography" },
+      { "name": "The No-Shadow Rule", "body": "If a surface needs separation, change its tone or give it a hairline border. A shadow is a bug.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do keep Sodium Amber under 10% of any screen — it is the only light in the room.",
+      "Do use tonal steps (Void → Asphalt → Card) and hairline #2a2a2a borders for all separation.",
+      "Do use Amber Ink (#1a0d00) for text on amber fills; the pairing is the brand handshake.",
+      "Do keep lowercase screen titles and heavy (800) title weight — that's the flyer voice.",
+      "Do honor swipe-to-dismiss and finger-tracking on every sheet."
+    ],
+    "donts": [
+      "Don't use the legacy AI purple #a855f7 / #7c3aed / #2a1a3e anywhere — retired by The No-Purple Rule.",
+      "Don't ship Eventbrite energy: no ticket-tier cards, no checkout chrome, no beige commerce surfaces.",
+      "Don't ship Instagram energy: no like-counts as decoration, no stories rails, no engagement-bait badges.",
+      "Don't ship campus-app clip-art energy: no mascots, no confetti, no bubbly oversized radii.",
+      "Don't add box shadows, gradients, or glassmorphism — flat tonal darkness only.",
+      "Don't put white text on amber (fails contrast) or gray text (#555) below 13pt on Card surfaces."
+    ]
+  }
+}
