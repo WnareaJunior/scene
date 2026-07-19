@@ -106,7 +106,19 @@
       "Bash(ov mkdir *)",
       "Bash(awk '{print $4+$6}')",
       "Bash(./node_modules/.bin/babel src/components/SearchSheet.jsx)",
-      "mcp__viking__add_resource"
+      "mcp__viking__add_resource",
+      "WebSearch",
+      "WebFetch(domain:scenely.com)",
+      "WebFetch(domain:scenely.app)",
+      "WebFetch(domain:getscene.com)",
+      "WebFetch(domain:getscene.app)",
+      "WebFetch(domain:scene.app)",
+      "WebFetch(domain:trademarks.justia.com)",
+      "WebFetch(domain:www.trademarkia.com)",
+      "WebFetch(domain:joinscenely.com)",
+      "WebFetch(domain:www.apple.com)",
+      "WebFetch(domain:www.trademarkelite.com)",
+      "WebFetch(domain:uspto.report)"
     ]
   },
   "enabledPlugins": {
