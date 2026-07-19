@@ -31,6 +31,35 @@ function regionToBounds(region) {
   };
 }
 
+// Chip-style marker: the label IS the marker. tracksViewChanges must be turned
+// off after the chip has rendered (kept on briefly, incl. on title changes) or
+// iOS re-rasterizes every marker each frame, which tanks map performance.
+function EventMarker({ pin, onPress }) {
+  const [tracksChanges, setTracksChanges] = useState(true);
+
+  useEffect(() => {
+    setTracksChanges(true);
+    const t = setTimeout(() => setTracksChanges(false), 500);
+    return () => clearTimeout(t);
+  }, [pin.title]);
+
+  return (
+    <Marker
+      coordinate={{ latitude: pin.latitude, longitude: pin.longitude }}
+      anchor={{ x: 0.5, y: 1 }}
+      tracksViewChanges={tracksChanges}
+      onPress={onPress}
+    >
+      <View style={styles.markerWrap}>
+        <View style={styles.markerChip}>
+          <Text style={styles.markerText} numberOfLines={1}>{pin.title}</Text>
+        </View>
+        <View style={styles.markerPointer} />
+      </View>
+    </Marker>
+  );
+}
+
 // Debounce delay in ms — matches SearchSheet's viewport debounce.
 const DEBOUNCE_MS = 400;
 // Minimum map-center movement (km) required to trigger a new pin fetch.
@@ -171,13 +200,7 @@ export default function MapScreen({ onRegionChangeComplete }) {
         showsMyLocationButton={false}
       >
         {pins.map((pin) => (
-          <Marker
-            key={pin.id}
-            coordinate={{ latitude: pin.latitude, longitude: pin.longitude }}
-            title={pin.title}
-            pinColor="#a855f7"
-            onPress={() => openEvent(pin)}
-          />
+          <EventMarker key={pin.id} pin={pin} onPress={() => openEvent(pin)} />
         ))}
       </MapView>
 
@@ -210,6 +233,33 @@ export default function MapScreen({ onRegionChangeComplete }) {
 }
 
 const styles = StyleSheet.create({
+  markerWrap: {
+    alignItems: 'center',
+  },
+  markerChip: {
+    backgroundColor: '#1a1a1a',
+    borderWidth: 1.5,
+    borderColor: '#a855f7',
+    borderRadius: 14,
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+    maxWidth: 140,
+  },
+  markerText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  markerPointer: {
+    width: 0,
+    height: 0,
+    borderLeftWidth: 6,
+    borderRightWidth: 6,
+    borderTopWidth: 6,
+    borderLeftColor: 'transparent',
+    borderRightColor: 'transparent',
+    borderTopColor: '#a855f7',
+  },
   locBtn: {
     position: 'absolute',
     top: 60,

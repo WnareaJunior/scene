@@ -143,10 +143,15 @@ export default function CreateScreen({ viewport, onCreated }) {
         setPickerMode(null);
       }
     } else {
-      // iOS: datetime mode returns a full date+time value.
-      setField('startTime', selected);
-      setPickerMode(null);
+      // iOS spinner fires onChange on every wheel tick — track the value but
+      // keep the picker open; the Done button (or re-tapping the field) commits.
+      setPickerDate(selected);
     }
+  }
+
+  function confirmIosPicker() {
+    setField('startTime', pickerDate);
+    setPickerMode(null);
   }
 
   async function pickImage() {
@@ -167,6 +172,11 @@ export default function CreateScreen({ viewport, onCreated }) {
   }
 
   function openDatePicker() {
+    if (Platform.OS === 'ios' && pickerMode !== null) {
+      // Tapping the field while the spinner is open commits the current value.
+      confirmIosPicker();
+      return;
+    }
     const base = form.startTime ?? new Date();
     setPickerDate(base);
     setPickerMode(Platform.OS === 'ios' ? 'datetime' : 'date');
@@ -237,6 +247,7 @@ export default function CreateScreen({ viewport, onCreated }) {
       >
         <ScrollView
           keyboardShouldPersistTaps="always"
+          keyboardDismissMode="on-drag"
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
           scrollEnabled={!mapScrollLocked}
@@ -361,6 +372,13 @@ export default function CreateScreen({ viewport, onCreated }) {
               onChange={handleDateChange}
               themeVariant="dark"
             />
+          )}
+          {pickerMode !== null && Platform.OS === 'ios' && (
+            <View style={styles.pickerDoneRow}>
+              <TouchableOpacity style={styles.pickerDoneBtn} onPress={confirmIosPicker}>
+                <Text style={styles.pickerDoneText}>Done</Text>
+              </TouchableOpacity>
+            </View>
           )}
 
           <TextInput
@@ -492,7 +510,7 @@ const styles = StyleSheet.create({
   },
 
   mapContainer: {
-    height: 160,
+    height: 110,
     borderRadius: 12,
     overflow: 'hidden',
     marginBottom: GAP,
@@ -525,6 +543,18 @@ const styles = StyleSheet.create({
     borderRadius: 3,
     backgroundColor: '#a855f7',
   },
+
+  pickerDoneRow: {
+    alignItems: 'flex-end',
+    marginBottom: GAP,
+  },
+  pickerDoneBtn: {
+    backgroundColor: '#a855f7',
+    borderRadius: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 20,
+  },
+  pickerDoneText: { color: '#fff', fontWeight: '700', fontSize: 15 },
 
   chipsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: GAP },
   chip: {

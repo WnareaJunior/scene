@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { View, StyleSheet, Dimensions } from 'react-native';
+import { View, StyleSheet, Dimensions, Keyboard } from 'react-native';
 import { GestureDetector, Gesture } from 'react-native-gesture-handler';
 import Animated, {
   useSharedValue, useAnimatedStyle, withSpring,
@@ -42,16 +42,22 @@ export default function Scene({ user, onSignOut }) {
   );
 
   const onNavigate = useCallback((page) => {
+    Keyboard.dismiss();
     const targets = { create: 0, map: -SCREEN_W, profile: -SCREEN_W * 2 };
     if (targets[page] !== undefined) slideX.value = withSpring(targets[page], SPRING);
   }, [slideX]);
+
+  const dismissKeyboard = useCallback(() => Keyboard.dismiss(), []);
 
   function makeEdgePan(onlyDirection) {
     const offsetX = onlyDirection === 'left' ? [-99999, -15] : [15, 99999];
     return Gesture.Pan()
       .activeOffsetX(offsetX)
       .failOffsetY([-20, 20])
-      .onBegin(() => { startX.value = slideX.value; })
+      .onBegin(() => {
+        startX.value = slideX.value;
+        runOnJS(dismissKeyboard)();
+      })
       .onUpdate((e) => {
         const lo = onlyDirection === 'left'
           ? Math.max(-SCREEN_W * 2, startX.value - SCREEN_W)
