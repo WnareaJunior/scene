@@ -129,7 +129,7 @@ router.get('/me/hosted-events', requireAuth, async (req, res, next) => {
 
     const { rows } = await db.query(
       `SELECT id, title, description, latitude, longitude, address, start_time, end_time,
-              capacity, hashtags, is_private, show_attendees, status, created_at
+              capacity, hashtags, is_private, show_attendees, status, created_at, image_url
        FROM events
        WHERE host_id = $1 AND status != 'cancelled' ${filter}
        ORDER BY start_time DESC`,
@@ -154,7 +154,8 @@ router.get('/me/rsvps', requireAuth, async (req, res, next) => {
 
     const { rows } = await db.query(
       `SELECT e.id, e.title, e.description, e.latitude, e.longitude, e.address,
-              e.start_time, e.end_time, e.capacity, e.hashtags, r.status AS rsvp_status
+              e.start_time, e.end_time, e.capacity, e.hashtags, e.image_url,
+              r.status AS rsvp_status
        FROM rsvps r
        JOIN events e ON e.id = r.event_id
        WHERE r.user_id = $1 ${rsvpFilter}
@@ -215,7 +216,7 @@ router.get('/:userId/hosted-events', requireAuth, async (req, res, next) => {
     // is a public profile view, so private events are excluded.
     const { rows } = await db.query(
       `SELECT id, title, description, latitude, longitude, address, start_time, end_time,
-              capacity, hashtags, is_private, show_attendees, status, created_at
+              capacity, hashtags, is_private, show_attendees, status, created_at, image_url
        FROM events
        WHERE host_id = $1 AND status != 'cancelled'
          AND (is_private = false OR host_id = $2) ${filter}

@@ -272,7 +272,12 @@ export default function SearchSheet({ slideX, screenW, viewport, onNavigate }) {
       }
     });
 
-  const sheetStyle = useAnimatedStyle(() => ({ top: sheetY.value }));
+  // translateY, not top: animating a layout prop forces a full relayout of the
+  // sheet subtree every frame on Fabric, which drops the drag to end-state
+  // snaps. Transforms stay on the UI thread and follow the finger.
+  const sheetStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: sheetY.value }],
+  }));
 
   return (
     <Animated.View style={[styles.sheet, sheetStyle]}>
@@ -373,6 +378,7 @@ export default function SearchSheet({ slideX, screenW, viewport, onNavigate }) {
 const styles = StyleSheet.create({
   sheet: {
     position: 'absolute',
+    top: 0,
     left: 0, right: 0,
     height: SCREEN_H * 1.2,
     backgroundColor: '#111',
