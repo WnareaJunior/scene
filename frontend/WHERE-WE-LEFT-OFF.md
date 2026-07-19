@@ -1,76 +1,75 @@
-# Where We Left Off — iOS v1 Build (2026-07-18)
+# Where We Left Off — Device Testing + TestFlight + Design System (2026-07-19)
 
 ## Milestone reached
-First iOS EAS build **succeeded** and is installed on Wilson's iPhone
-(ad-hoc internal distribution, no TestFlight yet). Backend/DB on Render
-were being woken from pause for on-device testing.
+On-device testing round-trip complete (2 fix rounds), **TestFlight external
+testing is live pending Apple beta review**, and the design system was
+captured and re-anchored (Sodium Amber, "The Unlisted Map").
 
 ## Current state
 
-- **Branch**: `fix/eas-v1-blockers` — PR #32 open against `main`
-  (https://github.com/WnareaJunior/scene/pull/32). Merge once on-device
-  testing looks good.
-- **Expo SDK**: 57.0.7 (upgraded from 50) · React Native 0.86.0 · React 19.2.3
-  - New Architecture **enabled** (default; required by Reanimated 4)
-  - Babel plugin is `react-native-worklets/plugin` (Reanimated 4 change)
-  - `expo-doctor`: 20/20 checks pass
-- **Config**: `app.config.js` is the single source of truth (stale `app.json`
-  deleted). `frontend/ios` + `frontend/android` are gitignored → CNG/managed
-  workflow; EAS prebuilds from config.
-- **Bundle ID**: `com.wilsonnarea.scene` (iOS + Android package).
-  `com.scene.app` was taken globally on Apple's registry. Treat the new ID
-  as FINAL once anything ships to TestFlight.
-- **Apple**: Individual team W96B85P6DV. EAS manages the distribution cert
-  and ad-hoc provisioning profile (both expire 2027-07-18). One iPhone
-  registered (UDID 00008130-00015C1C2638001C).
-- **Expo account**: project lives under `wnareajunior` (owner in
-  app.config.js). Log in as that account for all `eas` commands — the
-  `wnarea` account has no access.
-- **Assets**: real "S" branding wired into `assets/icon.png`, `splash.png`
-  (2048x2048, icon padded on pure black), `adaptive-icon.png`, `favicon.png`.
-  Splash/adaptive background color in config is `#000000` to match the art.
-- **Env vars**: `.env.example` and `app.config.js` agree on
-  `EXPO_PUBLIC_GOOGLE_MAPS_API_KEY_IOS` / `_ANDROID`. Local `.env` has real
-  values. The successful build got keys via the uploaded `.env`, but
-  `.easignore` now excludes `.env` from uploads (commit 8d151db) — so
-  TODO 2 is REQUIRED before the next build or maps will be keyless.
-- **API**: `src/api.js` hardcodes `https://scene-19ss.onrender.com/api/v1`.
-  Render free tier: expect 30–60 s cold starts after idle.
-- **`.easignore`** added — first upload was 176 MB (stale local native dirs);
-  next builds upload ~1 MB.
+- **Branch**: everything merged to `main` (PRs #33–#42). Working tree clean.
+- **TestFlight**: app record "Scene (fcda77)" (Apple ID 6792423931, bundle
+  `com.wilsonnarea.scene`). External group **Colleagues** (limit 50) with
+  public link **https://testflight.apple.com/join/WG6cdp1k** — testers can
+  join once Beta App Review approves (submitted 2026-07-19, usually <24 h).
+  Review demo account: `applereview@scenedemo.app` / `SceneBeta2026!`
+  (throwaway user on the prod DB).
+- **Builds**: build 4 (1.0.0) submitted for beta review. Two newer builds
+  (preview + production) fired at session end with everything below — when
+  the production one processes, ADD IT TO THE COLLEAGUES GROUP in
+  App Store Connect → TestFlight so testers start on the amber build.
+- **Design context**: `PRODUCT.md` + `DESIGN.md` + `.impeccable/design.json`
+  at repo root. North Star "The Unlisted Map"; accent is now
+  **Sodium Amber #ffa028** (pressed #e08010, tint #2b1d0a, text-on-amber
+  #1a0d00). The old purple #a855f7 is banned (No-Purple Rule).
+- **EAS**: uploads are ~1 MB now (root `.easignore`; the 176 MB culprit was
+  the repo-root `.venv`). iOS production credentials validated interactively
+  — production builds now work with `--non-interactive`.
+- **Render**: CLI authed, workspace "My Workspace", service
+  `srv-d7fbu7c71suc738l4g1g`, auto-deploys on push to `main`.
+
+## Fixed this session
+
+1. Cold-start "network connection was lost" on signup → fetch retry in api.js.
+2. "Unsupported FormDataPart" on image upload → expo-file-system `File`
+   (SDK 54+ WinterCG fetch rejects RN `{uri}` parts).
+3. Event sheet: clipped hero, buried ✕, no swipe-down → fixed + pan-to-dismiss.
+4. Address autocomplete dead-ends → geocode fallback + visible error alerts.
+5. Profile party images missing → backend SELECTs lacked `image_url`.
+6. Sheet drag snapping → translateY transform (was layout-prop `top`).
+7. "Rigid" gesture feel → velocity-fed springs + rubber-band overdrag.
+8. Five UI fixes (keyboard dismiss, smaller create-map, Start Time Done
+   button, chip map markers, pull-to-refresh).
+9. Full UX copy rewrite (lowercase flyer voice, actionable errors,
+   teaching empty states, "party" terminology).
+10. Sodium Amber migration across all 9 UI files.
 
 ## TODO — next session
 
-1. **Finish on-device testing** (login, map tiles, Places autocomplete,
-   event feed) and **merge PR #32**.
-2. **Move Maps keys into EAS env vars** — REQUIRED before the next build:
-   `.env` no longer uploads, so without these the next build ships without
-   Maps keys (run per environment: `preview`, `production`):
-   ```
-   eas env:create --scope project --name EXPO_PUBLIC_GOOGLE_MAPS_API_KEY_IOS \
-     --value <ios-key> --environment production --visibility plaintext
-   ```
-3. **Google Maps key hygiene**: currently ONE unrestricted-looking key used
-   for iOS/Android/geocoding. Create separate keys, restrict the iOS one to
-   bundle ID `com.wilsonnarea.scene`, and rotate the existing key (it has
-   been sitting unrestricted in a shipped bundle).
-4. **Cleanup**: delete unused `assets/icon-*.png` size matrix (Expo generates
-   all sizes from the single 1024px icon) and the stale local `frontend/ios`
-   / `frontend/android` dirs (`rm -rf`, they regenerate).
-5. **TestFlight path** when ready for wider testing:
-   `eas build --platform ios --profile production` → `eas submit -p ios`.
-   Ad-hoc preview builds only install on UDIDs registered at build time
-   (`eas device:create` to add more, then rebuild).
-6. **Android build** — untested this session (iOS-only focus). Known watch
-   item: launcher masks may slightly clip the "S" corners (glyph extends a
-   bit past the adaptive-icon safe zone).
+1. **Add the new production build to the Colleagues TestFlight group**
+   (App Store Connect → TestFlight → Colleagues → Builds) once processed;
+   share the public link with colleagues after beta review approves.
+2. **Verify on device**: amber theme, gesture feel (velocity springs),
+   new copy, pull-to-refresh, chip markers, Start Time Done flow.
+3. **Google Maps key hygiene** (still open from last session): split the
+   single unrestricted key, restrict per-platform, rotate the old one.
+4. **Extract color tokens** to `src/constants/colors.js`
+   (`/impeccable extract`) — hexes are still hardcoded per-file.
+5. **EventDetailSheet drag** still runs on the JS thread (PanResponder);
+   convert to RNGH/Reanimated (needs in-Modal GestureHandlerRootView +
+   scroll arbitration).
+6. Backend nits: no request logging in prod; runs under nodemon (switch
+   start script to `node index.js`).
+7. Accessibility pass deferred by decision — revisit after colleague
+   feedback (contrast of #555-on-dark, VoiceOver labels, Reduce Motion).
 
 ## Gotchas learned (don't relearn these)
 
-- `eas build --profile preview.` ← trailing punctuation becomes part of the
-  profile name.
-- EAS caches Apple ID sessions in `~/.app-store`; `rm -rf ~/.app-store` or
-  `EXPO_APPLE_ID=<email>` to switch accounts.
-- Browser-based `eas login` grabs whatever expo.dev session the browser has —
-  check `eas whoami` before building.
-- Bundle IDs are globally unique across ALL Apple accounts, not per-team.
+- EAS archives from the **git repo root**; `.easignore` only counts there.
+- Expo SDK 54+ global fetch is WinterCG: RN `{uri}` FormData parts throw.
+- `ios.config.googleMapsApiKey` breaks pod install (react-native-maps 1.27
+  has no `react-native-google-maps` podspec) — Apple Maps needs no key.
+- Reanimated springs feel "rigid" without `velocity:` from the gesture.
+- Render cold start can drop the first request at the proxy (iOS -1005).
+- ASC "My Workspace" quirk: `render workspace set <id>` non-interactive;
+  the `!` session shell has no TTY for interactive pickers.
