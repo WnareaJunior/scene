@@ -19,6 +19,8 @@ dist/
 build/
 coverage/
 .claude/
+.venv/
+.git/
 
 # Env files never leave this machine — provide build-time values via
 # `eas env:create` / the expo.dev dashboard instead.
