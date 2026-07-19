@@ -49,6 +49,10 @@ module.exports = {
     ios: {
       supportsTablet: false,
       infoPlist: {
+        // Standard HTTPS only — exempt from export-compliance review. Without
+        // this, every TestFlight build stalls on "Missing Compliance" until the
+        // encryption questionnaire is answered by hand in App Store Connect.
+        ITSAppUsesNonExemptEncryption: false,
         NSLocationWhenInUseUsageDescription:
           'Scene uses your location to show nearby events.',
         NSPhotoLibraryUsageDescription:
