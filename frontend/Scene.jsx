@@ -13,7 +13,10 @@ import ProfileScreen from './src/screens/ProfileScreen';
 
 const { width: SCREEN_W } = Dimensions.get('window');
 
-const SPRING = { damping: 40, stiffness: 200, mass: 1 };
+// Lively, velocity-aware settle — overdamped springs read as "rigid".
+const SPRING = { damping: 34, stiffness: 280, mass: 0.9 };
+// Drag resistance past the first/last page — rubber band, not a wall.
+const OVERDRAG = 0.15;
 
 // Track layout:  [ Create | Map+Sheet | Profile ]
 // slideX = 0           → create
@@ -41,10 +44,12 @@ export default function Scene({ user, onSignOut }) {
     },
   );
 
-  const onNavigate = useCallback((page) => {
+  const onNavigate = useCallback((page, velocity = 0) => {
     Keyboard.dismiss();
     const targets = { create: 0, map: -SCREEN_W, profile: -SCREEN_W * 2 };
-    if (targets[page] !== undefined) slideX.value = withSpring(targets[page], SPRING);
+    if (targets[page] !== undefined) {
+      slideX.value = withSpring(targets[page], { ...SPRING, velocity });
+    }
   }, [slideX]);
 
   const dismissKeyboard = useCallback(() => Keyboard.dismiss(), []);
@@ -65,16 +70,18 @@ export default function Scene({ user, onSignOut }) {
         const hi = onlyDirection === 'left'
           ? startX.value
           : Math.min(0, startX.value + SCREEN_W);
-        slideX.value = Math.max(lo, Math.min(hi, startX.value + e.translationX));
+        const next = startX.value + e.translationX;
+        const clamped = Math.max(lo, Math.min(hi, next));
+        slideX.value = clamped + (next - clamped) * OVERDRAG;
       })
       .onEnd((e) => {
         const didSwipe = Math.abs(e.translationX) > SCREEN_W * 0.25 || Math.abs(e.velocityX) > 300;
         if (didSwipe) {
           const dir = onlyDirection === 'left' ? -1 : 1;
           const target = Math.max(-SCREEN_W * 2, Math.min(0, startX.value + dir * SCREEN_W));
-          slideX.value = withSpring(target, SPRING);
+          slideX.value = withSpring(target, { ...SPRING, velocity: e.velocityX });
         } else {
-          slideX.value = withSpring(startX.value, SPRING);
+          slideX.value = withSpring(startX.value, { ...SPRING, velocity: e.velocityX });
         }
       });
   }
