@@ -138,14 +138,14 @@ const styles = StyleSheet.create({
     borderColor: '#2a2a2a',
   },
   btn: {
-    backgroundColor: '#a855f7',
+    backgroundColor: '#ffa028',
     borderRadius: 10,
     padding: 15,
     alignItems: 'center',
     marginTop: 8,
     marginBottom: 16,
   },
-  btnText: { color: '#fff', fontWeight: '700', fontSize: 16 },
+  btnText: { color: '#1a0d00', fontWeight: '700', fontSize: 16 },
   toggle: { color: '#666', textAlign: 'center', fontSize: 14 },
   toggleDisabled: { opacity: 0.4 },
 });

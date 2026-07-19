@@ -529,19 +529,19 @@ const styles = StyleSheet.create({
     position: 'absolute',
     width: 20,
     height: 1.5,
-    backgroundColor: '#a855f7',
+    backgroundColor: '#ffa028',
   },
   crosshairV: {
     position: 'absolute',
     width: 1.5,
     height: 20,
-    backgroundColor: '#a855f7',
+    backgroundColor: '#ffa028',
   },
   crosshairDot: {
     width: 5,
     height: 5,
     borderRadius: 3,
-    backgroundColor: '#a855f7',
+    backgroundColor: '#ffa028',
   },
 
   pickerDoneRow: {
@@ -549,29 +549,29 @@ const styles = StyleSheet.create({
     marginBottom: GAP,
   },
   pickerDoneBtn: {
-    backgroundColor: '#a855f7',
+    backgroundColor: '#ffa028',
     borderRadius: 10,
     paddingVertical: 8,
     paddingHorizontal: 20,
   },
-  pickerDoneText: { color: '#fff', fontWeight: '700', fontSize: 15 },
+  pickerDoneText: { color: '#1a0d00', fontWeight: '700', fontSize: 15 },
 
   chipsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: GAP },
   chip: {
     flexDirection: 'row', alignItems: 'center', gap: 5,
-    backgroundColor: '#2a1a3e', borderRadius: 20,
+    backgroundColor: '#2b1d0a', borderRadius: 20,
     paddingVertical: 5, paddingHorizontal: 10,
-    borderWidth: 1, borderColor: '#a855f7',
+    borderWidth: 1, borderColor: '#ffa028',
   },
-  chipText: { color: '#a855f7', fontSize: 13, fontWeight: '600' },
-  chipRemove: { color: '#a855f7', fontSize: 16, lineHeight: 18 },
+  chipText: { color: '#ffa028', fontSize: 13, fontWeight: '600' },
+  chipRemove: { color: '#ffa028', fontSize: 16, lineHeight: 18 },
 
   createBtn: {
-    backgroundColor: '#a855f7', borderRadius: 10,
+    backgroundColor: '#ffa028', borderRadius: 10,
     padding: 15, alignItems: 'center',
   },
   createBtnPosted: {
     backgroundColor: '#22c55e',
   },
-  createBtnText: { color: '#fff', fontWeight: '700', fontSize: 16 },
+  createBtnText: { color: '#1a0d00', fontWeight: '700', fontSize: 16 },
 });

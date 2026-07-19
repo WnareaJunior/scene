@@ -93,7 +93,7 @@ const StatusBadge = ({ status }) => {
   );
 };
 
-const STATE_COLORS = { live: '#22c55e', upcoming: '#a855f7', past: '#555' };
+const STATE_COLORS = { live: '#22c55e', upcoming: '#ffa028', past: '#555' };
 const STATE_LABELS = { live: 'Live', upcoming: 'Upcoming', past: 'Past' };
 
 const ProfileEventCard = ({ event, profileData }) => {
@@ -272,7 +272,7 @@ if (updated?.id) setProfileData((prev) => ({ ...prev, profile_picture: updated.p
 
   function FeedEmpty() {
     if (feedLoading) {
-      return <ActivityIndicator color="#a855f7" style={{ marginTop: 32 }} />;
+      return <ActivityIndicator color="#ffa028" style={{ marginTop: 32 }} />;
     }
     if (feedError) {
       return <Text style={styles.feedError}>{feedError}</Text>;
@@ -332,7 +332,7 @@ function FollowListSheet({ visible, type, data, loading, onClose, onUserPress })
           </TouchableOpacity>
         </View>
         {loading ? (
-          <ActivityIndicator color="#a855f7" style={{ marginTop: 32 }} />
+          <ActivityIndicator color="#ffa028" style={{ marginTop: 32 }} />
         ) : (
           <FlatList
             data={data}
@@ -403,13 +403,13 @@ const styles = StyleSheet.create({
     width: 72,
     height: 72,
     borderRadius: 36,
-    backgroundColor: '#2a1a3e',
+    backgroundColor: '#2b1d0a',
     borderWidth: 2,
-    borderColor: '#a855f7',
+    borderColor: '#ffa028',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  avatarInitial: { color: '#a855f7', fontSize: 28, fontWeight: '700' },
+  avatarInitial: { color: '#ffa028', fontSize: 28, fontWeight: '700' },
   avatarEdit: {
     position: 'absolute',
     bottom: 0,
@@ -417,11 +417,11 @@ const styles = StyleSheet.create({
     width: 22,
     height: 22,
     borderRadius: 11,
-    backgroundColor: '#a855f7',
+    backgroundColor: '#ffa028',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  avatarEditText: { color: '#fff', fontSize: 14, fontWeight: '700', lineHeight: 18 },
+  avatarEditText: { color: '#1a0d00', fontSize: 14, fontWeight: '700', lineHeight: 18 },
   headerInfo: {
     flex: 1,
     marginLeft: 14,
@@ -506,13 +506,13 @@ const styles = StyleSheet.create({
     marginRight: 10,
   },
   hostAvatarPlaceholder: {
-    backgroundColor: '#2a1a3e',
+    backgroundColor: '#2b1d0a',
     borderWidth: 1,
-    borderColor: '#a855f7',
+    borderColor: '#ffa028',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  hostAvatarInitial: { color: '#a855f7', fontSize: 13, fontWeight: '700' },
+  hostAvatarInitial: { color: '#ffa028', fontSize: 13, fontWeight: '700' },
   hostName: {
     color: COLORS.text,
     fontSize: 15,
@@ -612,13 +612,13 @@ const sheetStyles = StyleSheet.create({
     width: 40, height: 40, borderRadius: 20, backgroundColor: '#333',
   },
   avatarPlaceholder: {
-    backgroundColor: '#2a1a3e',
+    backgroundColor: '#2b1d0a',
     borderWidth: 1,
-    borderColor: '#a855f7',
+    borderColor: '#ffa028',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  avatarInitial: { color: '#a855f7', fontSize: 16, fontWeight: '700' },
+  avatarInitial: { color: '#ffa028', fontSize: 16, fontWeight: '700' },
   username: { color: '#fff', fontSize: 15, fontWeight: '600' },
   meta: { color: '#666', fontSize: 12, marginTop: 2 },
   empty: { color: '#444', textAlign: 'center', marginTop: 32 },

@@ -20,7 +20,7 @@ function getEventState(event) {
   return 'past';
 }
 
-const STATE_COLORS = { live: '#22c55e', upcoming: '#a855f7', past: '#555' };
+const STATE_COLORS = { live: '#22c55e', upcoming: '#ffa028', past: '#555' };
 const STATE_LABELS = { live: 'Live', upcoming: 'Upcoming', past: 'Past' };
 
 function EventRow({ event }) {
@@ -156,7 +156,7 @@ export default function UserProfileSheet({ userId, onClose }) {
         </TouchableOpacity>
 
         {loading ? (
-          <ActivityIndicator color="#a855f7" style={{ marginTop: 40 }} />
+          <ActivityIndicator color="#ffa028" style={{ marginTop: 40 }} />
         ) : (
           <FlatList
             data={events}
@@ -197,11 +197,11 @@ const styles = StyleSheet.create({
   avatar: { width: 72, height: 72, borderRadius: 36, backgroundColor: '#333' },
   avatarPlaceholder: {
     width: 72, height: 72, borderRadius: 36,
-    backgroundColor: '#2a1a3e',
-    borderWidth: 2, borderColor: '#a855f7',
+    backgroundColor: '#2b1d0a',
+    borderWidth: 2, borderColor: '#ffa028',
     alignItems: 'center', justifyContent: 'center',
   },
-  avatarInitial: { color: '#a855f7', fontSize: 28, fontWeight: '700' },
+  avatarInitial: { color: '#ffa028', fontSize: 28, fontWeight: '700' },
   headerInfo: { flex: 1 },
   name: { color: '#fff', fontSize: 20, fontWeight: '700', marginBottom: 4 },
   bio: { color: '#8e8e93', fontSize: 13, lineHeight: 18, marginBottom: 8 },
@@ -209,13 +209,13 @@ const styles = StyleSheet.create({
   statText: { color: '#8e8e93', fontSize: 13 },
   statNumber: { color: '#fff', fontWeight: '700' },
   followBtn: {
-    backgroundColor: '#a855f7', borderRadius: 8,
+    backgroundColor: '#ffa028', borderRadius: 8,
     paddingVertical: 7, paddingHorizontal: 20,
     alignSelf: 'flex-start',
   },
-  followBtnActive: { backgroundColor: 'transparent', borderWidth: 1, borderColor: '#a855f7' },
-  followBtnText: { color: '#fff', fontSize: 14, fontWeight: '600' },
-  followBtnTextActive: { color: '#a855f7' },
+  followBtnActive: { backgroundColor: 'transparent', borderWidth: 1, borderColor: '#ffa028' },
+  followBtnText: { color: '#1a0d00', fontSize: 14, fontWeight: '600' },
+  followBtnTextActive: { color: '#ffa028' },
 
   eventRow: { flexDirection: 'row', gap: 12, paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#1c1c1e' },
   eventImage: { width: 64, height: 64, borderRadius: 8, backgroundColor: '#222' },
