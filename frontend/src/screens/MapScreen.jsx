@@ -134,7 +134,7 @@ export default function MapScreen({ onRegionChangeComplete }) {
       const fullEvent = await events.get(pin.id);
       setSelectedEvent(fullEvent);
     } catch {
-      Alert.alert('Unavailable', 'Could not load this event. Please try again.');
+      Alert.alert("couldn't open this party", 'give it another tap in a second.');
     }
   }
 
@@ -161,7 +161,7 @@ export default function MapScreen({ onRegionChangeComplete }) {
       else await events.rsvp(eventId, newStatus);
     } catch {
       setSelectedEvent(current);
-      Alert.alert('Error', 'Could not update RSVP. Please try again.');
+      Alert.alert("rsvp didn't save", 'check your connection and tap it again.');
     }
   }
 
@@ -183,7 +183,7 @@ export default function MapScreen({ onRegionChangeComplete }) {
         longitudeDelta: 0.01,
       }, 600);
     } catch {
-      Alert.alert('Location unavailable', 'Could not determine your current location.');
+      Alert.alert("can't find you", 'allow location access in Settings to see parties near you.');
     }
   }
 

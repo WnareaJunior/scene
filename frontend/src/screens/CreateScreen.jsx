@@ -157,7 +157,7 @@ export default function CreateScreen({ viewport, onCreated }) {
   async function pickImage() {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
-      Alert.alert('Permission needed', 'Allow photo access to add a party image.');
+      Alert.alert('photos access needed', 'allow photo access in Settings to add a party photo.');
       return;
     }
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -184,19 +184,19 @@ export default function CreateScreen({ viewport, onCreated }) {
 
   async function handleSubmit() {
     if (!form.title || !form.startTime) {
-      Alert.alert('Missing fields', 'Title and start time are required.');
+      Alert.alert('not quite ready', 'add a title and a start time, then post.');
       return;
     }
     const locationToSubmit = selectedLocation ?? viewport;
     if (!locationToSubmit) {
-      Alert.alert('Location needed', 'Search an address or pan the map to set event location.');
+      Alert.alert("where's the party?", 'search an address or pan the map until the crosshair is on the spot.');
       return;
     }
     let capacity;
     if (form.capacity) {
       const parsed = parseInt(form.capacity, 10);
       if (Number.isNaN(parsed) || parsed < 1) {
-        Alert.alert('Invalid capacity', 'Capacity must be a positive number.');
+        Alert.alert('capacity looks off', 'use a whole number of 1 or more — or leave it blank for no cap.');
         return;
       }
       capacity = parsed;
@@ -230,10 +230,10 @@ export default function CreateScreen({ viewport, onCreated }) {
         onCreated();
         setTimeout(() => setPosted(false), 2500);
       } else {
-        Alert.alert('Error', data?.error || 'Could not create event.');
+        Alert.alert("couldn't post the party", data?.error || 'try again in a second.');
       }
     } catch (err) {
-      Alert.alert('Error', err.message || 'Something went wrong. Please try again.');
+      Alert.alert("couldn't post the party", err.message || 'try again in a second.');
     } finally {
       setCreating(false);
     }
@@ -252,7 +252,7 @@ export default function CreateScreen({ viewport, onCreated }) {
           showsVerticalScrollIndicator={false}
           scrollEnabled={!mapScrollLocked}
         >
-          <Text style={styles.screenTitle}>create event</Text>
+          <Text style={styles.screenTitle}>post a party</Text>
 
           {/* Address autocomplete — zIndex lets dropdown overlay elements below */}
           <View style={styles.autocompleteContainer}>
@@ -285,14 +285,14 @@ export default function CreateScreen({ viewport, onCreated }) {
                   );
                 } else {
                   Alert.alert(
-                    'Location lookup failed',
-                    'Could not get coordinates for that address. Pan the map to set the location instead.',
+                    "couldn't pin that address",
+                    'pan the map to set the spot instead.',
                   );
                 }
               }}
-              onFail={(error) => Alert.alert('Address search failed', String(error))}
-              onNotFound={(resp) => Alert.alert('Address search failed', `Google returned: ${resp?.status ?? 'no results'}`)}
-              onTimeout={() => Alert.alert('Address search failed', 'The request timed out.')}
+              onFail={(error) => Alert.alert("address search isn't working", String(error))}
+              onNotFound={(resp) => Alert.alert("address search isn't working", `Google returned: ${resp?.status ?? 'no results'}`)}
+              onTimeout={() => Alert.alert("address search isn't working", 'The request timed out.')}
               query={{ key: GOOGLE_MAPS_API_KEY, language: 'en' }}
               styles={{
                 textInputContainer: styles.placesInputContainer,
@@ -422,7 +422,7 @@ export default function CreateScreen({ viewport, onCreated }) {
           >
             {creating
               ? <ActivityIndicator color="#fff" />
-              : <Text style={styles.createBtnText}>{posted ? 'event posted!' : 'Post event'}</Text>
+              : <Text style={styles.createBtnText}>{posted ? 'party posted!' : 'post party'}</Text>
             }
           </TouchableOpacity>
         </ScrollView>

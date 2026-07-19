@@ -16,7 +16,10 @@ export default function AuthScreen({ onAuth }) {
 
   async function submit() {
     if (!email || !password || (mode === 'register' && !username)) {
-      Alert.alert('Missing fields', 'Please fill in all fields.');
+      Alert.alert(
+        'missing something',
+        mode === 'register' ? 'username, email, and password — all three.' : 'email and password — both.',
+      );
       return;
     }
     setLoading(true);
@@ -27,15 +30,17 @@ export default function AuthScreen({ onAuth }) {
       } else {
         data = await auth.register(email.trim(), password, username.trim());
       }
+      const failTitle = mode === 'login' ? "couldn't sign you in" : "couldn't create your account";
       if (data?.error) {
-        Alert.alert('Error', data.error);
+        Alert.alert(failTitle, data.error);
       } else if (data?.accessToken) {
         onAuth(data);
       } else {
-        Alert.alert('Error', 'Unexpected response. Try again.');
+        Alert.alert(failTitle, 'the server sent back something odd — try again.');
       }
     } catch (err) {
-      Alert.alert('Error', err.message || 'Something went wrong.');
+      const failTitle = mode === 'login' ? "couldn't sign you in" : "couldn't create your account";
+      Alert.alert(failTitle, err.message || 'try again in a second.');
     } finally {
       setLoading(false);
     }
@@ -48,7 +53,7 @@ export default function AuthScreen({ onAuth }) {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         <Text style={styles.logo}>scene</Text>
-        <Text style={styles.sub}>find what's happening near you</Text>
+        <Text style={styles.sub}>see tonight on a map</Text>
 
         {mode === 'register' && (
           <TextInput

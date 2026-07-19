@@ -170,7 +170,7 @@ export default function ProfileScreen({ user, onSignOut, refreshKey = 0 }) {
         if (cancelled) return;
         // Profile refresh failure is non-blocking — the user already has cached
         // data from login. Show a subtle alert rather than crashing the screen.
-        Alert.alert('Profile', err.message || 'Could not refresh profile data.');
+        Alert.alert("couldn't refresh your profile", 'showing the last saved version — try again in a bit.');
       });
 
     setFeedLoading(true);
@@ -217,8 +217,8 @@ export default function ProfileScreen({ user, onSignOut, refreshKey = 0 }) {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
       Alert.alert(
-        'Photos access denied',
-        'Enable photo library access in Settings to update your avatar.',
+        'photos access needed',
+        'allow photo access in Settings to change your picture.',
       );
       return;
     }
@@ -233,7 +233,7 @@ export default function ProfileScreen({ user, onSignOut, refreshKey = 0 }) {
       const updated = await users.uploadAvatar(result.assets[0].uri);
 if (updated?.id) setProfileData((prev) => ({ ...prev, profile_picture: updated.profile_picture }));
     } catch (err) {
-      Alert.alert('Upload failed', err.message || 'Could not update avatar.');
+      Alert.alert("photo didn't upload", err.message || 'try a different photo, or try again.');
     }
   }, []);
 
@@ -277,7 +277,7 @@ if (updated?.id) setProfileData((prev) => ({ ...prev, profile_picture: updated.p
     if (feedError) {
       return <Text style={styles.feedError}>{feedError}</Text>;
     }
-    return <Text style={styles.feedEmpty}>No events yet</Text>;
+    return <Text style={styles.feedEmpty}>your parties live here — post one or rsvp to your first</Text>;
   }
 
   return (
@@ -359,7 +359,7 @@ function FollowListSheet({ visible, type, data, loading, onClose, onUserPress })
               </TouchableOpacity>
             )}
             ListEmptyComponent={
-              <Text style={sheetStyles.empty}>No users yet</Text>
+              <Text style={sheetStyles.empty}>no one here yet</Text>
             }
             contentContainerStyle={{ paddingBottom: 40 }}
             showsVerticalScrollIndicator={false}

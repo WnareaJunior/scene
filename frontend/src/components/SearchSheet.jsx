@@ -128,7 +128,7 @@ export default function SearchSheet({ slideX, screenW, viewport, onNavigate }) {
     } catch {
       if (gen !== feedGenRef.current) return;
       setResults([]);
-      setErrorMsg('Something went wrong');
+      setErrorMsg("couldn't load parties — pull down to retry");
     } finally {
       if (gen === feedGenRef.current) setLoading(false);
     }
@@ -205,7 +205,7 @@ export default function SearchSheet({ slideX, screenW, viewport, onNavigate }) {
         }
       } catch {
         setResults([]);
-        setErrorMsg('Something went wrong');
+        setErrorMsg("couldn't load parties — pull down to retry");
       } finally {
         setLoading(false);
       }
@@ -241,7 +241,7 @@ export default function SearchSheet({ slideX, screenW, viewport, onNavigate }) {
       }
     } catch {
       setResults(rs => rs.map(ev => ev.id === eventId ? prevEvent : ev));
-      Alert.alert('Error', 'Could not update RSVP. Please try again.');
+      Alert.alert("rsvp didn't save", 'check your connection and tap it again.');
     }
   }
 
@@ -327,7 +327,7 @@ export default function SearchSheet({ slideX, screenW, viewport, onNavigate }) {
             <ActivityIndicator color="#a855f7" style={styles.spinner} />
           ) : errorMsg ? null : results.length === 0 ? (
             <Text style={styles.empty}>
-              {query.startsWith('@') ? 'no users found' : 'no events nearby'}
+              {query.startsWith('@') ? 'no one by that username' : 'nothing nearby yet — swipe right to post the first party'}
             </Text>
           ) : (
             <FlatList

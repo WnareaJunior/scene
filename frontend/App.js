@@ -19,12 +19,12 @@ class ErrorBoundary extends React.Component {
     if (this.state.hasError) {
       return (
         <View style={styles.errorFallback}>
-          <Text style={styles.errorFallbackText}>Something went wrong</Text>
+          <Text style={styles.errorFallbackText}>scene hit a snag — restart to keep going</Text>
           <TouchableOpacity
             style={styles.restartBtn}
             onPress={() => this.setState({ hasError: false })}
           >
-            <Text style={styles.restartBtnText}>Restart</Text>
+            <Text style={styles.restartBtnText}>restart</Text>
           </TouchableOpacity>
         </View>
       );
