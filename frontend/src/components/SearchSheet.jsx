@@ -18,8 +18,12 @@ import UserProfileSheet from './UserProfileSheet';
 const { height: SCREEN_H } = Dimensions.get('window');
 
 const HEADER_H = 110;
-const SPRING_V = { damping: 50, stiffness: 180, mass: 1.2 };
-const SPRING_H = { damping: 40, stiffness: 200, mass: 1 };
+// Springs carry the release velocity (passed per-gesture); configs stay lively
+// rather than overdamped so the settle glides instead of thudding.
+const SPRING_V = { damping: 32, stiffness: 260, mass: 0.9 };
+const SPRING_H = { damping: 34, stiffness: 280, mass: 0.9 };
+// Drag resistance past the last snap point — rubber band, not a wall.
+const OVERDRAG = 0.15;
 
 // Feed widening: if the current map area surfaces fewer than MIN_FEED_RESULTS
 // parties, progressively scan a larger radius (up to MAX_FEED_RADIUS_MILES)
@@ -246,14 +250,15 @@ export default function SearchSheet({ slideX, screenW, viewport, onNavigate }) {
     .onBegin(() => { startY.value = sheetY.value; })
     .onUpdate((e) => {
       const next = startY.value + e.translationY;
-      sheetY.value = Math.max(SNAP_FULL, Math.min(SNAP_BAR, next));
+      const clamped = Math.max(SNAP_FULL, Math.min(SNAP_BAR, next));
+      sheetY.value = clamped + (next - clamped) * OVERDRAG;
     })
     .onEnd((e) => {
       const projected = sheetY.value + e.velocityY * 0.18;
       const closest = SNAPS_V.reduce((a, b) =>
         Math.abs(a - projected) < Math.abs(b - projected) ? a : b
       );
-      sheetY.value = withSpring(closest, SPRING_V);
+      sheetY.value = withSpring(closest, { ...SPRING_V, velocity: e.velocityY });
     });
 
   // ── horizontal pan — bottom zone (swipe left/right between screens) ────────
@@ -261,11 +266,12 @@ export default function SearchSheet({ slideX, screenW, viewport, onNavigate }) {
     .failOffsetY([-15, 15])
     .onBegin(() => { startX.value = slideX.value; })
     .onUpdate((e) => {
-      // clamp to one page in either direction from where the gesture started
+      // rubber-band past one page in either direction from where the gesture started
       const lo = Math.max(-screenW * 2, startX.value - screenW);
       const hi = Math.min(0, startX.value + screenW);
       const next = startX.value + e.translationX;
-      slideX.value = Math.max(lo, Math.min(hi, next));
+      const clamped = Math.max(lo, Math.min(hi, next));
+      slideX.value = clamped + (next - clamped) * OVERDRAG;
     })
     .onEnd((e) => {
       const didSwipe = Math.abs(e.translationX) > screenW * 0.25 || Math.abs(e.velocityX) > 300;
@@ -273,12 +279,12 @@ export default function SearchSheet({ slideX, screenW, viewport, onNavigate }) {
         const dir = e.translationX < 0 ? -1 : 1;
         const target = Math.max(-screenW * 2, Math.min(0, startX.value + dir * screenW));
         // Determine which named page the target corresponds to and delegate to parent.
-        if (target === 0) runOnJS(onNavigate)('create');
-        else if (target === -screenW) runOnJS(onNavigate)('map');
-        else if (target === -screenW * 2) runOnJS(onNavigate)('profile');
-        else slideX.value = withSpring(target, SPRING_H);
+        if (target === 0) runOnJS(onNavigate)('create', e.velocityX);
+        else if (target === -screenW) runOnJS(onNavigate)('map', e.velocityX);
+        else if (target === -screenW * 2) runOnJS(onNavigate)('profile', e.velocityX);
+        else slideX.value = withSpring(target, { ...SPRING_H, velocity: e.velocityX });
       } else {
-        slideX.value = withSpring(startX.value, SPRING_H);
+        slideX.value = withSpring(startX.value, { ...SPRING_H, velocity: e.velocityX });
       }
     });
 
