@@ -1,0 +1,24 @@
+name: keep api warm
+
+# Render's free tier spins the service down after ~15 idle minutes; the next
+# request then eats a ~20s cold start (and iOS sometimes drops it entirely,
+# NSURLError -1005). Pinging /health every 10 minutes keeps it hot.
+#
+# Note: GitHub disables scheduled workflows after 60 days without repo
+# activity — a push re-enables it.
+
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch: {}
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: ping /health
+        run: |
+          code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 60 https://scene-19ss.onrender.com/health)
+          echo "health returned $code"
+          [ "$code" = "200" ]
