@@ -26,13 +26,15 @@ router.get('/events', requireAuth, async (req, res, next) => {
 
     const { rows } = await db.query(
       `SELECT e.id, e.title, e.latitude, e.longitude, e.hashtags,
-              e.start_time,
+              e.start_time, e.end_time,
               COUNT(r.id) FILTER (WHERE r.status = 'going') AS going_count
        FROM events e
        LEFT JOIN rsvps r ON r.event_id = e.id
        WHERE e.status = 'active'
          AND e.is_private = false
-         AND e.start_time >= now()
+         -- keep live parties on the map: a party without an end time counts as
+         -- live for 4 hours after it starts (matches the client's getState)
+         AND COALESCE(e.end_time, e.start_time + interval '4 hours') > now()
          AND ST_Within(e.location::geometry, ST_MakeEnvelope($1, $2, $3, $4, 4326))
          ${hashtagFilter}
        GROUP BY e.id

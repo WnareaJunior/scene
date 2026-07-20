@@ -12,20 +12,41 @@ import * as ImagePicker from 'expo-image-picker';
 
 import { events } from '../api';
 import { darkMapStyle } from '../constants/mapStyles';
+import { COLORS } from '../constants/colors';
 import { GOOGLE_MAPS_API_KEY } from '../constants/config';
 
 const GAP = 14;
+// Parties default to 4 hours: without an end time, "live" can never happen.
+const DEFAULT_DURATION_MS = 4 * 3600000;
 
 function formatDate(date) {
-  return date.toLocaleDateString('en-US', {
-    month: 'short', day: 'numeric',
+  return date.toLocaleDateString(undefined, {
+    weekday: 'short', month: 'short', day: 'numeric',
     hour: '2-digit', minute: '2-digit',
   });
 }
 
+// Quick-pick times for the dominant case. "tonight 10pm" only exists while
+// 10pm is still ahead; late-night posting falls back to "in 2 hours".
+function quickTimes() {
+  const now = new Date();
+  const tonight = new Date(now);
+  tonight.setHours(22, 0, 0, 0);
+  const tomorrow = new Date(now);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  tomorrow.setHours(22, 0, 0, 0);
+  const soon = new Date(now.getTime() + 2 * 3600000);
+  soon.setMinutes(0, 0, 0);
+
+  const first = tonight > now
+    ? { label: 'tonight 10pm', value: tonight }
+    : { label: 'in 2 hours', value: soon };
+  return [first, { label: 'tomorrow 10pm', value: tomorrow }];
+}
+
 export default function CreateScreen({ viewport, onCreated }) {
   const [form, setForm] = useState({
-    title: '', address: '', startTime: null, capacity: '',
+    title: '', description: '', address: '', startTime: null, capacity: '',
   });
   const [hashtags, setHashtags] = useState([]);
   const [tagInput, setTagInput] = useState('');
@@ -38,6 +59,7 @@ export default function CreateScreen({ viewport, onCreated }) {
   const [selectedLocation, setSelectedLocation] = useState(null);
   const [mapScrollLocked, setMapScrollLocked] = useState(false);
   const [partyImage, setPartyImage] = useState(null);
+  const [showMore, setShowMore] = useState(false);
 
   const mapRef = useRef(null);
   const placesRef = useRef(null);
@@ -96,7 +118,6 @@ export default function CreateScreen({ viewport, onCreated }) {
 
   // Reverse-geocode a lat/lng via Google Geocoding API and update the address field.
   const reverseGeocode = useCallback(async (latitude, longitude) => {
-    console.log('[reverseGeocode] called with', latitude, longitude, 'key?', !!GOOGLE_MAPS_API_KEY);
     if (!GOOGLE_MAPS_API_KEY) return;
     try {
       const url = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${latitude},${longitude}&key=${GOOGLE_MAPS_API_KEY}`;
@@ -107,8 +128,8 @@ export default function CreateScreen({ viewport, onCreated }) {
         setField('address', formatted);
         placesRef.current?.setAddressText(formatted);
       }
-    } catch (e) {
-      console.log('[reverseGeocode] error:', e.message);
+    } catch {
+      // Non-fatal: the pinned coordinates still submit without a pretty address.
     }
   }, []);
 
@@ -211,8 +232,10 @@ export default function CreateScreen({ viewport, onCreated }) {
       }
       const data = await events.create({
         title: form.title,
+        description: form.description || undefined,
         address: form.address,
         startTime: form.startTime.toISOString(),
+        endTime: new Date(form.startTime.getTime() + DEFAULT_DURATION_MS).toISOString(),
         latitude: locationToSubmit.latitude,
         longitude: locationToSubmit.longitude,
         capacity,
@@ -220,14 +243,15 @@ export default function CreateScreen({ viewport, onCreated }) {
         imageUrl,
       });
       if (data?.id) {
-        setForm({ title: '', address: '', startTime: null, capacity: '' });
+        setForm({ title: '', description: '', address: '', startTime: null, capacity: '' });
         setHashtags([]);
         setTagInput('');
         setSelectedLocation(null);
         setPartyImage(null);
+        setShowMore(false);
         placesRef.current?.setAddressText('');
         setPosted(true);
-        onCreated();
+        onCreated(data);
         setTimeout(() => setPosted(false), 2500);
       } else {
         Alert.alert("couldn't post the party", data?.error || 'try again in a second.');
@@ -254,6 +278,46 @@ export default function CreateScreen({ viewport, onCreated }) {
         >
           <Text style={styles.screenTitle}>post a party</Text>
 
+          {/* ── the what ─────────────────────────────────────────────── */}
+          <TextInput
+            style={styles.input}
+            placeholder="title"
+            placeholderTextColor={COLORS.inkSecondary}
+            value={form.title}
+            onChangeText={(v) => setField('title', v)}
+            accessibilityLabel="party title"
+          />
+
+          <TouchableOpacity
+            style={styles.imagePicker}
+            onPress={pickImage}
+            activeOpacity={0.8}
+            accessibilityRole="button"
+            accessibilityLabel={partyImage ? 'change the party photo' : 'add a party photo'}
+          >
+            {partyImage ? (
+              <Image source={{ uri: partyImage }} style={styles.partyImage} resizeMode="cover" />
+            ) : (
+              <View style={styles.imagePickerPlaceholder}>
+                <Text style={styles.imagePickerIcon}>+</Text>
+                <Text style={styles.imagePickerText}>add party photo</Text>
+              </View>
+            )}
+          </TouchableOpacity>
+
+          <TextInput
+            style={[styles.input, styles.descriptionInput]}
+            placeholder="set the vibe — byob? theme? side door?"
+            placeholderTextColor={COLORS.inkSecondary}
+            value={form.description}
+            onChangeText={(v) => setField('description', v)}
+            multiline
+            maxLength={500}
+            accessibilityLabel="party description"
+          />
+
+          {/* ── the where ────────────────────────────────────────────── */}
+          <Text style={styles.sectionLabel}>the where</Text>
           {/* Address autocomplete — zIndex lets dropdown overlay elements below */}
           <View style={styles.autocompleteContainer}>
             <GooglePlacesAutocomplete
@@ -290,9 +354,9 @@ export default function CreateScreen({ viewport, onCreated }) {
                   );
                 }
               }}
-              onFail={(error) => Alert.alert("address search isn't working", String(error))}
-              onNotFound={(resp) => Alert.alert("address search isn't working", `Google returned: ${resp?.status ?? 'no results'}`)}
-              onTimeout={() => Alert.alert("address search isn't working", 'The request timed out.')}
+              onFail={() => Alert.alert("address search isn't working", 'pan the map to drop the pin instead.')}
+              onNotFound={() => Alert.alert('no matches for that address', 'try fewer words, or pan the map to the spot.')}
+              onTimeout={() => Alert.alert("address search isn't working", 'pan the map to drop the pin instead.')}
               query={{ key: GOOGLE_MAPS_API_KEY, language: 'en' }}
               styles={{
                 textInputContainer: styles.placesInputContainer,
@@ -307,31 +371,11 @@ export default function CreateScreen({ viewport, onCreated }) {
               minLength={2}
               debounce={300}
               keyboardShouldPersistTaps="always"
-              textInputProps={{ placeholderTextColor: '#555' }}
+              textInputProps={{ placeholderTextColor: COLORS.inkSecondary }}
             />
           </View>
 
-          <TextInput
-            style={styles.input}
-            placeholder="title"
-            placeholderTextColor="#555"
-            value={form.title}
-            onChangeText={(v) => setField('title', v)}
-          />
-
-          {/* Party image picker */}
-          <TouchableOpacity style={styles.imagePicker} onPress={pickImage} activeOpacity={0.8}>
-            {partyImage ? (
-              <Image source={{ uri: partyImage }} style={styles.partyImage} resizeMode="cover" />
-            ) : (
-              <View style={styles.imagePickerPlaceholder}>
-                <Text style={styles.imagePickerIcon}>+</Text>
-                <Text style={styles.imagePickerText}>add party photo</Text>
-              </View>
-            )}
-          </TouchableOpacity>
-
-          {/* Embedded location map */}
+          {/* Embedded location map — directly under the address it sets */}
           <View
             style={styles.mapContainer}
             onTouchStart={() => setMapScrollLocked(true)}
@@ -357,12 +401,37 @@ export default function CreateScreen({ viewport, onCreated }) {
             </View>
           </View>
 
-          {/* Start time */}
-          <TouchableOpacity style={styles.input} onPress={openDatePicker} activeOpacity={0.7}>
-            <Text style={form.startTime ? styles.inputText : styles.inputPlaceholder}>
-              {form.startTime ? formatDate(form.startTime) : 'start time'}
-            </Text>
-          </TouchableOpacity>
+          {/* ── the when ─────────────────────────────────────────────── */}
+          <Text style={styles.sectionLabel}>the when</Text>
+          <View style={styles.timeRow}>
+            {quickTimes().map(({ label, value }) => {
+              const selected = form.startTime?.getTime() === value.getTime();
+              return (
+                <TouchableOpacity
+                  key={label}
+                  style={[styles.timeChip, selected && styles.timeChipActive]}
+                  onPress={() => { setField('startTime', value); setPickerMode(null); }}
+                  accessibilityRole="button"
+                  accessibilityLabel={`start ${label}`}
+                >
+                  <Text style={[styles.timeChipText, selected && styles.timeChipTextActive]}>{label}</Text>
+                </TouchableOpacity>
+              );
+            })}
+            <TouchableOpacity
+              style={styles.timeChip}
+              onPress={openDatePicker}
+              accessibilityRole="button"
+              accessibilityLabel="pick a start time"
+            >
+              <Text style={styles.timeChipText}>pick a time</Text>
+            </TouchableOpacity>
+          </View>
+          {form.startTime && (
+            <TouchableOpacity onPress={openDatePicker} accessibilityRole="button" accessibilityLabel="change the start time">
+              <Text style={styles.timeChosen}>starts {formatDate(form.startTime)}</Text>
+            </TouchableOpacity>
+          )}
           {pickerMode !== null && (
             <DateTimePicker
               value={pickerDate}
@@ -375,53 +444,81 @@ export default function CreateScreen({ viewport, onCreated }) {
           )}
           {pickerMode !== null && Platform.OS === 'ios' && (
             <View style={styles.pickerDoneRow}>
-              <TouchableOpacity style={styles.pickerDoneBtn} onPress={confirmIosPicker}>
-                <Text style={styles.pickerDoneText}>Done</Text>
+              <TouchableOpacity
+                style={styles.pickerDoneBtn}
+                onPress={confirmIosPicker}
+                accessibilityRole="button"
+                accessibilityLabel="confirm start time"
+              >
+                <Text style={styles.pickerDoneText}>done</Text>
               </TouchableOpacity>
             </View>
           )}
 
-          <TextInput
-            style={styles.input}
-            placeholder="capacity (optional)"
-            placeholderTextColor="#555"
-            keyboardType="number-pad"
-            value={form.capacity}
-            onChangeText={(v) => setField('capacity', v)}
-          />
+          {/* ── more (optional) ──────────────────────────────────────── */}
+          <TouchableOpacity
+            style={styles.moreToggle}
+            onPress={() => setShowMore((s) => !s)}
+            accessibilityRole="button"
+            accessibilityLabel={showMore ? 'hide capacity and tags' : 'show capacity and tags'}
+          >
+            <Text style={styles.moreToggleText}>{showMore ? '− less' : '+ capacity & tags'}</Text>
+          </TouchableOpacity>
 
-          <TextInput
-            style={styles.input}
-            placeholder={hashtags.length >= 5 ? 'max 5 tags' : 'add tag (e.g. music)'}
-            placeholderTextColor="#555"
-            autoCapitalize="none"
-            autoCorrect={false}
-            returnKeyType="done"
-            value={tagInput}
-            onChangeText={setTagInput}
-            onSubmitEditing={addTag}
-            editable={hashtags.length < 5}
-          />
-          {hashtags.length > 0 && (
-            <View style={styles.chipsRow}>
-              {hashtags.map((tag) => (
-                <View key={tag} style={styles.chip}>
-                  <Text style={styles.chipText}>#{tag}</Text>
-                  <TouchableOpacity onPress={() => removeTag(tag)} hitSlop={8}>
-                    <Text style={styles.chipRemove}>×</Text>
-                  </TouchableOpacity>
+          {showMore && (
+            <>
+              <TextInput
+                style={styles.input}
+                placeholder="capacity (optional)"
+                placeholderTextColor={COLORS.inkSecondary}
+                keyboardType="number-pad"
+                value={form.capacity}
+                onChangeText={(v) => setField('capacity', v)}
+                accessibilityLabel="capacity, optional"
+              />
+
+              <TextInput
+                style={styles.input}
+                placeholder={hashtags.length >= 5 ? 'max 5 tags' : 'add tag (e.g. music)'}
+                placeholderTextColor={COLORS.inkSecondary}
+                autoCapitalize="none"
+                autoCorrect={false}
+                returnKeyType="done"
+                value={tagInput}
+                onChangeText={setTagInput}
+                onSubmitEditing={addTag}
+                editable={hashtags.length < 5}
+                accessibilityLabel="add a tag"
+              />
+              {hashtags.length > 0 && (
+                <View style={styles.chipsRow}>
+                  {hashtags.map((tag) => (
+                    <View key={tag} style={styles.chip}>
+                      <Text style={styles.chipText}>#{tag}</Text>
+                      <TouchableOpacity
+                        onPress={() => removeTag(tag)}
+                        hitSlop={14}
+                        accessibilityRole="button"
+                        accessibilityLabel={`remove tag ${tag}`}
+                      >
+                        <Text style={styles.chipRemove}>×</Text>
+                      </TouchableOpacity>
+                    </View>
+                  ))}
                 </View>
-              ))}
-            </View>
+              )}
+            </>
           )}
 
           <TouchableOpacity
             style={[styles.createBtn, posted && styles.createBtnPosted]}
             onPress={handleSubmit}
             disabled={creating || posted}
+            accessibilityRole="button"
+            accessibilityLabel="post the party"
           >
             {creating
-              ? <ActivityIndicator color="#fff" />
+              ? <ActivityIndicator color={COLORS.amberInk} />
               : <Text style={styles.createBtnText}>{posted ? 'party posted!' : 'post party'}</Text>
             }
           </TouchableOpacity>
@@ -434,7 +531,11 @@ export default function CreateScreen({ viewport, onCreated }) {
 const styles = StyleSheet.create({
   safeContent: { flex: 1 },
   scrollContent: { paddingHorizontal: 24, paddingTop: 16, paddingBottom: 40 },
-  screenTitle: { color: '#fff', fontSize: 28, fontWeight: '800', marginBottom: GAP },
+  screenTitle: { color: COLORS.ink, fontSize: 28, fontWeight: '800', marginBottom: GAP },
+  sectionLabel: {
+    color: COLORS.inkSecondary, fontSize: 13, fontWeight: '600',
+    marginBottom: 8, marginTop: 4,
+  },
   autocompleteContainer: {
     zIndex: 100,
     elevation: 100,
@@ -442,14 +543,16 @@ const styles = StyleSheet.create({
   },
 
   input: {
-    backgroundColor: '#1a1a1a', borderRadius: 10,
+    backgroundColor: COLORS.card, borderRadius: 10,
     padding: 13, fontSize: 15, marginBottom: GAP,
-    borderWidth: 1, borderColor: '#2a2a2a',
+    borderWidth: 1, borderColor: COLORS.border,
     justifyContent: 'center',
-    color: '#fff',
+    color: COLORS.ink,
   },
-  inputText: { color: '#fff', fontSize: 15 },
-  inputPlaceholder: { color: '#555', fontSize: 15 },
+  descriptionInput: {
+    minHeight: 72,
+    textAlignVertical: 'top',
+  },
 
   placesInputContainer: {
     backgroundColor: 'transparent',
@@ -457,28 +560,28 @@ const styles = StyleSheet.create({
     borderBottomWidth: 0,
   },
   placesInput: {
-    backgroundColor: '#1a1a1a',
+    backgroundColor: COLORS.card,
     borderRadius: 10,
     fontSize: 15,
     borderWidth: 1,
-    borderColor: '#2a2a2a',
-    color: '#fff',
+    borderColor: COLORS.border,
+    color: COLORS.ink,
     padding: 13,
   },
   placesList: {
-    backgroundColor: '#1a1a1a',
+    backgroundColor: COLORS.card,
     borderWidth: 1,
-    borderColor: '#2a2a2a',
+    borderColor: COLORS.border,
     borderRadius: 10,
     marginTop: 2,
   },
   placesRow: {
-    backgroundColor: '#1a1a1a',
+    backgroundColor: COLORS.card,
     paddingVertical: 12,
     paddingHorizontal: 13,
   },
-  placesDescription: { color: '#ccc', fontSize: 14 },
-  placesSeparator: { backgroundColor: '#2a2a2a', height: 1 },
+  placesDescription: { color: COLORS.ink, fontSize: 14 },
+  placesSeparator: { backgroundColor: COLORS.border, height: 1 },
 
   imagePicker: {
     height: 120,
@@ -486,8 +589,8 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     marginBottom: GAP,
     borderWidth: 1,
-    borderColor: '#2a2a2a',
-    backgroundColor: '#1a1a1a',
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.card,
   },
   partyImage: {
     width: '100%',
@@ -500,12 +603,12 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   imagePickerIcon: {
-    color: '#555',
+    color: COLORS.inkSecondary,
     fontSize: 32,
     lineHeight: 36,
   },
   imagePickerText: {
-    color: '#555',
+    color: COLORS.inkSecondary,
     fontSize: 14,
   },
 
@@ -515,7 +618,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     marginBottom: GAP,
     borderWidth: 1,
-    borderColor: '#2a2a2a',
+    borderColor: COLORS.border,
     zIndex: 1,
     elevation: 1,
   },
@@ -529,49 +632,78 @@ const styles = StyleSheet.create({
     position: 'absolute',
     width: 20,
     height: 1.5,
-    backgroundColor: '#ffa028',
+    backgroundColor: COLORS.amber,
   },
   crosshairV: {
     position: 'absolute',
     width: 1.5,
     height: 20,
-    backgroundColor: '#ffa028',
+    backgroundColor: COLORS.amber,
   },
   crosshairDot: {
     width: 5,
     height: 5,
     borderRadius: 3,
-    backgroundColor: '#ffa028',
+    backgroundColor: COLORS.amber,
   },
+
+  timeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 10 },
+  timeChip: {
+    minHeight: 44,
+    paddingHorizontal: 14,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.card,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  timeChipActive: {
+    backgroundColor: COLORS.amberTint,
+    borderColor: COLORS.amber,
+  },
+  timeChipText: { color: COLORS.ink, fontSize: 14, fontWeight: '600' },
+  timeChipTextActive: { color: COLORS.amber },
+  timeChosen: { color: COLORS.amber, fontSize: 14, fontWeight: '600', marginBottom: GAP },
 
   pickerDoneRow: {
     alignItems: 'flex-end',
     marginBottom: GAP,
   },
   pickerDoneBtn: {
-    backgroundColor: '#ffa028',
+    backgroundColor: COLORS.amber,
     borderRadius: 10,
-    paddingVertical: 8,
+    minHeight: 44,
     paddingHorizontal: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  pickerDoneText: { color: '#1a0d00', fontWeight: '700', fontSize: 15 },
+  pickerDoneText: { color: COLORS.amberInk, fontWeight: '700', fontSize: 15 },
+
+  moreToggle: {
+    minHeight: 44,
+    justifyContent: 'center',
+    marginBottom: 4,
+  },
+  moreToggleText: { color: COLORS.inkSecondary, fontSize: 14, fontWeight: '600' },
 
   chipsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: GAP },
   chip: {
     flexDirection: 'row', alignItems: 'center', gap: 5,
-    backgroundColor: '#2b1d0a', borderRadius: 20,
+    backgroundColor: COLORS.amberTint, borderRadius: 20,
     paddingVertical: 5, paddingHorizontal: 10,
-    borderWidth: 1, borderColor: '#ffa028',
+    borderWidth: 1, borderColor: COLORS.amber,
   },
-  chipText: { color: '#ffa028', fontSize: 13, fontWeight: '600' },
-  chipRemove: { color: '#ffa028', fontSize: 16, lineHeight: 18 },
+  chipText: { color: COLORS.amber, fontSize: 13, fontWeight: '600' },
+  chipRemove: { color: COLORS.amber, fontSize: 16, lineHeight: 18 },
 
   createBtn: {
-    backgroundColor: '#ffa028', borderRadius: 10,
-    padding: 15, alignItems: 'center',
+    backgroundColor: COLORS.amber, borderRadius: 10,
+    minHeight: 50, alignItems: 'center', justifyContent: 'center',
+    marginTop: 6,
   },
   createBtnPosted: {
-    backgroundColor: '#22c55e',
+    backgroundColor: COLORS.amberPressed,
   },
-  createBtnText: { color: '#1a0d00', fontWeight: '700', fontSize: 16 },
+  createBtnText: { color: COLORS.amberInk, fontWeight: '700', fontSize: 16 },
 });

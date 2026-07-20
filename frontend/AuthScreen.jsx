@@ -6,6 +6,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { auth } from './src/api';
+import { COLORS } from './src/constants/colors';
 
 export default function AuthScreen({ onAuth }) {
   const [mode, setMode] = useState('login'); // 'login' | 'register'
@@ -59,7 +60,7 @@ export default function AuthScreen({ onAuth }) {
           <TextInput
             style={styles.input}
             placeholder="username"
-            placeholderTextColor="#555"
+            placeholderTextColor={COLORS.inkSecondary}
             autoCapitalize="none"
             value={username}
             onChangeText={setUsername}
@@ -68,7 +69,7 @@ export default function AuthScreen({ onAuth }) {
         <TextInput
           style={styles.input}
           placeholder="email"
-          placeholderTextColor="#555"
+          placeholderTextColor={COLORS.inkSecondary}
           autoCapitalize="none"
           keyboardType="email-address"
           textContentType="emailAddress"
@@ -79,7 +80,7 @@ export default function AuthScreen({ onAuth }) {
         <TextInput
           style={styles.input}
           placeholder="password"
-          placeholderTextColor="#555"
+          placeholderTextColor={COLORS.inkSecondary}
           secureTextEntry
           textContentType={mode === 'login' ? 'password' : 'newPassword'}
           autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
@@ -89,18 +90,21 @@ export default function AuthScreen({ onAuth }) {
 
         <TouchableOpacity style={styles.btn} onPress={submit} disabled={loading}>
           {loading ? (
-            <ActivityIndicator color="#fff" />
+            <ActivityIndicator color={COLORS.amberInk} />
           ) : (
-            <Text style={styles.btnText}>{mode === 'login' ? 'Sign in' : 'Create account'}</Text>
+            <Text style={styles.btnText}>{mode === 'login' ? 'sign in' : 'create account'}</Text>
           )}
         </TouchableOpacity>
 
         <TouchableOpacity
           onPress={() => setMode(mode === 'login' ? 'register' : 'login')}
           disabled={loading}
+          style={styles.toggleBtn}
+          accessibilityRole="button"
+          accessibilityLabel={mode === 'login' ? 'switch to sign up' : 'switch to sign in'}
         >
           <Text style={[styles.toggle, loading && styles.toggleDisabled]}>
-            {mode === 'login' ? "Don't have an account? Sign up" : 'Already have an account? Sign in'}
+            {mode === 'login' ? "don't have an account? sign up" : 'already have an account? sign in'}
           </Text>
         </TouchableOpacity>
       </KeyboardAvoidingView>
@@ -109,7 +113,7 @@ export default function AuthScreen({ onAuth }) {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#0a0a0a' },
+  safe: { flex: 1, backgroundColor: COLORS.asphalt },
   container: {
     flex: 1,
     paddingHorizontal: 28,
@@ -118,34 +122,36 @@ const styles = StyleSheet.create({
   logo: {
     fontSize: 42,
     fontWeight: '800',
-    color: '#fff',
+    color: COLORS.ink,
     letterSpacing: -1,
     marginBottom: 6,
   },
   sub: {
     fontSize: 14,
-    color: '#555',
+    color: COLORS.inkSecondary,
     marginBottom: 36,
   },
   input: {
-    backgroundColor: '#1a1a1a',
-    color: '#fff',
+    backgroundColor: COLORS.card,
+    color: COLORS.ink,
     borderRadius: 10,
     padding: 14,
     fontSize: 15,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: '#2a2a2a',
+    borderColor: COLORS.border,
   },
   btn: {
-    backgroundColor: '#ffa028',
+    backgroundColor: COLORS.amber,
     borderRadius: 10,
-    padding: 15,
+    minHeight: 50,
     alignItems: 'center',
+    justifyContent: 'center',
     marginTop: 8,
-    marginBottom: 16,
+    marginBottom: 4,
   },
-  btnText: { color: '#1a0d00', fontWeight: '700', fontSize: 16 },
-  toggle: { color: '#666', textAlign: 'center', fontSize: 14 },
+  btnText: { color: COLORS.amberInk, fontWeight: '700', fontSize: 16 },
+  toggleBtn: { minHeight: 44, justifyContent: 'center' },
+  toggle: { color: COLORS.inkSecondary, textAlign: 'center', fontSize: 14 },
   toggleDisabled: { opacity: 0.4 },
 });

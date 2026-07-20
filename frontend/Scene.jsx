@@ -1,6 +1,8 @@
 import React, { useState, useCallback } from 'react';
-import { View, StyleSheet, Dimensions, Keyboard } from 'react-native';
+import { View, Text, Image, TouchableOpacity, StyleSheet, Dimensions, Keyboard } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { GestureDetector, Gesture } from 'react-native-gesture-handler';
+import { COLORS } from './src/constants/colors';
 import Animated, {
   useSharedValue, useAnimatedStyle, withSpring,
   useAnimatedReaction, runOnJS, ReduceMotion,
@@ -28,6 +30,8 @@ const OVERDRAG = 0.15;
 export default function Scene({ user, onSignOut }) {
   const [viewport, setViewport] = useState(null);
   const [profileRefreshKey, setProfileRefreshKey] = useState(0);
+  const [focusEvent, setFocusEvent] = useState(null);
+  const { bottom: safeBottom } = useSafeAreaInsets();
   // Lazy-mount: only render a page once first visited. Map starts visited.
   const [visited, setVisited] = useState({ create: false, map: true, profile: false });
 
@@ -111,7 +115,8 @@ export default function Scene({ user, onSignOut }) {
           {visited.create && (
             <CreateScreen
               viewport={viewport}
-              onCreated={() => {
+              onCreated={(createdEvent) => {
+                if (createdEvent) setFocusEvent(createdEvent);
                 onNavigate('map');
                 setProfileRefreshKey((k) => k + 1);
               }}
@@ -126,12 +131,42 @@ export default function Scene({ user, onSignOut }) {
         <View style={styles.page}>
           {visited.map && (
             <>
-              <MapScreen onRegionChangeComplete={setViewport} />
+              <MapScreen
+                onRegionChangeComplete={setViewport}
+                currentUserId={user?.id}
+                focusEvent={focusEvent}
+              />
+              {/* The swipe stays; these make it discoverable. Two 44pt targets
+                  in the thumb zone, sitting just above the sheet's bar snap —
+                  the only page indicators the track has. */}
+              <View style={[styles.pageChrome, { bottom: 110 + safeBottom + 14 }]} pointerEvents="box-none">
+                <TouchableOpacity
+                  style={styles.chromeBtn}
+                  onPress={() => onNavigate('create')}
+                  accessibilityRole="button"
+                  accessibilityLabel="post a party"
+                >
+                  <Text style={styles.chromePlus}>+</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.chromeBtn}
+                  onPress={() => onNavigate('profile')}
+                  accessibilityRole="button"
+                  accessibilityLabel="your profile"
+                >
+                  {user?.profile_picture ? (
+                    <Image source={{ uri: user.profile_picture }} style={styles.chromeAvatar} />
+                  ) : (
+                    <Text style={styles.chromeInitial}>{user?.username?.[0]?.toLowerCase() ?? '?'}</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
               <SearchSheet
                 slideX={slideX}
                 screenW={SCREEN_W}
                 viewport={viewport}
                 onNavigate={onNavigate}
+                currentUserId={user?.id}
               />
             </>
           )}
@@ -153,14 +188,14 @@ export default function Scene({ user, onSignOut }) {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#0a0a0a', overflow: 'hidden' },
+  root: { flex: 1, backgroundColor: COLORS.asphalt, overflow: 'hidden' },
   track: {
     flex: 1,
     flexDirection: 'row',
     width: SCREEN_W * 3,
   },
   page: { width: SCREEN_W, flex: 1 },
-  darkPage: { backgroundColor: '#0a0a0a' },
+  darkPage: { backgroundColor: COLORS.asphalt },
   rightEdge: {
     position: 'absolute',
     right: 0,
@@ -175,4 +210,25 @@ const styles = StyleSheet.create({
     bottom: 0,
     width: 28,
   },
+  pageChrome: {
+    position: 'absolute',
+    left: 16,
+    right: 16,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  chromeBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(17,17,17,0.9)',
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  chromePlus: { color: COLORS.amber, fontSize: 24, fontWeight: '600', marginTop: -2 },
+  chromeAvatar: { width: 44, height: 44, borderRadius: 22 },
+  chromeInitial: { color: COLORS.inkSecondary, fontSize: 18, fontWeight: '700' },
 });

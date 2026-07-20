@@ -2,17 +2,24 @@ import React, { useState, useEffect, useRef } from 'react';
 import {
   Modal, View, Text, Image, TouchableOpacity,
   ScrollView, StyleSheet, Platform, ActivityIndicator,
-  Animated, PanResponder,
+  Animated, PanResponder, Alert, Share,
 } from 'react-native';
 import { events as eventsApi } from '../api';
+import { COLORS } from '../constants/colors';
 
-const STATE_COLORS = { live: '#22c55e', upcoming: '#ffa028', past: '#555' };
+const STATE_COLORS = { live: COLORS.liveGreen, upcoming: COLORS.amber, past: COLORS.inkFaint };
+
+// Parties without an explicit end are treated as live for 4 hours after they
+// start — otherwise "live" is unreachable and everything jumps straight to past.
+const DEFAULT_DURATION_MS = 4 * 3600000;
 
 function getState(event) {
   const now = Date.now();
   const start = new Date(event.start_time).getTime();
-  const end = event.end_time ? new Date(event.end_time).getTime() : null;
-  if (end && now >= start && now <= end) return 'live';
+  const end = event.end_time
+    ? new Date(event.end_time).getTime()
+    : start + DEFAULT_DURATION_MS;
+  if (now >= start && now <= end) return 'live';
   if (now < start) return 'upcoming';
   return 'past';
 }
@@ -24,9 +31,10 @@ function isThin(event) {
   return event != null && (event.host_id == null || event.host_picture === undefined);
 }
 
-export default function EventDetailSheet({ event: eventProp, onClose, onRsvp, onHostPress }) {
+export default function EventDetailSheet({ event: eventProp, onClose, onRsvp, onHostPress, currentUserId, onDeleted }) {
   const [full, setFull] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   // Swipe-down to dismiss: follow the finger when a downward drag starts while
   // the content is scrolled to the top, then close past the threshold.
@@ -87,13 +95,55 @@ export default function EventDetailSheet({ event: eventProp, onClose, onRsvp, on
   const spotsLeft = event.capacity != null ? event.capacity - goingCount : null;
   const hasRsvp = event.user_rsvp != null;
   const state = getState(event);
+  const isHost = currentUserId != null && event.host_id === currentUserId;
 
   const date = event.start_time
-    ? new Date(event.start_time).toLocaleDateString('en-US', {
+    ? new Date(event.start_time).toLocaleDateString(undefined, {
         weekday: 'short', month: 'short', day: 'numeric',
         hour: '2-digit', minute: '2-digit',
       })
     : '';
+
+  const handleRsvpPress = () => {
+    if (isFull && !hasRsvp) return;
+    if (hasRsvp) {
+      // Second tap is destructive — never a bare toggle.
+      Alert.alert('leave the list?', "you'll drop off going for this party.", [
+        { text: 'stay', style: 'cancel' },
+        { text: 'leave', style: 'destructive', onPress: () => onRsvp(event.id, 'going') },
+      ]);
+    } else {
+      onRsvp(event.id, 'going');
+    }
+  };
+
+  const handleShare = () => {
+    Share.share({
+      message: `${event.title} — ${date}${event.address ? ` · ${event.address}` : ''} (on scene)`,
+    }).catch(() => {});
+  };
+
+  const handleTakeDown = () => {
+    Alert.alert('take it down?', 'the party comes off the map for everyone. no undo.', [
+      { text: 'keep it up', style: 'cancel' },
+      {
+        text: 'take it down',
+        style: 'destructive',
+        onPress: async () => {
+          setDeleting(true);
+          try {
+            await eventsApi.cancel(event.id);
+            onDeleted?.(event.id);
+            onCloseRef.current();
+          } catch {
+            Alert.alert("couldn't take it down", 'check your connection and try again.');
+          } finally {
+            setDeleting(false);
+          }
+        },
+      },
+    ]);
+  };
 
   return (
     <Modal
@@ -111,13 +161,19 @@ export default function EventDetailSheet({ event: eventProp, onClose, onRsvp, on
         <View style={styles.handle} />
 
         {/* Close */}
-        <TouchableOpacity style={styles.closeBtn} onPress={onClose} hitSlop={12}>
+        <TouchableOpacity
+          style={styles.closeBtn}
+          onPress={onClose}
+          hitSlop={12}
+          accessibilityRole="button"
+          accessibilityLabel="close party details"
+        >
           <Text style={styles.closeBtnText}>✕</Text>
         </TouchableOpacity>
 
         {showLoading ? (
           <View style={styles.loadingBox}>
-            <ActivityIndicator color="#ffa028" />
+            <ActivityIndicator color={COLORS.amber} />
           </View>
         ) : (
           <>
@@ -126,18 +182,35 @@ export default function EventDetailSheet({ event: eventProp, onClose, onRsvp, on
               style={styles.scroll}
               contentContainerStyle={styles.scrollContent}
               showsVerticalScrollIndicator={false}
-              bounces={false}
               onScroll={(e) => { scrollOffsetRef.current = e.nativeEvent.contentOffset.y; }}
               scrollEventThrottle={16}
             >
               {/* Hero image */}
               {event.image_url ? (
-                <Image source={{ uri: event.image_url }} style={styles.hero} />
+                <Image
+                  source={{ uri: event.image_url }}
+                  style={styles.hero}
+                  accessibilityLabel={`${event.title} flyer`}
+                />
               ) : (
                 <View style={styles.heroPlaceholder}>
                   <Text style={styles.heroPlaceholderText}>{event.title?.[0] ?? '?'}</Text>
                 </View>
               )}
+
+              {/* Title first — "what party is this" beats "who's hosting it" */}
+              <View style={styles.titleRow}>
+                <Text style={styles.title}>{event.title}</Text>
+                <View style={[styles.statePill, { borderColor: STATE_COLORS[state] }]}>
+                  <Text style={[styles.statePillText, { color: STATE_COLORS[state] }]}>
+                    {state}
+                  </Text>
+                </View>
+              </View>
+
+              {/* Date + address */}
+              <Text style={styles.meta}>{date}</Text>
+              {event.address ? <Text style={styles.meta}>{event.address}</Text> : null}
 
               {/* Host row — tappable (guarded against a missing host id) */}
               <TouchableOpacity
@@ -145,6 +218,8 @@ export default function EventDetailSheet({ event: eventProp, onClose, onRsvp, on
                 onPress={() => event.host_id != null && onHostPress(event.host_id)}
                 disabled={event.host_id == null}
                 activeOpacity={0.7}
+                accessibilityRole="button"
+                accessibilityLabel={`hosted by ${event.host_username ?? 'unknown'}, view profile`}
               >
                 {event.host_picture ? (
                   <Image source={{ uri: event.host_picture }} style={styles.hostAvatar} />
@@ -161,26 +236,12 @@ export default function EventDetailSheet({ event: eventProp, onClose, onRsvp, on
                 </View>
               </TouchableOpacity>
 
-              {/* Title */}
-              <Text style={styles.title}>{event.title}</Text>
-
-              {/* State pill */}
-              <View style={[styles.statePill, { borderColor: STATE_COLORS[state] }]}>
-                <Text style={[styles.statePillText, { color: STATE_COLORS[state] }]}>
-                  {state.charAt(0).toUpperCase() + state.slice(1)}
-                </Text>
-              </View>
-
-              {/* Date + address */}
-              <Text style={styles.meta}>{date}</Text>
-              {event.address ? <Text style={styles.meta}>{event.address}</Text> : null}
-
               {/* Description */}
               {event.description ? (
                 <Text style={styles.description}>{event.description}</Text>
               ) : null}
 
-              {/* Hashtags */}
+              {/* Hashtags — quiet; the streetlight belongs to the RSVP button */}
               {event.hashtags?.length > 0 && (
                 <View style={styles.tagsRow}>
                   {event.hashtags.map((tag) => (
@@ -195,15 +256,28 @@ export default function EventDetailSheet({ event: eventProp, onClose, onRsvp, on
               <View style={styles.capacityRow}>
                 <Text style={styles.goingText}>{goingCount} going</Text>
                 {isFull
-                  ? <Text style={styles.full}>Full</Text>
+                  ? <Text style={styles.full}>full</Text>
                   : spotsLeft != null && spotsLeft <= 10
                     ? <Text style={styles.low}>{spotsLeft} spot{spotsLeft !== 1 ? 's' : ''} left</Text>
                     : null
                 }
               </View>
+
+              {/* Host controls */}
+              {isHost && (
+                <TouchableOpacity
+                  style={styles.takeDownBtn}
+                  onPress={handleTakeDown}
+                  disabled={deleting}
+                  accessibilityRole="button"
+                  accessibilityLabel="take this party down"
+                >
+                  <Text style={styles.takeDownText}>{deleting ? 'taking it down…' : 'take it down'}</Text>
+                </TouchableOpacity>
+              )}
             </ScrollView>
 
-            {/* Sticky RSVP button */}
+            {/* Sticky footer — RSVP + share */}
             <View style={styles.footer}>
               <TouchableOpacity
                 style={[
@@ -211,13 +285,23 @@ export default function EventDetailSheet({ event: eventProp, onClose, onRsvp, on
                   hasRsvp && styles.rsvpBtnActive,
                   isFull && !hasRsvp && styles.rsvpBtnDisabled,
                 ]}
-                onPress={() => (!isFull || hasRsvp) && onRsvp(event.id, 'going')}
+                onPress={handleRsvpPress}
                 disabled={isFull && !hasRsvp}
                 activeOpacity={0.8}
+                accessibilityRole="button"
+                accessibilityLabel={hasRsvp ? "you're going, tap to leave" : 'rsvp to this party'}
               >
-                <Text style={[styles.rsvpBtnText, isFull && !hasRsvp && styles.rsvpBtnTextDisabled]}>
-                  {isFull && !hasRsvp ? 'Event Full' : hasRsvp ? "RSVP'd ✓" : 'RSVP'}
+                <Text style={[styles.rsvpBtnText, hasRsvp && styles.rsvpBtnTextActive, isFull && !hasRsvp && styles.rsvpBtnTextDisabled]}>
+                  {isFull && !hasRsvp ? 'party full' : hasRsvp ? 'going ✓' : 'RSVP'}
                 </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.shareBtn}
+                onPress={handleShare}
+                accessibilityRole="button"
+                accessibilityLabel="share this party"
+              >
+                <Text style={styles.shareBtnText}>send it</Text>
               </TouchableOpacity>
             </View>
           </>
@@ -228,64 +312,65 @@ export default function EventDetailSheet({ event: eventProp, onClose, onRsvp, on
 }
 
 const styles = StyleSheet.create({
-  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)' },
+  backdrop: { flex: 1, backgroundColor: COLORS.scrim },
   sheet: {
-    backgroundColor: '#0a0a0a',
+    backgroundColor: COLORS.asphalt,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     maxHeight: '90%',
     overflow: 'hidden',
   },
   handle: {
-    width: 40, height: 5, borderRadius: 3, backgroundColor: '#333',
+    width: 40, height: 5, borderRadius: 3, backgroundColor: COLORS.handle,
     alignSelf: 'center', marginVertical: 12,
   },
   closeBtn: {
     position: 'absolute', top: 12, right: 14, zIndex: 10,
     width: 30, height: 30, borderRadius: 15,
-    backgroundColor: 'rgba(0,0,0,0.55)',
+    backgroundColor: COLORS.scrim,
     alignItems: 'center', justifyContent: 'center',
   },
-  closeBtnText: { color: '#ccc', fontSize: 16 },
+  closeBtnText: { color: COLORS.ink, fontSize: 16 },
 
   loadingBox: { paddingVertical: 80, alignItems: 'center', justifyContent: 'center' },
 
   scroll: { flex: 0 },
   scrollContent: { paddingBottom: 8 },
 
-  hero: { width: '100%', aspectRatio: 16 / 9, backgroundColor: '#111' },
+  hero: { width: '100%', aspectRatio: 16 / 9, backgroundColor: COLORS.surface },
   heroPlaceholder: {
     width: '100%', aspectRatio: 16 / 9,
-    backgroundColor: '#1a1a1a', alignItems: 'center', justifyContent: 'center',
+    backgroundColor: COLORS.card, alignItems: 'center', justifyContent: 'center',
   },
-  heroPlaceholderText: { color: '#333', fontSize: 64, fontWeight: '700' },
+  heroPlaceholderText: { color: COLORS.handle, fontSize: 64, fontWeight: '700' },
+
+  titleRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    paddingHorizontal: 16, paddingTop: 16, marginBottom: 8,
+  },
+  title: { color: COLORS.ink, fontSize: 22, fontWeight: '800', flexShrink: 1 },
+  statePill: {
+    borderWidth: 1, borderRadius: 6,
+    paddingHorizontal: 8, paddingVertical: 3,
+  },
+  statePillText: { fontSize: 12, fontWeight: '600' },
+  meta: { color: COLORS.inkSecondary, fontSize: 14, paddingHorizontal: 16, marginBottom: 4 },
 
   hostRow: {
     flexDirection: 'row', alignItems: 'center', gap: 10,
-    paddingHorizontal: 16, paddingTop: 16, paddingBottom: 10,
+    paddingHorizontal: 16, paddingTop: 12, paddingBottom: 4,
   },
-  hostAvatar: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#333' },
+  hostAvatar: { width: 36, height: 36, borderRadius: 18, backgroundColor: COLORS.card },
   hostAvatarPlaceholder: {
-    backgroundColor: '#2b1d0a', borderWidth: 1, borderColor: '#ffa028',
+    backgroundColor: COLORS.card, borderWidth: 1, borderColor: COLORS.border,
     alignItems: 'center', justifyContent: 'center',
   },
-  hostAvatarInitial: { color: '#ffa028', fontSize: 14, fontWeight: '700' },
-  hostLabel: { color: '#555', fontSize: 11 },
-  hostName: { color: '#ffa028', fontSize: 14, fontWeight: '600' },
+  hostAvatarInitial: { color: COLORS.inkSecondary, fontSize: 14, fontWeight: '700' },
+  hostLabel: { color: COLORS.inkSecondary, fontSize: 11 },
+  hostName: { color: COLORS.ink, fontSize: 14, fontWeight: '600' },
 
-  title: {
-    color: '#fff', fontSize: 22, fontWeight: '800',
-    paddingHorizontal: 16, marginBottom: 8,
-  },
-  statePill: {
-    alignSelf: 'flex-start', borderWidth: 1, borderRadius: 6,
-    paddingHorizontal: 8, paddingVertical: 3,
-    marginHorizontal: 16, marginBottom: 10,
-  },
-  statePillText: { fontSize: 12, fontWeight: '600' },
-  meta: { color: '#666', fontSize: 14, paddingHorizontal: 16, marginBottom: 4 },
   description: {
-    color: '#aaa', fontSize: 14, lineHeight: 21,
+    color: COLORS.ink, fontSize: 14, lineHeight: 21,
     paddingHorizontal: 16, marginTop: 12, marginBottom: 4,
   },
   tagsRow: {
@@ -293,29 +378,49 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16, marginTop: 12,
   },
   tag: {
-    backgroundColor: '#1a1a2e', borderRadius: 20,
+    backgroundColor: COLORS.card, borderRadius: 20,
     paddingVertical: 4, paddingHorizontal: 10,
-    borderWidth: 1, borderColor: '#ffa028',
+    borderWidth: 1, borderColor: COLORS.border,
   },
-  tagText: { color: '#ffa028', fontSize: 12, fontWeight: '600' },
+  tagText: { color: COLORS.inkSecondary, fontSize: 12, fontWeight: '600' },
   capacityRow: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
     paddingHorizontal: 16, marginTop: 14, marginBottom: 4,
   },
-  goingText: { color: '#555', fontSize: 13 },
-  full: { color: '#ef4444', fontSize: 12, fontWeight: '600' },
-  low: { color: '#ffa028', fontSize: 12, fontWeight: '600' },
+  goingText: { color: COLORS.inkSecondary, fontSize: 13 },
+  full: { color: COLORS.errorRed, fontSize: 12, fontWeight: '600' },
+  low: { color: COLORS.amber, fontSize: 12, fontWeight: '600' },
+
+  takeDownBtn: {
+    marginHorizontal: 16, marginTop: 16, minHeight: 44,
+    borderRadius: 10, borderWidth: 1, borderColor: COLORS.border,
+    backgroundColor: COLORS.card,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  takeDownText: { color: COLORS.errorRed, fontSize: 14, fontWeight: '600' },
 
   footer: {
+    flexDirection: 'row', gap: 10, alignItems: 'stretch',
     paddingHorizontal: 16, paddingTop: 12, paddingBottom: Platform.OS === 'ios' ? 32 : 16,
-    borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: '#1c1c1e',
+    borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: COLORS.divider,
   },
   rsvpBtn: {
-    backgroundColor: '#ffa028', borderRadius: 12,
-    paddingVertical: 15, alignItems: 'center',
+    flex: 1, backgroundColor: COLORS.amber, borderRadius: 12,
+    minHeight: 50, alignItems: 'center', justifyContent: 'center',
   },
-  rsvpBtnActive: { backgroundColor: '#e08010' },
-  rsvpBtnDisabled: { backgroundColor: '#1a1a1a', borderWidth: 1, borderColor: '#2a2a2a' },
-  rsvpBtnText: { color: '#1a0d00', fontSize: 16, fontWeight: '700' },
-  rsvpBtnTextDisabled: { color: '#444' },
+  rsvpBtnActive: {
+    backgroundColor: COLORS.amberTint,
+    borderWidth: 1, borderColor: COLORS.amber,
+  },
+  rsvpBtnDisabled: { backgroundColor: COLORS.card, borderWidth: 1, borderColor: COLORS.border },
+  rsvpBtnText: { color: COLORS.amberInk, fontSize: 16, fontWeight: '700' },
+  rsvpBtnTextActive: { color: COLORS.amber },
+  rsvpBtnTextDisabled: { color: COLORS.inkFaint },
+  shareBtn: {
+    minHeight: 50, paddingHorizontal: 18,
+    borderRadius: 12, borderWidth: 1, borderColor: COLORS.border,
+    backgroundColor: COLORS.card,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  shareBtnText: { color: COLORS.ink, fontSize: 15, fontWeight: '600' },
 });

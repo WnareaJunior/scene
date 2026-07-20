@@ -10,6 +10,7 @@ import Animated, {
 } from 'react-native-reanimated';
 
 import { events, users } from '../api';
+import { COLORS } from '../constants/colors';
 import EventCard from './EventCard';
 import EventDetailSheet from './EventDetailSheet';
 import { haversineKm } from '../utils/geo';
@@ -36,7 +37,7 @@ const MILES_TO_KM = 1.60934;
 // Radius ladder (miles); steps at or below the current viewport are skipped.
 const WIDEN_LADDER_MILES = [5, 10, 20, MAX_FEED_RADIUS_MILES];
 
-export default function SearchSheet({ slideX, screenW, viewport, onNavigate }) {
+export default function SearchSheet({ slideX, screenW, viewport, onNavigate, currentUserId }) {
   const { top: safeTop, bottom: safeBottom } = useSafeAreaInsets();
   // Measured height of the handle + search header; seeds with the static sum
   // of those styles so the first layout pass is already close.
@@ -313,8 +314,9 @@ export default function SearchSheet({ slideX, screenW, viewport, onNavigate }) {
           <View style={styles.searchRow}>
             <TextInput
               style={styles.searchInput}
-              placeholder="search nearby… or @username"
-              placeholderTextColor="#555"
+              placeholder="search tags… or @username"
+              placeholderTextColor={COLORS.inkSecondary}
+              accessibilityLabel="search parties by tag or people by username"
               returnKeyType="search"
               value={query}
               onChangeText={setQuery}
@@ -387,6 +389,10 @@ export default function SearchSheet({ slideX, screenW, viewport, onNavigate }) {
 
       <EventDetailSheet
         event={selectedEvent}
+        currentUserId={currentUserId}
+        onDeleted={(id) => {
+          setResults((rs) => rs.filter((ev) => ev.id !== id));
+        }}
         onClose={() => setSelectedEvent(null)}
         onRsvp={(eventId, status) => {
           handleRsvp(eventId, status);
@@ -416,33 +422,33 @@ const styles = StyleSheet.create({
     top: 0,
     left: 0, right: 0,
     height: SCREEN_H * 1.2,
-    backgroundColor: '#111',
+    backgroundColor: COLORS.surface,
     borderTopLeftRadius: 20, borderTopRightRadius: 20,
     flexDirection: 'column',
   },
   topZone: {},
   handle: {
-    width: 40, height: 5, backgroundColor: '#555',
+    width: 40, height: 5, backgroundColor: COLORS.handle,
     borderRadius: 3, alignSelf: 'center', marginVertical: 14,
   },
   searchRow: { marginHorizontal: 16, marginBottom: 12 },
   searchInput: {
-    height: 44, backgroundColor: '#1e1e1e',
+    height: 44, backgroundColor: COLORS.card,
     borderRadius: 12, paddingHorizontal: 16,
-    color: '#fff', fontSize: 15,
+    color: COLORS.ink, fontSize: 15,
   },
   bottomZone: {},
   spinner: { marginTop: 32 },
-  empty: { color: '#444', textAlign: 'center', marginTop: 40, fontSize: 15 },
+  empty: { color: COLORS.inkSecondary, textAlign: 'center', marginTop: 40, fontSize: 15 },
   list: { flex: 1 },
   listContent: { paddingHorizontal: 16, paddingTop: 8 },
   userCard: {
-    backgroundColor: '#1a1a1a', borderRadius: 12,
+    backgroundColor: COLORS.card, borderRadius: 12,
     padding: 14, marginBottom: 10,
-    borderWidth: 1, borderColor: '#2a2a2a',
+    borderWidth: 1, borderColor: COLORS.border,
   },
-  userName: { color: '#fff', fontSize: 16, fontWeight: '600', marginBottom: 4 },
-  userBio: { color: '#888', fontSize: 13, marginBottom: 4 },
-  userMeta: { color: '#555', fontSize: 12 },
-  errorText: { color: '#e05050', textAlign: 'center', marginTop: 20, fontSize: 14 },
+  userName: { color: COLORS.ink, fontSize: 16, fontWeight: '600', marginBottom: 4 },
+  userBio: { color: COLORS.inkSecondary, fontSize: 13, marginBottom: 4 },
+  userMeta: { color: COLORS.inkSecondary, fontSize: 12 },
+  errorText: { color: COLORS.errorRed, textAlign: 'center', marginTop: 20, fontSize: 14 },
 });

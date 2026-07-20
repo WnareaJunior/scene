@@ -8,14 +8,15 @@ import {
   StatusBar,
   Alert,
   ActivityIndicator,
-  Modal,
 } from 'react-native';
 import { FlatList } from 'react-native-gesture-handler';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 
 import { users, auth } from '../api';
+import { COLORS as PALETTE } from '../constants/colors';
 import UserProfileSheet from '../components/UserProfileSheet';
+import BottomSheet from '../components/BottomSheet';
 
 // ============================================================================
 // Helpers
@@ -29,8 +30,9 @@ const formatCount = (n) => {
 function getEventState(event) {
   const now = Date.now();
   const start = new Date(event.start_time).getTime();
-  const end = event.end_time ? new Date(event.end_time).getTime() : null;
-  if (end && now >= start && now <= end) return 'live';
+  // No explicit end → live for 4h after start (matches EventDetailSheet).
+  const end = event.end_time ? new Date(event.end_time).getTime() : start + 4 * 3600000;
+  if (now >= start && now <= end) return 'live';
   if (now < start) return 'upcoming';
   return 'past';
 }
@@ -66,14 +68,26 @@ const ProfileHeader = ({ profileData, onAvatarPress, onFollowingPress, onFollowe
         <Text style={styles.bio}>{profileData?.email}</Text>
       )}
       <View style={styles.statsRow}>
-        <TouchableOpacity onPress={onFollowingPress} activeOpacity={0.7}>
+        <TouchableOpacity
+          onPress={onFollowingPress}
+          activeOpacity={0.7}
+          style={styles.statTap}
+          accessibilityRole="button"
+          accessibilityLabel={`${formatCount(profileData?.following_count)} following, view list`}
+        >
           <Text style={styles.statText}>
-            <Text style={styles.statNumber}>{formatCount(profileData?.following_count)}</Text> Following
+            <Text style={styles.statNumber}>{formatCount(profileData?.following_count)}</Text> following
           </Text>
         </TouchableOpacity>
-        <TouchableOpacity onPress={onFollowersPress} activeOpacity={0.7}>
+        <TouchableOpacity
+          onPress={onFollowersPress}
+          activeOpacity={0.7}
+          style={styles.statTap}
+          accessibilityRole="button"
+          accessibilityLabel={`${formatCount(profileData?.followers_count)} followers, view list`}
+        >
           <Text style={styles.statText}>
-            <Text style={styles.statNumber}>{formatCount(profileData?.followers_count)}</Text> Followers
+            <Text style={styles.statNumber}>{formatCount(profileData?.followers_count)}</Text> followers
           </Text>
         </TouchableOpacity>
       </View>
@@ -81,44 +95,34 @@ const ProfileHeader = ({ profileData, onAvatarPress, onFollowingPress, onFollowe
   </View>
 );
 
+// Border-only pills per the design system — a solid white badge was the
+// brightest thing on the screen, a second streetlight.
 const StatusBadge = ({ status }) => {
   if (!status) return null;
   const isHosting = status === 'hosting';
   return (
     <View style={[styles.badge, isHosting ? styles.badgeHosting : styles.badgeGoing]}>
       <Text style={[styles.badgeText, isHosting ? styles.badgeTextHosting : styles.badgeTextGoing]}>
-        {isHosting ? 'Hosting' : 'Going'}
+        {isHosting ? 'hosting' : 'going'}
       </Text>
     </View>
   );
 };
 
-const STATE_COLORS = { live: '#22c55e', upcoming: '#ffa028', past: '#555' };
-const STATE_LABELS = { live: 'Live', upcoming: 'Upcoming', past: 'Past' };
+const STATE_COLORS = { live: PALETTE.liveGreen, upcoming: PALETTE.amber, past: PALETTE.inkFaint };
 
 const ProfileEventCard = ({ event, profileData }) => {
   const state = getEventState(event);
   const status = event.source === 'hosting' ? 'hosting' : 'going';
-  const formattedDate = new Date(event.start_time).toLocaleDateString('en-US', {
+  const formattedDate = new Date(event.start_time).toLocaleDateString(undefined, {
     month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
   });
 
   return (
     <View style={styles.eventCard}>
-      {/* Host row */}
+      {/* Your own profile doesn't need your avatar on every card — just the
+          relationship badge. */}
       <View style={styles.hostRow}>
-        <View style={styles.hostInfo}>
-          {profileData?.profile_picture ? (
-            <Image source={{ uri: profileData.profile_picture }} style={styles.hostAvatar} />
-          ) : (
-            <View style={[styles.hostAvatar, styles.hostAvatarPlaceholder]}>
-              <Text style={styles.hostAvatarInitial}>
-                {profileData?.username?.[0]?.toUpperCase() ?? '?'}
-              </Text>
-            </View>
-          )}
-          <Text style={styles.hostName}>{profileData?.username}</Text>
-        </View>
         <StatusBadge status={status} />
       </View>
 
@@ -139,7 +143,7 @@ const ProfileEventCard = ({ event, profileData }) => {
           </Text>
           <View style={[styles.statePill, { borderColor: STATE_COLORS[state] }]}>
             <Text style={[styles.statePillText, { color: STATE_COLORS[state] }]}>
-              {STATE_LABELS[state]}
+              {state}
             </Text>
           </View>
         </View>
@@ -237,10 +241,21 @@ if (updated?.id) setProfileData((prev) => ({ ...prev, profile_picture: updated.p
     }
   }, []);
 
-  const handleSignOut = useCallback(async () => {
-    // auth.logout() calls the server revoke endpoint AND clears tokens locally.
-    await auth.logout();
-    onSignOut();
+  const handleSignOut = useCallback(() => {
+    // Guarded: the button sits in prime position under the header, and an
+    // exploratory tap shouldn't log anyone out.
+    Alert.alert('sign out?', "you'll need your password to get back in.", [
+      { text: 'stay', style: 'cancel' },
+      {
+        text: 'sign out',
+        style: 'destructive',
+        onPress: async () => {
+          // auth.logout() calls the server revoke endpoint AND clears tokens locally.
+          await auth.logout();
+          onSignOut();
+        },
+      },
+    ]);
   }, [onSignOut]);
 
   // Stable renderItem — avoids re-creating the function on every profileData change
@@ -263,8 +278,13 @@ if (updated?.id) setProfileData((prev) => ({ ...prev, profile_picture: updated.p
         onFollowingPress={() => openList('following')}
         onFollowersPress={() => openList('followers')}
       />
-      <TouchableOpacity style={styles.signOutBtn} onPress={handleSignOut}>
-        <Text style={styles.signOutText}>Sign out</Text>
+      <TouchableOpacity
+        style={styles.signOutBtn}
+        onPress={handleSignOut}
+        accessibilityRole="button"
+        accessibilityLabel="sign out"
+      >
+        <Text style={styles.signOutText}>sign out</Text>
       </TouchableOpacity>
       <View style={styles.divider} />
     </>
@@ -272,7 +292,7 @@ if (updated?.id) setProfileData((prev) => ({ ...prev, profile_picture: updated.p
 
   function FeedEmpty() {
     if (feedLoading) {
-      return <ActivityIndicator color="#ffa028" style={{ marginTop: 32 }} />;
+      return <ActivityIndicator color={PALETTE.amber} style={{ marginTop: 32 }} />;
     }
     if (feedError) {
       return <Text style={styles.feedError}>{feedError}</Text>;
@@ -314,25 +334,23 @@ if (updated?.id) setProfileData((prev) => ({ ...prev, profile_picture: updated.p
 // ============================================================================
 function FollowListSheet({ visible, type, data, loading, onClose, onUserPress }) {
   return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="slide"
-      onRequestClose={onClose}
-    >
-      <TouchableOpacity style={sheetStyles.backdrop} activeOpacity={1} onPress={onClose} />
-      <View style={sheetStyles.sheet}>
-        <View style={sheetStyles.handle} />
+    <BottomSheet visible={visible} onClose={onClose} maxHeight="75%">
+      <View style={sheetStyles.body}>
         <View style={sheetStyles.header}>
           <Text style={sheetStyles.title}>
-            {type === 'followers' ? 'Followers' : 'Following'}
+            {type === 'followers' ? 'followers' : 'following'}
           </Text>
-          <TouchableOpacity onPress={onClose} hitSlop={12}>
+          <TouchableOpacity
+            onPress={onClose}
+            hitSlop={12}
+            accessibilityRole="button"
+            accessibilityLabel="close list"
+          >
             <Text style={sheetStyles.closeBtn}>✕</Text>
           </TouchableOpacity>
         </View>
         {loading ? (
-          <ActivityIndicator color="#ffa028" style={{ marginTop: 32 }} />
+          <ActivityIndicator color={PALETTE.amber} style={{ marginTop: 32, marginBottom: 32 }} />
         ) : (
           <FlatList
             data={data}
@@ -342,6 +360,8 @@ function FollowListSheet({ visible, type, data, loading, onClose, onUserPress })
                 style={sheetStyles.userRow}
                 onPress={() => onUserPress(item.id)}
                 activeOpacity={0.7}
+                accessibilityRole="button"
+                accessibilityLabel={`view ${item.username}'s profile`}
               >
                 {item.profile_picture ? (
                   <Image source={{ uri: item.profile_picture }} style={sheetStyles.avatar} />
@@ -366,7 +386,7 @@ function FollowListSheet({ visible, type, data, loading, onClose, onUserPress })
           />
         )}
       </View>
-    </Modal>
+    </BottomSheet>
   );
 }
 
@@ -374,12 +394,10 @@ function FollowListSheet({ visible, type, data, loading, onClose, onUserPress })
 // Styles
 // ============================================================================
 const COLORS = {
-  bg: '#000',
-  text: '#fff',
-  textMuted: '#8e8e93',
-  divider: '#1c1c1e',
-  badgeGoing: '#2c2c2e',
-  badgeHosting: '#fff',
+  bg: PALETTE.void,
+  text: PALETTE.ink,
+  textMuted: PALETTE.inkSecondary,
+  divider: PALETTE.divider,
 };
 
 const styles = StyleSheet.create({
@@ -397,19 +415,19 @@ const styles = StyleSheet.create({
     width: 72,
     height: 72,
     borderRadius: 36,
-    backgroundColor: '#333',
+    backgroundColor: PALETTE.card,
   },
   avatarPlaceholder: {
     width: 72,
     height: 72,
     borderRadius: 36,
-    backgroundColor: '#2b1d0a',
+    backgroundColor: PALETTE.amberTint,
     borderWidth: 2,
-    borderColor: '#ffa028',
+    borderColor: PALETTE.amber,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  avatarInitial: { color: '#ffa028', fontSize: 28, fontWeight: '700' },
+  avatarInitial: { color: PALETTE.amber, fontSize: 28, fontWeight: '700' },
   avatarEdit: {
     position: 'absolute',
     bottom: 0,
@@ -417,11 +435,11 @@ const styles = StyleSheet.create({
     width: 22,
     height: 22,
     borderRadius: 11,
-    backgroundColor: '#ffa028',
+    backgroundColor: PALETTE.amber,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  avatarEditText: { color: '#1a0d00', fontSize: 14, fontWeight: '700', lineHeight: 18 },
+  avatarEditText: { color: PALETTE.amberInk, fontSize: 14, fontWeight: '700', lineHeight: 18 },
   headerInfo: {
     flex: 1,
     marginLeft: 14,
@@ -441,7 +459,10 @@ const styles = StyleSheet.create({
   statsRow: {
     flexDirection: 'row',
     gap: 20,
-    marginTop: 4,
+  },
+  statTap: {
+    minHeight: 44,
+    justifyContent: 'center',
   },
   statText: {
     color: COLORS.textMuted,
@@ -456,14 +477,15 @@ const styles = StyleSheet.create({
   signOutBtn: {
     marginHorizontal: 16,
     marginBottom: 16,
-    backgroundColor: '#1a1a1a',
+    backgroundColor: PALETTE.card,
     borderRadius: 12,
-    padding: 14,
+    minHeight: 48,
     alignItems: 'center',
+    justifyContent: 'center',
     borderWidth: 1,
-    borderColor: '#2a2a2a',
+    borderColor: PALETTE.border,
   },
-  signOutText: { color: '#ef4444', fontWeight: '600' },
+  signOutText: { color: PALETTE.errorRed, fontWeight: '600' },
 
   // Divider
   divider: {
@@ -474,12 +496,12 @@ const styles = StyleSheet.create({
 
   // Empty / error state
   feedEmpty: {
-    color: '#444',
+    color: PALETTE.inkSecondary,
     textAlign: 'center',
     marginTop: 32,
   },
   feedError: {
-    color: '#e05050',
+    color: PALETTE.errorRed,
     textAlign: 'center',
     marginTop: 32,
     paddingHorizontal: 24,
@@ -489,46 +511,23 @@ const styles = StyleSheet.create({
   eventCard: { paddingHorizontal: 16 },
   hostRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    justifyContent: 'flex-end',
     alignItems: 'center',
     marginBottom: 12,
   },
-  hostInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-  },
-  hostAvatar: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#333',
-    marginRight: 10,
-  },
-  hostAvatarPlaceholder: {
-    backgroundColor: '#2b1d0a',
-    borderWidth: 1,
-    borderColor: '#ffa028',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  hostAvatarInitial: { color: '#ffa028', fontSize: 13, fontWeight: '700' },
-  hostName: {
-    color: COLORS.text,
-    fontSize: 15,
-    fontWeight: '600',
-  },
 
-  // Status badges
+  // Status badges — border-only pills, per the state-pill spec
   badge: {
     paddingHorizontal: 14,
     paddingVertical: 6,
     borderRadius: 6,
+    borderWidth: 1,
+    backgroundColor: 'transparent',
   },
-  badgeHosting: { backgroundColor: COLORS.badgeHosting },
-  badgeGoing: { backgroundColor: COLORS.badgeGoing },
+  badgeHosting: { borderColor: PALETTE.amber },
+  badgeGoing: { borderColor: PALETTE.border },
   badgeText: { fontSize: 13, fontWeight: '600' },
-  badgeTextHosting: { color: '#000' },
+  badgeTextHosting: { color: PALETTE.amber },
   badgeTextGoing: { color: COLORS.text },
 
   // Event image + details
@@ -536,18 +535,18 @@ const styles = StyleSheet.create({
     width: '100%',
     aspectRatio: 16 / 10,
     borderRadius: 12,
-    backgroundColor: '#222',
+    backgroundColor: PALETTE.card,
   },
   eventImagePlaceholder: {
     width: '100%',
     aspectRatio: 16 / 10,
     borderRadius: 12,
-    backgroundColor: '#1c1c1e',
+    backgroundColor: PALETTE.divider,
     alignItems: 'center',
     justifyContent: 'center',
   },
   eventImagePlaceholderText: {
-    color: '#555',
+    color: PALETTE.inkFaint,
     fontSize: 40,
     fontWeight: '700',
   },
@@ -574,23 +573,8 @@ const styles = StyleSheet.create({
 });
 
 const sheetStyles = StyleSheet.create({
-  backdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-  },
-  sheet: {
-    backgroundColor: '#111',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    maxHeight: '75%',
+  body: {
     paddingHorizontal: 16,
-    paddingBottom: 0,
-  },
-  handle: {
-    width: 40, height: 5, borderRadius: 3,
-    backgroundColor: '#444',
-    alignSelf: 'center',
-    marginVertical: 12,
   },
   header: {
     flexDirection: 'row',
@@ -598,28 +582,28 @@ const sheetStyles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 16,
   },
-  title: { color: '#fff', fontSize: 17, fontWeight: '700' },
-  closeBtn: { color: '#666', fontSize: 18 },
+  title: { color: PALETTE.ink, fontSize: 17, fontWeight: '700' },
+  closeBtn: { color: PALETTE.inkSecondary, fontSize: 18 },
   userRow: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 10,
     gap: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#1c1c1e',
+    borderBottomColor: PALETTE.divider,
   },
   avatar: {
-    width: 40, height: 40, borderRadius: 20, backgroundColor: '#333',
+    width: 40, height: 40, borderRadius: 20, backgroundColor: PALETTE.card,
   },
   avatarPlaceholder: {
-    backgroundColor: '#2b1d0a',
+    backgroundColor: PALETTE.amberTint,
     borderWidth: 1,
-    borderColor: '#ffa028',
+    borderColor: PALETTE.amber,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  avatarInitial: { color: '#ffa028', fontSize: 16, fontWeight: '700' },
-  username: { color: '#fff', fontSize: 15, fontWeight: '600' },
-  meta: { color: '#666', fontSize: 12, marginTop: 2 },
-  empty: { color: '#444', textAlign: 'center', marginTop: 32 },
+  avatarInitial: { color: PALETTE.amber, fontSize: 16, fontWeight: '700' },
+  username: { color: PALETTE.ink, fontSize: 15, fontWeight: '600' },
+  meta: { color: PALETTE.inkSecondary, fontSize: 12, marginTop: 2 },
+  empty: { color: PALETTE.inkSecondary, textAlign: 'center', marginTop: 32, marginBottom: 32 },
 });
