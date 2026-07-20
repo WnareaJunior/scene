@@ -123,6 +123,18 @@ export default function EventDetailSheet({ event: eventProp, onClose, onRsvp, on
     }).catch(() => {});
   };
 
+  const handleReport = () => {
+    const send = (reason) => {
+      eventsApi.report(event.id, reason).catch(() => {});
+      Alert.alert('got it', "thanks — we'll take a look.");
+    };
+    Alert.alert('report this party?', "tell us what's wrong.", [
+      { text: 'nevermind', style: 'cancel' },
+      { text: "it's spam or fake", onPress: () => send('spam or fake') },
+      { text: "it's offensive or unsafe", onPress: () => send('offensive or unsafe') },
+    ]);
+  };
+
   const handleTakeDown = () => {
     Alert.alert('take it down?', 'the party comes off the map for everyone. no undo.', [
       { text: 'keep it up', style: 'cancel' },
@@ -263,8 +275,8 @@ export default function EventDetailSheet({ event: eventProp, onClose, onRsvp, on
                 }
               </View>
 
-              {/* Host controls */}
-              {isHost && (
+              {/* Host controls / guest report */}
+              {isHost ? (
                 <TouchableOpacity
                   style={styles.takeDownBtn}
                   onPress={handleTakeDown}
@@ -273,6 +285,15 @@ export default function EventDetailSheet({ event: eventProp, onClose, onRsvp, on
                   accessibilityLabel="take this party down"
                 >
                   <Text style={styles.takeDownText}>{deleting ? 'taking it down…' : 'take it down'}</Text>
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity
+                  style={styles.reportBtn}
+                  onPress={handleReport}
+                  accessibilityRole="button"
+                  accessibilityLabel="report this party"
+                >
+                  <Text style={styles.reportText}>report this party</Text>
                 </TouchableOpacity>
               )}
             </ScrollView>
@@ -398,6 +419,11 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
   },
   takeDownText: { color: COLORS.errorRed, fontSize: 14, fontWeight: '600' },
+  reportBtn: {
+    marginTop: 12, minHeight: 44,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  reportText: { color: COLORS.inkSecondary, fontSize: 13, fontWeight: '600' },
 
   footer: {
     flexDirection: 'row', gap: 10, alignItems: 'stretch',
