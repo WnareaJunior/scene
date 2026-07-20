@@ -198,7 +198,13 @@ router.get('/', requireAuth, async (req, res, next) => {
     }
 
     const params = [req.user.sub];
-    const conditions = [`e.status = 'active'`, `e.is_private = false`, `e.host_id != $1`];
+    const conditions = [
+      `e.status = 'active'`,
+      `e.is_private = false`,
+      `e.host_id != $1`,
+      // Blocking hides the blocked host's parties from the blocker everywhere.
+      `NOT EXISTS (SELECT 1 FROM blocks WHERE blocker_id = $1 AND blocked_id = e.host_id)`,
+    ];
 
     if (swLat && swLng && neLat && neLng) {
       const swLatF = parseFloat(swLat), swLngF = parseFloat(swLng);
@@ -369,6 +375,26 @@ router.patch('/:eventId', requireAuth, async (req, res, next) => {
       [title, description, address, startTime, endTime, capacity, hashtags, isPrivate, showAttendees, imageUrl ?? null, req.params.eventId]
     );
     res.json(rows[0]);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /events/:eventId/report
+router.post('/:eventId/report', requireAuth, async (req, res, next) => {
+  try {
+    const reason = String(req.body?.reason || '').trim().slice(0, 500) || null;
+    const { rows } = await db.query(
+      `SELECT id, host_id FROM events WHERE id = $1`, [req.params.eventId]
+    );
+    if (!rows.length) return res.status(404).json({ error: 'Event not found' });
+
+    await db.query(
+      `INSERT INTO reports (reporter_id, event_id, reported_user_id, reason)
+       VALUES ($1, $2, $3, $4)`,
+      [req.user.sub, req.params.eventId, rows[0].host_id, reason]
+    );
+    res.status(201).json({ ok: true });
   } catch (err) {
     next(err);
   }

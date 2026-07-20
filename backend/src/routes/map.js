@@ -16,12 +16,12 @@ router.get('/events', requireAuth, async (req, res, next) => {
       return res.status(400).json({ error: 'swLat, swLng, neLat, neLng must be finite numbers' });
     }
 
-    const params = [swLngF, swLatF, neLngF, neLatF];
+    const params = [swLngF, swLatF, neLngF, neLatF, req.user.sub];
     let hashtagFilter = '';
     if (hashtags) {
       const tags = hashtags.split(',').map(t => t.trim());
       params.push(tags);
-      hashtagFilter = `AND hashtags && $5`;
+      hashtagFilter = `AND hashtags && $6`;
     }
 
     const { rows } = await db.query(
@@ -35,6 +35,7 @@ router.get('/events', requireAuth, async (req, res, next) => {
          -- keep live parties on the map: a party without an end time counts as
          -- live for 4 hours after it starts (matches the client's getState)
          AND COALESCE(e.end_time, e.start_time + interval '4 hours') > now()
+         AND NOT EXISTS (SELECT 1 FROM blocks WHERE blocker_id = $5 AND blocked_id = e.host_id)
          AND ST_Within(e.location::geometry, ST_MakeEnvelope($1, $2, $3, $4, 4326))
          ${hashtagFilter}
        GROUP BY e.id

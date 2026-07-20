@@ -184,6 +184,7 @@ router.get('/search', requireAuth, async (req, res, next) => {
        FROM users
        WHERE id != $1
          AND (username ILIKE $2 ESCAPE '\\' OR display_name ILIKE $2 ESCAPE '\\')
+         AND NOT EXISTS (SELECT 1 FROM blocks WHERE blocker_id = $1 AND blocked_id = users.id)
        ORDER BY username ASC
        LIMIT $3 OFFSET $4`,
       [req.user.sub, pattern, limit, offset]
@@ -236,7 +237,8 @@ router.get('/:userId', requireAuth, async (req, res, next) => {
       `SELECT id, username, bio, gender, interests, profile_picture, created_at,
               (SELECT count(*) FROM follows WHERE followed_id = users.id) AS followers_count,
               (SELECT count(*) FROM follows WHERE follower_id = users.id) AS following_count,
-              EXISTS(SELECT 1 FROM follows WHERE follower_id = $2 AND followed_id = users.id) AS is_following
+              EXISTS(SELECT 1 FROM follows WHERE follower_id = $2 AND followed_id = users.id) AS is_following,
+              EXISTS(SELECT 1 FROM blocks WHERE blocker_id = $2 AND blocked_id = users.id) AS is_blocked
        FROM users WHERE id = $1`,
       [req.params.userId, req.user.sub]
     );
@@ -271,6 +273,61 @@ router.delete('/:userId/follow', requireAuth, async (req, res, next) => {
       [req.user.sub, req.params.userId]
     );
     res.status(204).end();
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /users/:userId/block
+router.post('/:userId/block', requireAuth, async (req, res, next) => {
+  try {
+    if (req.params.userId === req.user.sub) {
+      return res.status(400).json({ error: 'Cannot block yourself' });
+    }
+    await db.query(
+      `INSERT INTO blocks (blocker_id, blocked_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+      [req.user.sub, req.params.userId]
+    );
+    // Blocking also severs the follow relationship both ways.
+    await db.query(
+      `DELETE FROM follows
+       WHERE (follower_id = $1 AND followed_id = $2) OR (follower_id = $2 AND followed_id = $1)`,
+      [req.user.sub, req.params.userId]
+    );
+    res.status(204).end();
+  } catch (err) {
+    next(err);
+  }
+});
+
+// DELETE /users/:userId/block
+router.delete('/:userId/block', requireAuth, async (req, res, next) => {
+  try {
+    await db.query(
+      `DELETE FROM blocks WHERE blocker_id = $1 AND blocked_id = $2`,
+      [req.user.sub, req.params.userId]
+    );
+    res.status(204).end();
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /users/:userId/report
+router.post('/:userId/report', requireAuth, async (req, res, next) => {
+  try {
+    if (req.params.userId === req.user.sub) {
+      return res.status(400).json({ error: 'Cannot report yourself' });
+    }
+    const reason = String(req.body?.reason || '').trim().slice(0, 500) || null;
+    const { rows } = await db.query(`SELECT id FROM users WHERE id = $1`, [req.params.userId]);
+    if (!rows.length) return res.status(404).json({ error: 'User not found' });
+
+    await db.query(
+      `INSERT INTO reports (reporter_id, reported_user_id, reason) VALUES ($1, $2, $3)`,
+      [req.user.sub, req.params.userId, reason]
+    );
+    res.status(201).json({ ok: true });
   } catch (err) {
     next(err);
   }

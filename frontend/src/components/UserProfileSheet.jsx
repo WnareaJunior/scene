@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, Image, TouchableOpacity,
-  StyleSheet, ActivityIndicator, FlatList,
+  StyleSheet, ActivityIndicator, FlatList, Alert,
 } from 'react-native';
 import { users } from '../api';
 import { COLORS } from '../constants/colors';
@@ -61,6 +61,7 @@ export default function UserProfileSheet({ userId, onClose }) {
   const [loading, setLoading] = useState(false);
   const [following, setFollowing] = useState(false);
   const [followLoading, setFollowLoading] = useState(false);
+  const [blocked, setBlocked] = useState(false);
 
   useEffect(() => {
     if (!userId) { setProfile(null); setEvents([]); return; }
@@ -73,6 +74,7 @@ export default function UserProfileSheet({ userId, onClose }) {
         if (cancelled) return;
         setProfile(prof);
         setFollowing(prof?.is_following ?? false);
+        setBlocked(prof?.is_blocked ?? false);
         setEvents(Array.isArray(evts) ? evts : []);
       })
       .catch(() => {})
@@ -102,6 +104,35 @@ export default function UserProfileSheet({ userId, onClose }) {
       setFollowLoading(false);
     }
   }, [following, profile, userId]);
+
+  const handleBlock = useCallback(() => {
+    if (blocked) {
+      users.unblock(userId).then(() => setBlocked(false)).catch(() => {});
+      return;
+    }
+    Alert.alert(`block @${profile?.username}?`, 'their parties disappear from your map and feed. they wont know.', [
+      { text: 'nevermind', style: 'cancel' },
+      {
+        text: 'block',
+        style: 'destructive',
+        onPress: () => {
+          users.block(userId).then(() => { setBlocked(true); setFollowing(false); }).catch(() => {});
+        },
+      },
+    ]);
+  }, [blocked, userId, profile?.username]);
+
+  const handleReport = useCallback(() => {
+    const send = (reason) => {
+      users.report(userId, reason).catch(() => {});
+      Alert.alert('got it', "thanks — we'll take a look.");
+    };
+    Alert.alert(`report @${profile?.username}?`, "tell us what's wrong.", [
+      { text: 'nevermind', style: 'cancel' },
+      { text: 'fake or spam account', onPress: () => send('fake or spam account') },
+      { text: 'offensive or unsafe', onPress: () => send('offensive or unsafe') },
+    ]);
+  }, [userId, profile?.username]);
 
   const ListHeader = useCallback(() => (
     <View style={styles.header}>
@@ -134,21 +165,41 @@ export default function UserProfileSheet({ userId, onClose }) {
             <Text style={styles.statNumber}>{formatCount(profile?.followers_count)}</Text> followers
           </Text>
         </View>
-        <TouchableOpacity
-          style={[styles.followBtn, following && styles.followBtnActive]}
-          onPress={toggleFollow}
-          disabled={followLoading}
-          activeOpacity={0.8}
-          accessibilityRole="button"
-          accessibilityLabel={following ? `unfollow ${profile?.username}` : `follow ${profile?.username}`}
-        >
-          <Text style={[styles.followBtnText, following && styles.followBtnTextActive]}>
-            {following ? 'following' : 'follow'}
-          </Text>
-        </TouchableOpacity>
+        <View style={styles.actionRow}>
+          {!blocked && (
+            <TouchableOpacity
+              style={[styles.followBtn, following && styles.followBtnActive]}
+              onPress={toggleFollow}
+              disabled={followLoading}
+              activeOpacity={0.8}
+              accessibilityRole="button"
+              accessibilityLabel={following ? `unfollow ${profile?.username}` : `follow ${profile?.username}`}
+            >
+              <Text style={[styles.followBtnText, following && styles.followBtnTextActive]}>
+                {following ? 'following' : 'follow'}
+              </Text>
+            </TouchableOpacity>
+          )}
+          <TouchableOpacity
+            style={styles.quietBtn}
+            onPress={handleBlock}
+            accessibilityRole="button"
+            accessibilityLabel={blocked ? `unblock ${profile?.username}` : `block ${profile?.username}`}
+          >
+            <Text style={styles.quietBtnText}>{blocked ? 'unblock' : 'block'}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.quietBtn}
+            onPress={handleReport}
+            accessibilityRole="button"
+            accessibilityLabel={`report ${profile?.username}`}
+          >
+            <Text style={styles.quietBtnText}>report</Text>
+          </TouchableOpacity>
+        </View>
       </View>
     </View>
-  ), [profile, following, followLoading, toggleFollow]);
+  ), [profile, following, followLoading, toggleFollow, blocked, handleBlock, handleReport]);
 
   return (
     <BottomSheet visible={userId !== null} onClose={onClose} maxHeight="85%">
@@ -201,6 +252,9 @@ const styles = StyleSheet.create({
   statsRow: { flexDirection: 'row', gap: 16, marginBottom: 12 },
   statText: { color: COLORS.inkSecondary, fontSize: 13 },
   statNumber: { color: COLORS.ink, fontWeight: '700' },
+  actionRow: { flexDirection: 'row', alignItems: 'center', gap: 14 },
+  quietBtn: { minHeight: 44, justifyContent: 'center' },
+  quietBtnText: { color: COLORS.inkSecondary, fontSize: 13, fontWeight: '600' },
   followBtn: {
     backgroundColor: COLORS.amber, borderRadius: 8,
     minHeight: 44, paddingHorizontal: 20,
