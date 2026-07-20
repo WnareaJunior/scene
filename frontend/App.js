@@ -6,6 +6,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import AuthScreen from './AuthScreen';
 import Scene from './Scene';
+import { COLORS } from './src/constants/colors';
 import { users, auth, saveTokens, getStoredToken, clearTokens } from './src/api';
 
 class ErrorBoundary extends React.Component {
@@ -78,7 +79,7 @@ export default function App() {
   if (loading) {
     return (
       <View style={styles.splash}>
-        <ActivityIndicator size="large" color="#ffa028" />
+        <ActivityIndicator size="large" color={COLORS.amber} />
       </View>
     );
   }
@@ -101,30 +102,32 @@ export default function App() {
 const styles = StyleSheet.create({
   splash: {
     flex: 1,
-    backgroundColor: '#0a0a0a',
+    backgroundColor: COLORS.asphalt,
     alignItems: 'center',
     justifyContent: 'center',
   },
   errorFallback: {
     flex: 1,
-    backgroundColor: '#0a0a0a',
+    backgroundColor: COLORS.asphalt,
     alignItems: 'center',
     justifyContent: 'center',
     padding: 24,
   },
   errorFallbackText: {
-    color: '#fff',
+    color: COLORS.ink,
     fontSize: 18,
     marginBottom: 24,
   },
   restartBtn: {
-    backgroundColor: '#ffa028',
+    backgroundColor: COLORS.amber,
     paddingHorizontal: 28,
-    paddingVertical: 12,
+    minHeight: 44,
+    justifyContent: 'center',
     borderRadius: 10,
   },
+  // amberInk on amber — white-on-amber is 2:1 and banned by the spec
   restartBtnText: {
-    color: '#fff',
+    color: COLORS.amberInk,
     fontSize: 16,
     fontWeight: '600',
   },

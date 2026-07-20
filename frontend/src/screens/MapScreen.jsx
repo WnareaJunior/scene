@@ -1,10 +1,12 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { View, TouchableOpacity, Text, StyleSheet, Alert } from 'react-native';
+import { View, TouchableOpacity, Text, StyleSheet, Alert, Share } from 'react-native';
 import MapView, { Marker } from 'react-native-maps';
 import * as Location from 'expo-location';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { map as mapApi, events } from '../api';
 import { haversineKm } from '../utils/geo';
 import { darkMapStyle } from '../constants/mapStyles';
+import { COLORS } from '../constants/colors';
 import EventDetailSheet from '../components/EventDetailSheet';
 import UserProfileSheet from '../components/UserProfileSheet';
 
@@ -12,6 +14,18 @@ const initialRegion = {
   latitude: 40.7128, longitude: -74.006,
   latitudeDelta: 0.05, longitudeDelta: 0.05,
 };
+
+const DEFAULT_DURATION_MS = 4 * 3600000;
+
+function pinIsLive(pin) {
+  if (!pin.start_time) return false;
+  const now = Date.now();
+  const start = new Date(pin.start_time).getTime();
+  const end = pin.end_time
+    ? new Date(pin.end_time).getTime()
+    : start + DEFAULT_DURATION_MS;
+  return now >= start && now <= end;
+}
 
 // Significant zoom change: delta ratio differs by more than 30%.
 function zoomChanged(prev, next) {
@@ -34,14 +48,16 @@ function regionToBounds(region) {
 // Chip-style marker: the label IS the marker. tracksViewChanges must be turned
 // off after the chip has rendered (kept on briefly, incl. on title changes) or
 // iOS re-rasterizes every marker each frame, which tanks map performance.
+// A live party's chip burns green — the one place Live Green touches the map.
 function EventMarker({ pin, onPress }) {
   const [tracksChanges, setTracksChanges] = useState(true);
+  const live = pinIsLive(pin);
 
   useEffect(() => {
     setTracksChanges(true);
     const t = setTimeout(() => setTracksChanges(false), 500);
     return () => clearTimeout(t);
-  }, [pin.title]);
+  }, [pin.title, live]);
 
   return (
     <Marker
@@ -51,10 +67,11 @@ function EventMarker({ pin, onPress }) {
       onPress={onPress}
     >
       <View style={styles.markerWrap}>
-        <View style={styles.markerChip}>
+        <View style={[styles.markerChip, live && styles.markerChipLive]}>
+          {live && <View style={styles.liveDot} />}
           <Text style={styles.markerText} numberOfLines={1}>{pin.title}</Text>
         </View>
-        <View style={styles.markerPointer} />
+        <View style={[styles.markerPointer, live && styles.markerPointerLive]} />
       </View>
     </Marker>
   );
@@ -65,15 +82,18 @@ const DEBOUNCE_MS = 400;
 // Minimum map-center movement (km) required to trigger a new pin fetch.
 const MIN_MOVE_KM = 0.5;
 
-export default function MapScreen({ onRegionChangeComplete }) {
+export default function MapScreen({ onRegionChangeComplete, currentUserId, focusEvent }) {
   const [pins, setPins] = useState([]);
   const [fetchError, setFetchError] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState(null);
   const [viewingUserId, setViewingUserId] = useState(null);
+  const [postedToast, setPostedToast] = useState(null); // the just-created event
+  const { top: safeTop } = useSafeAreaInsets();
   const mapRef = useRef(null);
   // Refs for debounce and movement guard — never trigger re-renders.
   const debounceRef = useRef(null);
   const lastFetchRef = useRef(null); // { lat, lng, region }
+  const toastTimerRef = useRef(null);
 
   const fetchPins = useCallback(async (region) => {
     try {
@@ -105,6 +125,36 @@ export default function MapScreen({ onRegionChangeComplete }) {
       fetchPins(initialRegion);
     })();
   }, [fetchPins]);
+
+  // A party was just posted: fly to it, drop its pin immediately (the debounced
+  // region fetch can miss it), and offer the share moment. The post's
+  // confirmation used to play on the screen the host had already left.
+  useEffect(() => {
+    if (!focusEvent) return;
+    const ev = focusEvent;
+    setPins((ps) => ps.some((p) => p.id === ev.id) ? ps : [...ps, ev]);
+    mapRef.current?.animateToRegion({
+      latitude: ev.latitude,
+      longitude: ev.longitude,
+      latitudeDelta: 0.01,
+      longitudeDelta: 0.01,
+    }, 600);
+    setPostedToast(ev);
+    clearTimeout(toastTimerRef.current);
+    toastTimerRef.current = setTimeout(() => setPostedToast(null), 8000);
+    return () => clearTimeout(toastTimerRef.current);
+  }, [focusEvent]);
+
+  const shareEvent = useCallback((ev) => {
+    const date = ev.start_time
+      ? new Date(ev.start_time).toLocaleDateString(undefined, {
+          weekday: 'short', hour: '2-digit', minute: '2-digit',
+        })
+      : '';
+    Share.share({
+      message: `${ev.title} — ${date}${ev.address ? ` · ${ev.address}` : ''} (on scene)`,
+    }).catch(() => {});
+  }, []);
 
   const handleRegionChange = useCallback((region) => {
     // Always notify the parent of the latest viewport (used by SearchSheet).
@@ -170,8 +220,8 @@ export default function MapScreen({ onRegionChangeComplete }) {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
         Alert.alert(
-          'Location access denied',
-          'Enable location in Settings to center the map on your position.',
+          'location is off',
+          'allow location in Settings to see parties near you.',
         );
         return;
       }
@@ -186,6 +236,10 @@ export default function MapScreen({ onRegionChangeComplete }) {
       Alert.alert("can't find you", 'allow location access in Settings to see parties near you.');
     }
   }
+
+  const retryPins = useCallback(() => {
+    fetchPins(lastFetchRef.current?.region ?? initialRegion);
+  }, [fetchPins]);
 
   return (
     <View style={StyleSheet.absoluteFill}>
@@ -204,20 +258,46 @@ export default function MapScreen({ onRegionChangeComplete }) {
         ))}
       </MapView>
 
-      <TouchableOpacity style={styles.locBtn} onPress={centerOnUser}>
+      <TouchableOpacity
+        style={[styles.locBtn, { top: safeTop + 12 }]}
+        onPress={centerOnUser}
+        accessibilityRole="button"
+        accessibilityLabel="center the map on your location"
+      >
         <Text style={styles.locBtnText}>⊙</Text>
       </TouchableOpacity>
 
       {fetchError && (
-        <View style={styles.errorBanner}>
-          <Text style={styles.errorBannerText}>Something went wrong</Text>
-        </View>
+        <TouchableOpacity
+          style={styles.errorBanner}
+          onPress={retryPins}
+          activeOpacity={0.8}
+          accessibilityRole="button"
+          accessibilityLabel="couldn't load pins, tap to retry"
+        >
+          <Text style={styles.errorBannerText}>couldn't load the pins — tap to retry</Text>
+        </TouchableOpacity>
+      )}
+
+      {postedToast && (
+        <TouchableOpacity
+          style={[styles.postedToast, { top: safeTop + 8 }]}
+          onPress={() => { shareEvent(postedToast); setPostedToast(null); }}
+          activeOpacity={0.85}
+          accessibilityRole="button"
+          accessibilityLabel="party posted, tap to share it"
+        >
+          <Text style={styles.postedToastTitle}>it's up.</Text>
+          <Text style={styles.postedToastSub}>tap to send it to the group chat</Text>
+        </TouchableOpacity>
       )}
 
       <EventDetailSheet
         event={selectedEvent}
+        currentUserId={currentUserId}
         onClose={() => setSelectedEvent(null)}
         onRsvp={handleRsvp}
+        onDeleted={(id) => setPins((ps) => ps.filter((p) => p.id !== id))}
         onHostPress={(hostId) => {
           setSelectedEvent(null);
           setViewingUserId(hostId);
@@ -237,18 +317,29 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   markerChip: {
-    backgroundColor: '#1a1a1a',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: COLORS.card,
     borderWidth: 1.5,
-    borderColor: '#ffa028',
+    borderColor: COLORS.amber,
     borderRadius: 14,
     paddingVertical: 5,
     paddingHorizontal: 10,
     maxWidth: 140,
   },
+  markerChipLive: {
+    borderColor: COLORS.liveGreen,
+  },
+  liveDot: {
+    width: 6, height: 6, borderRadius: 3,
+    backgroundColor: COLORS.liveGreen,
+  },
   markerText: {
-    color: '#fff',
+    color: COLORS.ink,
     fontSize: 12,
     fontWeight: '600',
+    flexShrink: 1,
   },
   markerPointer: {
     width: 0,
@@ -258,23 +349,25 @@ const styles = StyleSheet.create({
     borderTopWidth: 6,
     borderLeftColor: 'transparent',
     borderRightColor: 'transparent',
-    borderTopColor: '#ffa028',
+    borderTopColor: COLORS.amber,
+  },
+  markerPointerLive: {
+    borderTopColor: COLORS.liveGreen,
   },
   locBtn: {
     position: 'absolute',
-    top: 60,
     right: 16,
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: 'rgba(17,17,17,0.9)',
     borderWidth: 1,
-    borderColor: '#2a2a2a',
+    borderColor: COLORS.border,
     alignItems: 'center',
     justifyContent: 'center',
   },
   locBtnText: {
-    color: '#ffa028',
+    color: COLORS.amber,
     fontSize: 20,
     lineHeight: 24,
   },
@@ -283,15 +376,30 @@ const styles = StyleSheet.create({
     bottom: 20,
     left: 16,
     right: 16,
-    backgroundColor: 'rgba(220,50,50,0.9)',
+    backgroundColor: COLORS.card,
+    borderWidth: 1,
+    borderColor: COLORS.border,
     borderRadius: 10,
-    paddingVertical: 10,
+    minHeight: 44,
     paddingHorizontal: 16,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   errorBannerText: {
-    color: '#fff',
+    color: COLORS.errorRed,
     fontSize: 14,
+    fontWeight: '600',
   },
+  postedToast: {
+    position: 'absolute',
+    left: 16, right: 16,
+    backgroundColor: COLORS.card,
+    borderWidth: 1,
+    borderColor: COLORS.amber,
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+  },
+  postedToastTitle: { color: COLORS.amber, fontSize: 15, fontWeight: '700' },
+  postedToastSub: { color: COLORS.inkSecondary, fontSize: 13, marginTop: 2 },
 });
-

@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
-  Modal, View, Text, Image, TouchableOpacity,
+  View, Text, Image, TouchableOpacity,
   StyleSheet, ActivityIndicator, FlatList,
 } from 'react-native';
 import { users } from '../api';
+import { COLORS } from '../constants/colors';
+import BottomSheet from './BottomSheet';
 
 const formatCount = (n) => {
   if (!n && n !== 0) return '0';
@@ -11,21 +13,24 @@ const formatCount = (n) => {
   return String(n);
 };
 
+const DEFAULT_DURATION_MS = 4 * 3600000;
+
 function getEventState(event) {
   const now = Date.now();
   const start = new Date(event.start_time).getTime();
-  const end = event.end_time ? new Date(event.end_time).getTime() : null;
-  if (end && now >= start && now <= end) return 'live';
+  const end = event.end_time
+    ? new Date(event.end_time).getTime()
+    : start + DEFAULT_DURATION_MS;
+  if (now >= start && now <= end) return 'live';
   if (now < start) return 'upcoming';
   return 'past';
 }
 
-const STATE_COLORS = { live: '#22c55e', upcoming: '#ffa028', past: '#555' };
-const STATE_LABELS = { live: 'Live', upcoming: 'Upcoming', past: 'Past' };
+const STATE_COLORS = { live: COLORS.liveGreen, upcoming: COLORS.amber, past: COLORS.inkFaint };
 
 function EventRow({ event }) {
   const state = getEventState(event);
-  const date = new Date(event.start_time).toLocaleDateString('en-US', {
+  const date = new Date(event.start_time).toLocaleDateString(undefined, {
     month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
   });
   return (
@@ -42,7 +47,7 @@ function EventRow({ event }) {
         <Text style={styles.eventDate}>{date}</Text>
         <View style={[styles.statePill, { borderColor: STATE_COLORS[state] }]}>
           <Text style={[styles.statePillText, { color: STATE_COLORS[state] }]}>
-            {STATE_LABELS[state]}
+            {state}
           </Text>
         </View>
       </View>
@@ -102,7 +107,11 @@ export default function UserProfileSheet({ userId, onClose }) {
     <View style={styles.header}>
       {/* Avatar */}
       {profile?.profile_picture ? (
-        <Image source={{ uri: profile.profile_picture }} style={styles.avatar} />
+        <Image
+          source={{ uri: profile.profile_picture }}
+          style={styles.avatar}
+          accessibilityLabel={`${profile?.username}'s profile picture`}
+        />
       ) : (
         <View style={styles.avatarPlaceholder}>
           <Text style={styles.avatarInitial}>
@@ -110,20 +119,19 @@ export default function UserProfileSheet({ userId, onClose }) {
           </Text>
         </View>
       )}
-      {/* Name + bio + stats + follow */}
+      {/* Name + bio + stats + follow. Bio only — never fall back to the
+          account email; that leaks private data on a public surface. */}
       <View style={styles.headerInfo}>
         <Text style={styles.name}>{profile?.username}</Text>
-        {(profile?.bio || profile?.email) ? (
-          <Text style={styles.bio} numberOfLines={2}>
-            {profile.bio || profile.email}
-          </Text>
+        {profile?.bio ? (
+          <Text style={styles.bio} numberOfLines={2}>{profile.bio}</Text>
         ) : null}
         <View style={styles.statsRow}>
           <Text style={styles.statText}>
-            <Text style={styles.statNumber}>{formatCount(profile?.following_count)}</Text> Following
+            <Text style={styles.statNumber}>{formatCount(profile?.following_count)}</Text> following
           </Text>
           <Text style={styles.statText}>
-            <Text style={styles.statNumber}>{formatCount(profile?.followers_count)}</Text> Followers
+            <Text style={styles.statNumber}>{formatCount(profile?.followers_count)}</Text> followers
           </Text>
         </View>
         <TouchableOpacity
@@ -131,9 +139,11 @@ export default function UserProfileSheet({ userId, onClose }) {
           onPress={toggleFollow}
           disabled={followLoading}
           activeOpacity={0.8}
+          accessibilityRole="button"
+          accessibilityLabel={following ? `unfollow ${profile?.username}` : `follow ${profile?.username}`}
         >
           <Text style={[styles.followBtnText, following && styles.followBtnTextActive]}>
-            {following ? 'Following' : 'Follow'}
+            {following ? 'following' : 'follow'}
           </Text>
         </TouchableOpacity>
       </View>
@@ -141,96 +151,80 @@ export default function UserProfileSheet({ userId, onClose }) {
   ), [profile, following, followLoading, toggleFollow]);
 
   return (
-    <Modal
-      visible={userId !== null}
-      transparent
-      animationType="slide"
-      onRequestClose={onClose}
-    >
-      <TouchableOpacity style={styles.backdrop} activeOpacity={1} onPress={onClose} />
-      <View style={styles.sheet}>
-        <View style={styles.handle} />
-        {/* Close button */}
-        <TouchableOpacity style={styles.closeBtn} onPress={onClose} hitSlop={12}>
-          <Text style={styles.closeBtnText}>✕</Text>
-        </TouchableOpacity>
+    <BottomSheet visible={userId !== null} onClose={onClose} maxHeight="85%">
+      <TouchableOpacity
+        style={styles.closeBtn}
+        onPress={onClose}
+        hitSlop={12}
+        accessibilityRole="button"
+        accessibilityLabel="close profile"
+      >
+        <Text style={styles.closeBtnText}>✕</Text>
+      </TouchableOpacity>
 
-        {loading ? (
-          <ActivityIndicator color="#ffa028" style={{ marginTop: 40 }} />
-        ) : (
-          <FlatList
-            data={events}
-            keyExtractor={(item) => item.id.toString()}
-            renderItem={({ item }) => <EventRow event={item} />}
-            ListHeaderComponent={ListHeader}
-            ListEmptyComponent={
-              profile ? <Text style={styles.empty}>No events yet</Text> : null
-            }
-            contentContainerStyle={styles.listContent}
-            showsVerticalScrollIndicator={false}
-          />
-        )}
-      </View>
-    </Modal>
+      {loading ? (
+        <ActivityIndicator color={COLORS.amber} style={{ marginTop: 40, marginBottom: 40 }} />
+      ) : (
+        <FlatList
+          data={events}
+          keyExtractor={(item) => item.id.toString()}
+          renderItem={({ item }) => <EventRow event={item} />}
+          ListHeaderComponent={ListHeader}
+          ListEmptyComponent={
+            profile ? <Text style={styles.empty}>no parties yet</Text> : null
+          }
+          contentContainerStyle={styles.listContent}
+          showsVerticalScrollIndicator={false}
+        />
+      )}
+    </BottomSheet>
   );
 }
 
 const styles = StyleSheet.create({
-  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)' },
-  sheet: {
-    backgroundColor: '#0a0a0a',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    maxHeight: '85%',
-  },
-  handle: {
-    width: 40, height: 5, borderRadius: 3,
-    backgroundColor: '#444',
-    alignSelf: 'center',
-    marginVertical: 12,
-  },
-  closeBtn: { position: 'absolute', top: 14, right: 16 },
-  closeBtnText: { color: '#666', fontSize: 18 },
+  closeBtn: { position: 'absolute', top: 14, right: 16, zIndex: 10 },
+  closeBtnText: { color: COLORS.inkSecondary, fontSize: 18 },
   listContent: { paddingHorizontal: 16, paddingBottom: 40 },
 
   header: { flexDirection: 'row', paddingTop: 8, paddingBottom: 20, gap: 14 },
-  avatar: { width: 72, height: 72, borderRadius: 36, backgroundColor: '#333' },
+  avatar: { width: 72, height: 72, borderRadius: 36, backgroundColor: COLORS.card },
   avatarPlaceholder: {
     width: 72, height: 72, borderRadius: 36,
-    backgroundColor: '#2b1d0a',
-    borderWidth: 2, borderColor: '#ffa028',
+    backgroundColor: COLORS.amberTint,
+    borderWidth: 2, borderColor: COLORS.amber,
     alignItems: 'center', justifyContent: 'center',
   },
-  avatarInitial: { color: '#ffa028', fontSize: 28, fontWeight: '700' },
+  avatarInitial: { color: COLORS.amber, fontSize: 28, fontWeight: '700' },
   headerInfo: { flex: 1 },
-  name: { color: '#fff', fontSize: 20, fontWeight: '700', marginBottom: 4 },
-  bio: { color: '#8e8e93', fontSize: 13, lineHeight: 18, marginBottom: 8 },
+  name: { color: COLORS.ink, fontSize: 20, fontWeight: '700', marginBottom: 4 },
+  bio: { color: COLORS.inkSecondary, fontSize: 13, lineHeight: 18, marginBottom: 8 },
   statsRow: { flexDirection: 'row', gap: 16, marginBottom: 12 },
-  statText: { color: '#8e8e93', fontSize: 13 },
-  statNumber: { color: '#fff', fontWeight: '700' },
+  statText: { color: COLORS.inkSecondary, fontSize: 13 },
+  statNumber: { color: COLORS.ink, fontWeight: '700' },
   followBtn: {
-    backgroundColor: '#ffa028', borderRadius: 8,
-    paddingVertical: 7, paddingHorizontal: 20,
+    backgroundColor: COLORS.amber, borderRadius: 8,
+    minHeight: 44, paddingHorizontal: 20,
+    alignItems: 'center', justifyContent: 'center',
     alignSelf: 'flex-start',
   },
-  followBtnActive: { backgroundColor: 'transparent', borderWidth: 1, borderColor: '#ffa028' },
-  followBtnText: { color: '#1a0d00', fontSize: 14, fontWeight: '600' },
-  followBtnTextActive: { color: '#ffa028' },
+  followBtnActive: { backgroundColor: 'transparent', borderWidth: 1, borderColor: COLORS.amber },
+  followBtnText: { color: COLORS.amberInk, fontSize: 14, fontWeight: '600' },
+  followBtnTextActive: { color: COLORS.amber },
 
-  eventRow: { flexDirection: 'row', gap: 12, paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#1c1c1e' },
-  eventImage: { width: 64, height: 64, borderRadius: 8, backgroundColor: '#222' },
+  eventRow: { flexDirection: 'row', gap: 12, paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: COLORS.divider },
+  eventImage: { width: 64, height: 64, borderRadius: 8, backgroundColor: COLORS.card },
   eventImagePlaceholder: {
     width: 64, height: 64, borderRadius: 8,
-    backgroundColor: '#1c1c1e', alignItems: 'center', justifyContent: 'center',
+    backgroundColor: COLORS.divider, alignItems: 'center', justifyContent: 'center',
   },
-  eventImageInitial: { color: '#555', fontSize: 24, fontWeight: '700' },
+  eventImageInitial: { color: COLORS.inkFaint, fontSize: 24, fontWeight: '700' },
   eventInfo: { flex: 1, justifyContent: 'center' },
-  eventTitle: { color: '#fff', fontSize: 15, fontWeight: '600', marginBottom: 3 },
-  eventDate: { color: '#8e8e93', fontSize: 12, marginBottom: 6 },
+  eventTitle: { color: COLORS.ink, fontSize: 15, fontWeight: '600', marginBottom: 3 },
+  eventDate: { color: COLORS.inkSecondary, fontSize: 12, marginBottom: 6 },
   statePill: {
     alignSelf: 'flex-start', borderWidth: 1, borderRadius: 4,
     paddingHorizontal: 6, paddingVertical: 2,
   },
   statePillText: { fontSize: 11, fontWeight: '600' },
-  empty: { color: '#444', textAlign: 'center', marginTop: 24 },
+  empty: { color: COLORS.inkSecondary, textAlign: 'center', marginTop: 24 },
 });

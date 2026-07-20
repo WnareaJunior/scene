@@ -1,9 +1,10 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
+import { COLORS } from '../constants/colors';
 
 export default function EventCard({ event, onRsvp, onPress }) {
   const date = event.start_time
-    ? new Date(event.start_time).toLocaleDateString('en-US', {
+    ? new Date(event.start_time).toLocaleDateString(undefined, {
         month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
       })
     : '';
@@ -13,6 +14,20 @@ export default function EventCard({ event, onRsvp, onPress }) {
   const spotsLeft = event.capacity != null ? event.capacity - goingCount : null;
   const userStatus = event.user_rsvp ?? null;
   const hasRsvp = userStatus !== null;
+
+  // A second tap on an RSVP'd button is destructive (drops you off the list),
+  // so it never fires bare — the constructive tap stays one-touch.
+  const handleRsvpPress = () => {
+    if (isFull && !hasRsvp) return;
+    if (hasRsvp) {
+      Alert.alert('leave the list?', "you'll drop off going for this party.", [
+        { text: 'stay', style: 'cancel' },
+        { text: 'leave', style: 'destructive', onPress: () => onRsvp(event.id, 'going') },
+      ]);
+    } else {
+      onRsvp(event.id, 'going');
+    }
+  };
 
   const inner = (
     <>
@@ -27,7 +42,7 @@ export default function EventCard({ event, onRsvp, onPress }) {
         <View>
           <Text style={styles.cardCount}>{goingCount} going</Text>
           {isFull
-            ? <Text style={styles.capacityFull}>Full</Text>
+            ? <Text style={styles.capacityFull}>full</Text>
             : spotsLeft != null && spotsLeft <= 5
               ? <Text style={styles.capacityLow}>{spotsLeft} spot{spotsLeft !== 1 ? 's' : ''} left</Text>
               : null
@@ -35,11 +50,13 @@ export default function EventCard({ event, onRsvp, onPress }) {
         </View>
         <TouchableOpacity
           style={[styles.rsvpBtn, hasRsvp && styles.rsvpBtnActive, isFull && !hasRsvp && styles.rsvpBtnDisabled]}
-          onPress={() => (!isFull || hasRsvp) && onRsvp(event.id, 'going')}
+          onPress={handleRsvpPress}
           disabled={isFull && !hasRsvp}
+          accessibilityRole="button"
+          accessibilityLabel={hasRsvp ? `you're going to ${event.title}, tap to leave` : `rsvp to ${event.title}`}
         >
-          <Text style={[styles.rsvpBtnText, isFull && !hasRsvp && styles.rsvpBtnTextDisabled]}>
-            {hasRsvp ? "RSVP'd" : 'RSVP'}
+          <Text style={[styles.rsvpBtnText, hasRsvp && styles.rsvpBtnTextActive, isFull && !hasRsvp && styles.rsvpBtnTextDisabled]}>
+            {hasRsvp ? 'going ✓' : 'RSVP'}
           </Text>
         </TouchableOpacity>
       </View>
@@ -48,7 +65,13 @@ export default function EventCard({ event, onRsvp, onPress }) {
 
   if (onPress) {
     return (
-      <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.85}>
+      <TouchableOpacity
+        style={styles.card}
+        onPress={onPress}
+        activeOpacity={0.85}
+        accessibilityRole="button"
+        accessibilityLabel={`${event.title}, ${date}`}
+      >
         {inner}
       </TouchableOpacity>
     );
@@ -58,24 +81,34 @@ export default function EventCard({ event, onRsvp, onPress }) {
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: '#1a1a1a',
+    backgroundColor: COLORS.card,
     borderRadius: 12, padding: 14, marginBottom: 10,
-    borderWidth: 1, borderColor: '#2a2a2a',
+    borderWidth: 1, borderColor: COLORS.border,
   },
   cardHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 },
-  cardTitle: { color: '#fff', fontSize: 16, fontWeight: '600', flex: 1 },
-  cardTag: { color: '#ffa028', fontSize: 12 },
-  cardMeta: { color: '#555', fontSize: 13, marginBottom: 10 },
+  cardTitle: { color: COLORS.ink, fontSize: 16, fontWeight: '600', flex: 1 },
+  cardTag: { color: COLORS.amber, fontSize: 12 },
+  cardMeta: { color: COLORS.inkSecondary, fontSize: 13, marginBottom: 10 },
   cardFooter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  cardCount: { color: '#666', fontSize: 13 },
+  cardCount: { color: COLORS.inkSecondary, fontSize: 13 },
+  // RSVP'd is a state, not a pressed shade: tint fill + amber border reads as
+  // "held", distinct from both the resting fill and the finger-down darken.
   rsvpBtn: {
-    backgroundColor: '#ffa028', borderRadius: 8,
-    paddingHorizontal: 14, paddingVertical: 6,
+    backgroundColor: COLORS.amber, borderRadius: 8,
+    paddingHorizontal: 18, minHeight: 44,
+    alignItems: 'center', justifyContent: 'center',
   },
-  rsvpBtnText: { color: '#1a0d00', fontSize: 13, fontWeight: '600' },
-  rsvpBtnActive: { backgroundColor: '#e08010' },
-  rsvpBtnDisabled: { backgroundColor: '#333' },
-  rsvpBtnTextDisabled: { color: '#666' },
-  capacityFull: { color: '#ef4444', fontSize: 12, fontWeight: '600', marginTop: 2 },
-  capacityLow: { color: '#ffa028', fontSize: 12, fontWeight: '600', marginTop: 2 },
+  rsvpBtnText: { color: COLORS.amberInk, fontSize: 13, fontWeight: '600' },
+  rsvpBtnActive: {
+    backgroundColor: COLORS.amberTint,
+    borderWidth: 1, borderColor: COLORS.amber,
+  },
+  rsvpBtnTextActive: { color: COLORS.amber },
+  rsvpBtnDisabled: {
+    backgroundColor: 'transparent',
+    borderWidth: 1, borderColor: COLORS.border,
+  },
+  rsvpBtnTextDisabled: { color: COLORS.inkFaint },
+  capacityFull: { color: COLORS.errorRed, fontSize: 12, fontWeight: '600', marginTop: 2 },
+  capacityLow: { color: COLORS.amber, fontSize: 12, fontWeight: '600', marginTop: 2 },
 });
