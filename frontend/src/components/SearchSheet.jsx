@@ -38,6 +38,9 @@ const WIDEN_LADDER_MILES = [5, 10, 20, MAX_FEED_RADIUS_MILES];
 
 export default function SearchSheet({ slideX, screenW, viewport, onNavigate }) {
   const { top: safeTop, bottom: safeBottom } = useSafeAreaInsets();
+  // Measured height of the handle + search header; seeds with the static sum
+  // of those styles so the first layout pass is already close.
+  const [topZoneH, setTopZoneH] = useState(89);
 
   const SNAP_FULL = safeTop + 16;
   const SNAP_HALF = SCREEN_H * 0.45;
@@ -302,7 +305,10 @@ export default function SearchSheet({ slideX, screenW, viewport, onNavigate }) {
 
       {/* TOP ZONE — drag up/down only */}
       <GestureDetector gesture={panV}>
-        <View style={styles.topZone}>
+        <View
+          style={styles.topZone}
+          onLayout={(e) => setTopZoneH(Math.round(e.nativeEvent.layout.height))}
+        >
           <View style={styles.handle} />
           <View style={styles.searchRow}>
             <TextInput
@@ -319,9 +325,13 @@ export default function SearchSheet({ slideX, screenW, viewport, onNavigate }) {
         </View>
       </GestureDetector>
 
-      {/* BOTTOM ZONE — swipe left/right + scrollable results */}
+      {/* BOTTOM ZONE — swipe left/right + scrollable results.
+          The sheet itself is 1.2× screen height so overdrag never exposes the
+          map beneath it; a flex:1 list would inherit that oversize and put its
+          tail past the bottom of the screen, making the last cards unreachable.
+          Size the scroll area to exactly what's visible at the full snap. */}
       <GestureDetector gesture={panH}>
-        <View style={styles.bottomZone}>
+        <View style={[styles.bottomZone, { height: SCREEN_H - SNAP_FULL - topZoneH }]}>
           {errorMsg && !loading && (
             <Text style={styles.errorText}>{errorMsg}</Text>
           )}
@@ -336,7 +346,7 @@ export default function SearchSheet({ slideX, screenW, viewport, onNavigate }) {
               data={results}
               keyExtractor={(item) => item.id.toString()}
               style={styles.list}
-              contentContainerStyle={styles.listContent}
+              contentContainerStyle={[styles.listContent, { paddingBottom: safeBottom + 24 }]}
               showsVerticalScrollIndicator={false}
               keyboardShouldPersistTaps="handled"
               refreshControl={
@@ -421,11 +431,11 @@ const styles = StyleSheet.create({
     borderRadius: 12, paddingHorizontal: 16,
     color: '#fff', fontSize: 15,
   },
-  bottomZone: { flex: 1 },
+  bottomZone: {},
   spinner: { marginTop: 32 },
   empty: { color: '#444', textAlign: 'center', marginTop: 40, fontSize: 15 },
   list: { flex: 1 },
-  listContent: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 40 },
+  listContent: { paddingHorizontal: 16, paddingTop: 8 },
   userCard: {
     backgroundColor: '#1a1a1a', borderRadius: 12,
     padding: 14, marginBottom: 10,
