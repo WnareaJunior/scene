@@ -3,7 +3,7 @@ import { View, StyleSheet, Dimensions, Keyboard } from 'react-native';
 import { GestureDetector, Gesture } from 'react-native-gesture-handler';
 import Animated, {
   useSharedValue, useAnimatedStyle, withSpring,
-  useAnimatedReaction, runOnJS,
+  useAnimatedReaction, runOnJS, ReduceMotion,
 } from 'react-native-reanimated';
 
 import MapScreen from './src/screens/MapScreen';
@@ -14,7 +14,10 @@ import ProfileScreen from './src/screens/ProfileScreen';
 const { width: SCREEN_W } = Dimensions.get('window');
 
 // Lively, velocity-aware settle — overdamped springs read as "rigid".
-const SPRING = { damping: 34, stiffness: 280, mass: 0.9 };
+// ReduceMotion.Never: these springs settle a gesture's position, not decoration;
+// under the system Reduce Motion setting Reanimated would complete them in one
+// frame, so releases teleport instead of glide.
+const SPRING = { damping: 34, stiffness: 280, mass: 0.9, reduceMotion: ReduceMotion.Never };
 // Drag resistance past the first/last page — rubber band, not a wall.
 const OVERDRAG = 0.15;
 
@@ -48,14 +51,20 @@ export default function Scene({ user, onSignOut }) {
     Keyboard.dismiss();
     const targets = { create: 0, map: -SCREEN_W, profile: -SCREEN_W * 2 };
     if (targets[page] !== undefined) {
+      // Mount the destination before the glide starts — waiting for the settle
+      // reaction slides a blank page over and pops the content in at the end.
+      markVisited(page);
       slideX.value = withSpring(targets[page], { ...SPRING, velocity });
     }
-  }, [slideX]);
+  }, [slideX, markVisited]);
 
   const dismissKeyboard = useCallback(() => Keyboard.dismiss(), []);
 
   function makeEdgePan(onlyDirection) {
-    const offsetX = onlyDirection === 'left' ? [-99999, -15] : [15, 99999];
+    // Single-sided threshold: a [-99999, -15]-style range leaves no inactive
+    // band around 0, so the pan activated on any touch movement in the edge
+    // strip and swallowed taps and vertical scrolls there.
+    const offsetX = onlyDirection === 'left' ? -15 : 15;
     return Gesture.Pan()
       .activeOffsetX(offsetX)
       .failOffsetY([-20, 20])

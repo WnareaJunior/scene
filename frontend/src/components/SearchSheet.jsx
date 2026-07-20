@@ -6,7 +6,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { GestureDetector, Gesture } from 'react-native-gesture-handler';
 import Animated, {
-  useSharedValue, useAnimatedStyle, withSpring, runOnJS,
+  useSharedValue, useAnimatedStyle, withSpring, runOnJS, ReduceMotion,
 } from 'react-native-reanimated';
 
 import { events, users } from '../api';
@@ -20,8 +20,10 @@ const { height: SCREEN_H } = Dimensions.get('window');
 const HEADER_H = 110;
 // Springs carry the release velocity (passed per-gesture); configs stay lively
 // rather than overdamped so the settle glides instead of thudding.
-const SPRING_V = { damping: 32, stiffness: 260, mass: 0.9 };
-const SPRING_H = { damping: 34, stiffness: 280, mass: 0.9 };
+// ReduceMotion.Never: these settle gesture positions; the system Reduce Motion
+// default completes them in one frame, snapping releases instead of gliding.
+const SPRING_V = { damping: 32, stiffness: 260, mass: 0.9, reduceMotion: ReduceMotion.Never };
+const SPRING_H = { damping: 34, stiffness: 280, mass: 0.9, reduceMotion: ReduceMotion.Never };
 // Drag resistance past the last snap point — rubber band, not a wall.
 const OVERDRAG = 0.15;
 
