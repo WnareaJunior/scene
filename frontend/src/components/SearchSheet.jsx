@@ -338,7 +338,7 @@ export default function SearchSheet({ slideX, screenW, viewport, onNavigate, cur
             <Text style={styles.errorText}>{errorMsg}</Text>
           )}
           {loading && !isRefreshing ? (
-            <ActivityIndicator color="#ffa028" style={styles.spinner} />
+            <ActivityIndicator color={COLORS.accent} style={styles.spinner} />
           ) : errorMsg ? null : results.length === 0 ? (
             <Text style={styles.empty}>
               {query.startsWith('@') ? 'no one by that username' : 'nothing nearby yet — swipe right to post the first party'}
@@ -355,7 +355,7 @@ export default function SearchSheet({ slideX, screenW, viewport, onNavigate, cur
                 <RefreshControl
                   refreshing={isRefreshing}
                   onRefresh={handleRefresh}
-                  tintColor="#ffa028"
+                  tintColor={COLORS.accent}
                 />
               }
               renderItem={({ item }) =>
@@ -423,18 +423,17 @@ const styles = StyleSheet.create({
     left: 0, right: 0,
     height: SCREEN_H * 1.2,
     backgroundColor: COLORS.surface,
-    borderTopLeftRadius: 20, borderTopRightRadius: 20,
     flexDirection: 'column',
   },
   topZone: {},
   handle: {
     width: 40, height: 5, backgroundColor: COLORS.handle,
-    borderRadius: 3, alignSelf: 'center', marginVertical: 14,
+    alignSelf: 'center', marginVertical: 14,
   },
   searchRow: { marginHorizontal: 16, marginBottom: 12 },
   searchInput: {
     height: 44, backgroundColor: COLORS.card,
-    borderRadius: 12, paddingHorizontal: 16,
+    paddingHorizontal: 16,
     color: COLORS.ink, fontSize: 15,
   },
   bottomZone: {},
@@ -443,7 +442,7 @@ const styles = StyleSheet.create({
   list: { flex: 1 },
   listContent: { paddingHorizontal: 16, paddingTop: 8 },
   userCard: {
-    backgroundColor: COLORS.card, borderRadius: 12,
+    backgroundColor: COLORS.card,
     padding: 14, marginBottom: 10,
     borderWidth: 1, borderColor: COLORS.border,
   },

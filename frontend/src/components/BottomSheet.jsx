@@ -67,10 +67,8 @@ const styles = StyleSheet.create({
   backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: COLORS.scrim },
   sheet: {
     backgroundColor: COLORS.asphalt,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
     overflow: 'hidden',
   },
   handleZone: { paddingVertical: 12, alignItems: 'center' },
-  handle: { width: 40, height: 5, borderRadius: 3, backgroundColor: COLORS.handle },
+  handle: { width: 40, height: 5, backgroundColor: COLORS.handle },
 });

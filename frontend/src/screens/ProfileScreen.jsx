@@ -109,7 +109,7 @@ const StatusBadge = ({ status }) => {
   );
 };
 
-const STATE_COLORS = { live: PALETTE.liveGreen, upcoming: PALETTE.amber, past: PALETTE.inkFaint };
+const STATE_COLORS = { live: PALETTE.liveGreen, upcoming: PALETTE.accent, past: PALETTE.inkFaint };
 
 const ProfileEventCard = ({ event, profileData }) => {
   const state = getEventState(event);
@@ -292,7 +292,7 @@ if (updated?.id) setProfileData((prev) => ({ ...prev, profile_picture: updated.p
 
   function FeedEmpty() {
     if (feedLoading) {
-      return <ActivityIndicator color={PALETTE.amber} style={{ marginTop: 32 }} />;
+      return <ActivityIndicator color={PALETTE.accent} style={{ marginTop: 32 }} />;
     }
     if (feedError) {
       return <Text style={styles.feedError}>{feedError}</Text>;
@@ -350,7 +350,7 @@ function FollowListSheet({ visible, type, data, loading, onClose, onUserPress })
           </TouchableOpacity>
         </View>
         {loading ? (
-          <ActivityIndicator color={PALETTE.amber} style={{ marginTop: 32, marginBottom: 32 }} />
+          <ActivityIndicator color={PALETTE.accent} style={{ marginTop: 32, marginBottom: 32 }} />
         ) : (
           <FlatList
             data={data}
@@ -414,32 +414,29 @@ const styles = StyleSheet.create({
   avatar: {
     width: 72,
     height: 72,
-    borderRadius: 36,
     backgroundColor: PALETTE.card,
   },
   avatarPlaceholder: {
     width: 72,
     height: 72,
-    borderRadius: 36,
-    backgroundColor: PALETTE.amberTint,
+    backgroundColor: PALETTE.accentTint,
     borderWidth: 2,
-    borderColor: PALETTE.amber,
+    borderColor: PALETTE.accent,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  avatarInitial: { color: PALETTE.amber, fontSize: 28, fontWeight: '700' },
+  avatarInitial: { color: PALETTE.accent, fontSize: 28, fontWeight: '700' },
   avatarEdit: {
     position: 'absolute',
     bottom: 0,
     right: 0,
     width: 22,
     height: 22,
-    borderRadius: 11,
-    backgroundColor: PALETTE.amber,
+    backgroundColor: PALETTE.accent,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  avatarEditText: { color: PALETTE.amberInk, fontSize: 14, fontWeight: '700', lineHeight: 18 },
+  avatarEditText: { color: PALETTE.accentInk, fontSize: 14, fontWeight: '700', lineHeight: 18 },
   headerInfo: {
     flex: 1,
     marginLeft: 14,
@@ -478,7 +475,6 @@ const styles = StyleSheet.create({
     marginHorizontal: 16,
     marginBottom: 16,
     backgroundColor: PALETTE.card,
-    borderRadius: 12,
     minHeight: 48,
     alignItems: 'center',
     justifyContent: 'center',
@@ -520,27 +516,24 @@ const styles = StyleSheet.create({
   badge: {
     paddingHorizontal: 14,
     paddingVertical: 6,
-    borderRadius: 6,
     borderWidth: 1,
     backgroundColor: 'transparent',
   },
-  badgeHosting: { borderColor: PALETTE.amber },
+  badgeHosting: { borderColor: PALETTE.accent },
   badgeGoing: { borderColor: PALETTE.border },
   badgeText: { fontSize: 13, fontWeight: '600' },
-  badgeTextHosting: { color: PALETTE.amber },
+  badgeTextHosting: { color: PALETTE.accent },
   badgeTextGoing: { color: COLORS.text },
 
   // Event image + details
   eventImage: {
     width: '100%',
     aspectRatio: 16 / 10,
-    borderRadius: 12,
     backgroundColor: PALETTE.card,
   },
   eventImagePlaceholder: {
     width: '100%',
     aspectRatio: 16 / 10,
-    borderRadius: 12,
     backgroundColor: PALETTE.divider,
     alignItems: 'center',
     justifyContent: 'center',
@@ -565,7 +558,6 @@ const styles = StyleSheet.create({
   statePill: {
     alignSelf: 'flex-start',
     borderWidth: 1,
-    borderRadius: 6,
     paddingHorizontal: 8,
     paddingVertical: 3,
   },
@@ -593,16 +585,16 @@ const sheetStyles = StyleSheet.create({
     borderBottomColor: PALETTE.divider,
   },
   avatar: {
-    width: 40, height: 40, borderRadius: 20, backgroundColor: PALETTE.card,
+    width: 40, height: 40, backgroundColor: PALETTE.card,
   },
   avatarPlaceholder: {
-    backgroundColor: PALETTE.amberTint,
+    backgroundColor: PALETTE.accentTint,
     borderWidth: 1,
-    borderColor: PALETTE.amber,
+    borderColor: PALETTE.accent,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  avatarInitial: { color: PALETTE.amber, fontSize: 16, fontWeight: '700' },
+  avatarInitial: { color: PALETTE.accent, fontSize: 16, fontWeight: '700' },
   username: { color: PALETTE.ink, fontSize: 15, fontWeight: '600' },
   meta: { color: PALETTE.inkSecondary, fontSize: 12, marginTop: 2 },
   empty: { color: PALETTE.inkSecondary, textAlign: 'center', marginTop: 32, marginBottom: 32 },

@@ -82,33 +82,33 @@ export default function EventCard({ event, onRsvp, onPress }) {
 const styles = StyleSheet.create({
   card: {
     backgroundColor: COLORS.card,
-    borderRadius: 12, padding: 14, marginBottom: 10,
+    padding: 14, marginBottom: 10,
     borderWidth: 1, borderColor: COLORS.border,
   },
   cardHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 },
   cardTitle: { color: COLORS.ink, fontSize: 16, fontWeight: '600', flex: 1 },
-  cardTag: { color: COLORS.amber, fontSize: 12 },
+  cardTag: { color: COLORS.accent, fontSize: 12 },
   cardMeta: { color: COLORS.inkSecondary, fontSize: 13, marginBottom: 10 },
   cardFooter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   cardCount: { color: COLORS.inkSecondary, fontSize: 13 },
-  // RSVP'd is a state, not a pressed shade: tint fill + amber border reads as
+  // RSVP'd is a state, not a pressed shade: tint fill + accent border reads as
   // "held", distinct from both the resting fill and the finger-down darken.
   rsvpBtn: {
-    backgroundColor: COLORS.amber, borderRadius: 8,
+    backgroundColor: COLORS.accent,
     paddingHorizontal: 18, minHeight: 44,
     alignItems: 'center', justifyContent: 'center',
   },
-  rsvpBtnText: { color: COLORS.amberInk, fontSize: 13, fontWeight: '600' },
+  rsvpBtnText: { color: COLORS.accentInk, fontSize: 13, fontWeight: '600' },
   rsvpBtnActive: {
-    backgroundColor: COLORS.amberTint,
-    borderWidth: 1, borderColor: COLORS.amber,
+    backgroundColor: COLORS.accentTint,
+    borderWidth: 1, borderColor: COLORS.accent,
   },
-  rsvpBtnTextActive: { color: COLORS.amber },
+  rsvpBtnTextActive: { color: COLORS.accent },
   rsvpBtnDisabled: {
     backgroundColor: 'transparent',
     borderWidth: 1, borderColor: COLORS.border,
   },
   rsvpBtnTextDisabled: { color: COLORS.inkFaint },
   capacityFull: { color: COLORS.errorRed, fontSize: 12, fontWeight: '600', marginTop: 2 },
-  capacityLow: { color: COLORS.amber, fontSize: 12, fontWeight: '600', marginTop: 2 },
+  capacityLow: { color: COLORS.accent, fontSize: 12, fontWeight: '600', marginTop: 2 },
 });

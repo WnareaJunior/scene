@@ -1,13 +1,14 @@
 // Scene palette — "The Unlisted Map" (DESIGN.md).
-// One streetlight: amber marks what you can act on; everything else recedes.
+// One streetlight: the electric-cyan accent marks what you can act on;
+// everything else recedes.
 // Grays here differ from DESIGN.md's ink-hint/ink-meta on purpose: #555/#666
 // fail WCAG on every surface in the app (2.3–3.4:1). inkSecondary passes 4.5:1
 // on all four dark surfaces; inkFaint is for ≥18pt/decorative text only (≥3:1).
 export const COLORS = {
-  amber: '#ffa028',
-  amberPressed: '#e08010',
-  amberTint: '#2b1d0a',
-  amberInk: '#1a0d00',
+  accent: '#22d3ee',
+  accentPressed: '#06b6d4',
+  accentTint: '#062a33',
+  accentInk: '#001418',
 
   void: '#000000',
   asphalt: '#0a0a0a',

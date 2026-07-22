@@ -26,7 +26,7 @@ function getEventState(event) {
   return 'past';
 }
 
-const STATE_COLORS = { live: COLORS.liveGreen, upcoming: COLORS.amber, past: COLORS.inkFaint };
+const STATE_COLORS = { live: COLORS.liveGreen, upcoming: COLORS.accent, past: COLORS.inkFaint };
 
 function EventRow({ event }) {
   const state = getEventState(event);
@@ -214,7 +214,7 @@ export default function UserProfileSheet({ userId, onClose }) {
       </TouchableOpacity>
 
       {loading ? (
-        <ActivityIndicator color={COLORS.amber} style={{ marginTop: 40, marginBottom: 40 }} />
+        <ActivityIndicator color={COLORS.accent} style={{ marginTop: 40, marginBottom: 40 }} />
       ) : (
         <FlatList
           data={events}
@@ -238,14 +238,14 @@ const styles = StyleSheet.create({
   listContent: { paddingHorizontal: 16, paddingBottom: 40 },
 
   header: { flexDirection: 'row', paddingTop: 8, paddingBottom: 20, gap: 14 },
-  avatar: { width: 72, height: 72, borderRadius: 36, backgroundColor: COLORS.card },
+  avatar: { width: 72, height: 72, backgroundColor: COLORS.card },
   avatarPlaceholder: {
-    width: 72, height: 72, borderRadius: 36,
-    backgroundColor: COLORS.amberTint,
-    borderWidth: 2, borderColor: COLORS.amber,
+    width: 72, height: 72,
+    backgroundColor: COLORS.accentTint,
+    borderWidth: 2, borderColor: COLORS.accent,
     alignItems: 'center', justifyContent: 'center',
   },
-  avatarInitial: { color: COLORS.amber, fontSize: 28, fontWeight: '700' },
+  avatarInitial: { color: COLORS.accent, fontSize: 28, fontWeight: '700' },
   headerInfo: { flex: 1 },
   name: { color: COLORS.ink, fontSize: 20, fontWeight: '700', marginBottom: 4 },
   bio: { color: COLORS.inkSecondary, fontSize: 13, lineHeight: 18, marginBottom: 8 },
@@ -256,19 +256,19 @@ const styles = StyleSheet.create({
   quietBtn: { minHeight: 44, justifyContent: 'center' },
   quietBtnText: { color: COLORS.inkSecondary, fontSize: 13, fontWeight: '600' },
   followBtn: {
-    backgroundColor: COLORS.amber, borderRadius: 8,
+    backgroundColor: COLORS.accent,
     minHeight: 44, paddingHorizontal: 20,
     alignItems: 'center', justifyContent: 'center',
     alignSelf: 'flex-start',
   },
-  followBtnActive: { backgroundColor: 'transparent', borderWidth: 1, borderColor: COLORS.amber },
-  followBtnText: { color: COLORS.amberInk, fontSize: 14, fontWeight: '600' },
-  followBtnTextActive: { color: COLORS.amber },
+  followBtnActive: { backgroundColor: 'transparent', borderWidth: 1, borderColor: COLORS.accent },
+  followBtnText: { color: COLORS.accentInk, fontSize: 14, fontWeight: '600' },
+  followBtnTextActive: { color: COLORS.accent },
 
   eventRow: { flexDirection: 'row', gap: 12, paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: COLORS.divider },
-  eventImage: { width: 64, height: 64, borderRadius: 8, backgroundColor: COLORS.card },
+  eventImage: { width: 64, height: 64, backgroundColor: COLORS.card },
   eventImagePlaceholder: {
-    width: 64, height: 64, borderRadius: 8,
+    width: 64, height: 64,
     backgroundColor: COLORS.divider, alignItems: 'center', justifyContent: 'center',
   },
   eventImageInitial: { color: COLORS.inkFaint, fontSize: 24, fontWeight: '700' },
@@ -276,7 +276,7 @@ const styles = StyleSheet.create({
   eventTitle: { color: COLORS.ink, fontSize: 15, fontWeight: '600', marginBottom: 3 },
   eventDate: { color: COLORS.inkSecondary, fontSize: 12, marginBottom: 6 },
   statePill: {
-    alignSelf: 'flex-start', borderWidth: 1, borderRadius: 4,
+    alignSelf: 'flex-start', borderWidth: 1,
     paddingHorizontal: 6, paddingVertical: 2,
   },
   statePillText: { fontSize: 11, fontWeight: '600' },

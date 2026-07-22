@@ -518,7 +518,7 @@ export default function CreateScreen({ viewport, onCreated }) {
             accessibilityLabel="post the party"
           >
             {creating
-              ? <ActivityIndicator color={COLORS.amberInk} />
+              ? <ActivityIndicator color={COLORS.accentInk} />
               : <Text style={styles.createBtnText}>{posted ? 'party posted!' : 'post party'}</Text>
             }
           </TouchableOpacity>
@@ -543,7 +543,7 @@ const styles = StyleSheet.create({
   },
 
   input: {
-    backgroundColor: COLORS.card, borderRadius: 10,
+    backgroundColor: COLORS.card,
     padding: 13, fontSize: 15, marginBottom: GAP,
     borderWidth: 1, borderColor: COLORS.border,
     justifyContent: 'center',
@@ -561,7 +561,6 @@ const styles = StyleSheet.create({
   },
   placesInput: {
     backgroundColor: COLORS.card,
-    borderRadius: 10,
     fontSize: 15,
     borderWidth: 1,
     borderColor: COLORS.border,
@@ -572,7 +571,6 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.card,
     borderWidth: 1,
     borderColor: COLORS.border,
-    borderRadius: 10,
     marginTop: 2,
   },
   placesRow: {
@@ -585,7 +583,6 @@ const styles = StyleSheet.create({
 
   imagePicker: {
     height: 120,
-    borderRadius: 12,
     overflow: 'hidden',
     marginBottom: GAP,
     borderWidth: 1,
@@ -614,7 +611,6 @@ const styles = StyleSheet.create({
 
   mapContainer: {
     height: 110,
-    borderRadius: 12,
     overflow: 'hidden',
     marginBottom: GAP,
     borderWidth: 1,
@@ -632,26 +628,24 @@ const styles = StyleSheet.create({
     position: 'absolute',
     width: 20,
     height: 1.5,
-    backgroundColor: COLORS.amber,
+    backgroundColor: COLORS.accent,
   },
   crosshairV: {
     position: 'absolute',
     width: 1.5,
     height: 20,
-    backgroundColor: COLORS.amber,
+    backgroundColor: COLORS.accent,
   },
   crosshairDot: {
     width: 5,
     height: 5,
-    borderRadius: 3,
-    backgroundColor: COLORS.amber,
+    backgroundColor: COLORS.accent,
   },
 
   timeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 10 },
   timeChip: {
     minHeight: 44,
     paddingHorizontal: 14,
-    borderRadius: 20,
     borderWidth: 1,
     borderColor: COLORS.border,
     backgroundColor: COLORS.card,
@@ -659,26 +653,25 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   timeChipActive: {
-    backgroundColor: COLORS.amberTint,
-    borderColor: COLORS.amber,
+    backgroundColor: COLORS.accentTint,
+    borderColor: COLORS.accent,
   },
   timeChipText: { color: COLORS.ink, fontSize: 14, fontWeight: '600' },
-  timeChipTextActive: { color: COLORS.amber },
-  timeChosen: { color: COLORS.amber, fontSize: 14, fontWeight: '600', marginBottom: GAP },
+  timeChipTextActive: { color: COLORS.accent },
+  timeChosen: { color: COLORS.accent, fontSize: 14, fontWeight: '600', marginBottom: GAP },
 
   pickerDoneRow: {
     alignItems: 'flex-end',
     marginBottom: GAP,
   },
   pickerDoneBtn: {
-    backgroundColor: COLORS.amber,
-    borderRadius: 10,
+    backgroundColor: COLORS.accent,
     minHeight: 44,
     paddingHorizontal: 20,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  pickerDoneText: { color: COLORS.amberInk, fontWeight: '700', fontSize: 15 },
+  pickerDoneText: { color: COLORS.accentInk, fontWeight: '700', fontSize: 15 },
 
   moreToggle: {
     minHeight: 44,
@@ -690,20 +683,20 @@ const styles = StyleSheet.create({
   chipsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: GAP },
   chip: {
     flexDirection: 'row', alignItems: 'center', gap: 5,
-    backgroundColor: COLORS.amberTint, borderRadius: 20,
+    backgroundColor: COLORS.accentTint,
     paddingVertical: 5, paddingHorizontal: 10,
-    borderWidth: 1, borderColor: COLORS.amber,
+    borderWidth: 1, borderColor: COLORS.accent,
   },
-  chipText: { color: COLORS.amber, fontSize: 13, fontWeight: '600' },
-  chipRemove: { color: COLORS.amber, fontSize: 16, lineHeight: 18 },
+  chipText: { color: COLORS.accent, fontSize: 13, fontWeight: '600' },
+  chipRemove: { color: COLORS.accent, fontSize: 16, lineHeight: 18 },
 
   createBtn: {
-    backgroundColor: COLORS.amber, borderRadius: 10,
+    backgroundColor: COLORS.accent,
     minHeight: 50, alignItems: 'center', justifyContent: 'center',
     marginTop: 6,
   },
   createBtnPosted: {
-    backgroundColor: COLORS.amberPressed,
+    backgroundColor: COLORS.accentPressed,
   },
-  createBtnText: { color: COLORS.amberInk, fontWeight: '700', fontSize: 16 },
+  createBtnText: { color: COLORS.accentInk, fontWeight: '700', fontSize: 16 },
 });

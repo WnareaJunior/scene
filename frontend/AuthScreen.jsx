@@ -90,7 +90,7 @@ export default function AuthScreen({ onAuth }) {
 
         <TouchableOpacity style={styles.btn} onPress={submit} disabled={loading}>
           {loading ? (
-            <ActivityIndicator color={COLORS.amberInk} />
+            <ActivityIndicator color={COLORS.accentInk} />
           ) : (
             <Text style={styles.btnText}>{mode === 'login' ? 'sign in' : 'create account'}</Text>
           )}
@@ -134,7 +134,6 @@ const styles = StyleSheet.create({
   input: {
     backgroundColor: COLORS.card,
     color: COLORS.ink,
-    borderRadius: 10,
     padding: 14,
     fontSize: 15,
     marginBottom: 12,
@@ -142,15 +141,14 @@ const styles = StyleSheet.create({
     borderColor: COLORS.border,
   },
   btn: {
-    backgroundColor: COLORS.amber,
-    borderRadius: 10,
+    backgroundColor: COLORS.accent,
     minHeight: 50,
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: 8,
     marginBottom: 4,
   },
-  btnText: { color: COLORS.amberInk, fontWeight: '700', fontSize: 16 },
+  btnText: { color: COLORS.accentInk, fontWeight: '700', fontSize: 16 },
   toggleBtn: { minHeight: 44, justifyContent: 'center' },
   toggle: { color: COLORS.inkSecondary, textAlign: 'center', fontSize: 14 },
   toggleDisabled: { opacity: 0.4 },
