@@ -14,9 +14,9 @@ export const COLORS = {
   asphalt: '#0a0a0a',
   surface: '#111111',
   card: '#1a1a1a',
-  border: '#2a2a2a',
-  divider: '#1c1c1e',
-  handle: '#3a3a3c', // drag handles + non-text ornaments only
+  border: '#484848',
+  divider: '#2e2e30',
+  handle: '#58585c', // drag handles + non-text ornaments only
 
   ink: '#ffffff',
   inkSecondary: '#8e8e93',
