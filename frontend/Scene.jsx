@@ -220,7 +220,6 @@ const styles = StyleSheet.create({
   chromeBtn: {
     width: 44,
     height: 44,
-    borderRadius: 22,
     backgroundColor: 'rgba(17,17,17,0.9)',
     borderWidth: 1,
     borderColor: COLORS.border,
@@ -228,7 +227,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     overflow: 'hidden',
   },
-  chromePlus: { color: COLORS.amber, fontSize: 24, fontWeight: '600', marginTop: -2 },
-  chromeAvatar: { width: 44, height: 44, borderRadius: 22 },
+  chromePlus: { color: COLORS.accent, fontSize: 24, fontWeight: '600', marginTop: -2 },
+  chromeAvatar: { width: 44, height: 44 },
   chromeInitial: { color: COLORS.inkSecondary, fontSize: 18, fontWeight: '700' },
 });

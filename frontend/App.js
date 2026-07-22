@@ -4,10 +4,15 @@ import { View, ActivityIndicator, StyleSheet, Text, TouchableOpacity } from 'rea
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
 import AuthScreen from './AuthScreen';
 import Scene from './Scene';
+import OnboardingScreen from './src/screens/OnboardingScreen';
 import { COLORS } from './src/constants/colors';
 import { users, auth, saveTokens, getStoredToken, clearTokens } from './src/api';
+
+const ONBOARDING_KEY = 'scene.onboarding.v1.seen';
 
 class ErrorBoundary extends React.Component {
   state = { hasError: false };
@@ -37,6 +42,7 @@ class ErrorBoundary extends React.Component {
 export default function App() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [onboarded, setOnboarded] = useState(true);
 
   useEffect(() => {
     bootstrap();
@@ -44,6 +50,8 @@ export default function App() {
 
   async function bootstrap() {
     try {
+      const seen = await AsyncStorage.getItem(ONBOARDING_KEY).catch(() => null);
+      setOnboarded(seen === '1');
       const token = await getStoredToken();
       if (token) {
         const me = await users.me();
@@ -69,6 +77,12 @@ export default function App() {
     setUser(data.user);
   }
 
+  function handleOnboardingDone() {
+    setOnboarded(true);
+    // Fire-and-forget: losing the flag just replays the intro next launch.
+    AsyncStorage.setItem(ONBOARDING_KEY, '1').catch(() => {});
+  }
+
   async function handleSignOut() {
     // Ensure tokens are always wiped even if the caller already called
     // auth.logout() — clearTokens() is idempotent.
@@ -79,7 +93,7 @@ export default function App() {
   if (loading) {
     return (
       <View style={styles.splash}>
-        <ActivityIndicator size="large" color={COLORS.amber} />
+        <ActivityIndicator size="large" color={COLORS.accent} />
       </View>
     );
   }
@@ -88,7 +102,9 @@ export default function App() {
     <ErrorBoundary>
       <GestureHandlerRootView style={{ flex: 1 }}>
         <SafeAreaProvider>
-          {user ? (
+          {!onboarded ? (
+            <OnboardingScreen onDone={handleOnboardingDone} />
+          ) : user ? (
             <Scene user={user} onSignOut={handleSignOut} />
           ) : (
             <AuthScreen onAuth={handleAuth} />
@@ -119,15 +135,14 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   restartBtn: {
-    backgroundColor: COLORS.amber,
+    backgroundColor: COLORS.accent,
     paddingHorizontal: 28,
     minHeight: 44,
     justifyContent: 'center',
-    borderRadius: 10,
   },
-  // amberInk on amber — white-on-amber is 2:1 and banned by the spec
+  // accentInk on accent — white-on-accent is 2:1 and banned by the spec
   restartBtnText: {
-    color: COLORS.amberInk,
+    color: COLORS.accentInk,
     fontSize: 16,
     fontWeight: '600',
   },

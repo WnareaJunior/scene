@@ -7,7 +7,7 @@ import {
 import { events as eventsApi } from '../api';
 import { COLORS } from '../constants/colors';
 
-const STATE_COLORS = { live: COLORS.liveGreen, upcoming: COLORS.amber, past: COLORS.inkFaint };
+const STATE_COLORS = { live: COLORS.liveGreen, upcoming: COLORS.accent, past: COLORS.inkFaint };
 
 // Parties without an explicit end are treated as live for 4 hours after they
 // start — otherwise "live" is unreachable and everything jumps straight to past.
@@ -185,7 +185,7 @@ export default function EventDetailSheet({ event: eventProp, onClose, onRsvp, on
 
         {showLoading ? (
           <View style={styles.loadingBox}>
-            <ActivityIndicator color={COLORS.amber} />
+            <ActivityIndicator color={COLORS.accent} />
           </View>
         ) : (
           <>
@@ -336,18 +336,16 @@ const styles = StyleSheet.create({
   backdrop: { flex: 1, backgroundColor: COLORS.scrim },
   sheet: {
     backgroundColor: COLORS.asphalt,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
     maxHeight: '90%',
     overflow: 'hidden',
   },
   handle: {
-    width: 40, height: 5, borderRadius: 3, backgroundColor: COLORS.handle,
+    width: 40, height: 5, backgroundColor: COLORS.handle,
     alignSelf: 'center', marginVertical: 12,
   },
   closeBtn: {
     position: 'absolute', top: 12, right: 14, zIndex: 10,
-    width: 30, height: 30, borderRadius: 15,
+    width: 30, height: 30,
     backgroundColor: COLORS.scrim,
     alignItems: 'center', justifyContent: 'center',
   },
@@ -371,7 +369,7 @@ const styles = StyleSheet.create({
   },
   title: { color: COLORS.ink, fontSize: 22, fontWeight: '800', flexShrink: 1 },
   statePill: {
-    borderWidth: 1, borderRadius: 6,
+    borderWidth: 1,
     paddingHorizontal: 8, paddingVertical: 3,
   },
   statePillText: { fontSize: 12, fontWeight: '600' },
@@ -381,7 +379,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', gap: 10,
     paddingHorizontal: 16, paddingTop: 12, paddingBottom: 4,
   },
-  hostAvatar: { width: 36, height: 36, borderRadius: 18, backgroundColor: COLORS.card },
+  hostAvatar: { width: 36, height: 36, backgroundColor: COLORS.card },
   hostAvatarPlaceholder: {
     backgroundColor: COLORS.card, borderWidth: 1, borderColor: COLORS.border,
     alignItems: 'center', justifyContent: 'center',
@@ -399,7 +397,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16, marginTop: 12,
   },
   tag: {
-    backgroundColor: COLORS.card, borderRadius: 20,
+    backgroundColor: COLORS.card,
     paddingVertical: 4, paddingHorizontal: 10,
     borderWidth: 1, borderColor: COLORS.border,
   },
@@ -410,11 +408,11 @@ const styles = StyleSheet.create({
   },
   goingText: { color: COLORS.inkSecondary, fontSize: 13 },
   full: { color: COLORS.errorRed, fontSize: 12, fontWeight: '600' },
-  low: { color: COLORS.amber, fontSize: 12, fontWeight: '600' },
+  low: { color: COLORS.accent, fontSize: 12, fontWeight: '600' },
 
   takeDownBtn: {
     marginHorizontal: 16, marginTop: 16, minHeight: 44,
-    borderRadius: 10, borderWidth: 1, borderColor: COLORS.border,
+    borderWidth: 1, borderColor: COLORS.border,
     backgroundColor: COLORS.card,
     alignItems: 'center', justifyContent: 'center',
   },
@@ -431,20 +429,20 @@ const styles = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: COLORS.divider,
   },
   rsvpBtn: {
-    flex: 1, backgroundColor: COLORS.amber, borderRadius: 12,
+    flex: 1, backgroundColor: COLORS.accent,
     minHeight: 50, alignItems: 'center', justifyContent: 'center',
   },
   rsvpBtnActive: {
-    backgroundColor: COLORS.amberTint,
-    borderWidth: 1, borderColor: COLORS.amber,
+    backgroundColor: COLORS.accentTint,
+    borderWidth: 1, borderColor: COLORS.accent,
   },
   rsvpBtnDisabled: { backgroundColor: COLORS.card, borderWidth: 1, borderColor: COLORS.border },
-  rsvpBtnText: { color: COLORS.amberInk, fontSize: 16, fontWeight: '700' },
-  rsvpBtnTextActive: { color: COLORS.amber },
+  rsvpBtnText: { color: COLORS.accentInk, fontSize: 16, fontWeight: '700' },
+  rsvpBtnTextActive: { color: COLORS.accent },
   rsvpBtnTextDisabled: { color: COLORS.inkFaint },
   shareBtn: {
     minHeight: 50, paddingHorizontal: 18,
-    borderRadius: 12, borderWidth: 1, borderColor: COLORS.border,
+    borderWidth: 1, borderColor: COLORS.border,
     backgroundColor: COLORS.card,
     alignItems: 'center', justifyContent: 'center',
   },
