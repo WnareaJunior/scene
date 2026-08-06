@@ -1,4 +1,5 @@
 const router = require('express').Router();
+const bcrypt = require('bcryptjs');
 const db = require('../db');
 const requireAuth = require('../middleware/auth');
 const multer = require('multer');
@@ -94,6 +95,43 @@ router.patch('/me', requireAuth, async (req, res, next) => {
       [bio, gender, interests, profilePicture, req.user.sub]
     );
     res.json(rows[0]);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// DELETE /users/me
+// Permanent account deletion (App Store Guideline 5.1.1(v)). Password re-entry
+// guards against someone with a borrowed unlocked phone. Every dependent row —
+// hosted events, rsvps, follows, blocks, reports, refresh_tokens — is removed
+// by the schema's ON DELETE CASCADE constraints.
+router.delete('/me', requireAuth, async (req, res, next) => {
+  try {
+    const { password } = req.body || {};
+    if (!password) return res.status(400).json({ error: 'password is required' });
+
+    const { rows } = await db.query(
+      `SELECT password_hash, profile_picture FROM users WHERE id = $1`,
+      [req.user.sub]
+    );
+    if (!rows.length) return res.status(404).json({ error: 'User not found' });
+    if (!(await bcrypt.compare(password, rows[0].password_hash))) {
+      return res.status(401).json({ error: 'Incorrect password' });
+    }
+
+    await db.query(`DELETE FROM users WHERE id = $1`, [req.user.sub]);
+
+    // Best-effort avatar cleanup — the account row is already gone, so a
+    // storage failure must not surface as a failed deletion to the client.
+    if (rows[0].profile_picture && SUPABASE_URL && SUPABASE_SERVICE_KEY) {
+      const filename = rows[0].profile_picture.split('/').pop();
+      fetch(`${SUPABASE_URL}/storage/v1/object/${SUPABASE_BUCKET}/avatars/${filename}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${SUPABASE_SERVICE_KEY}` },
+      }).catch(() => {});
+    }
+
+    res.status(204).end();
   } catch (err) {
     next(err);
   }

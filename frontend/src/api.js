@@ -149,6 +149,12 @@ export const auth = {
 export const users = {
   me: () => request('GET', '/users/me'),
   update: (data) => request('PATCH', '/users/me', data),
+  // Permanent deletion — server cascades all user data, then local tokens are
+  // cleared so the app lands back on the auth screen.
+  deleteAccount: async (password) => {
+    await request('DELETE', '/users/me', { password });
+    await clearTokens();
+  },
   uploadAvatar: (imageUri) => uploadFile('/users/me/avatar', 'avatar', imageUri),
   hostedEvents: (params = {}) => request('GET', `/users/me/hosted-events?${qs(params)}`),
   myRsvps: (params = {}) => request('GET', `/users/me/rsvps?${qs(params)}`),
