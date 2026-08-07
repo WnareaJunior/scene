@@ -3,11 +3,14 @@ import {
   View,
   Text,
   Image,
+  TextInput,
   TouchableOpacity,
   StyleSheet,
   StatusBar,
   Alert,
   ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { FlatList } from 'react-native-gesture-handler';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -164,6 +167,7 @@ export default function ProfileScreen({ user, onSignOut, refreshKey = 0 }) {
   const [listData, setListData] = useState([]);
   const [listLoading, setListLoading] = useState(false);
   const [viewingUserId, setViewingUserId] = useState(null);
+  const [deleteSheetVisible, setDeleteSheetVisible] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -286,6 +290,14 @@ if (updated?.id) setProfileData((prev) => ({ ...prev, profile_picture: updated.p
       >
         <Text style={styles.signOutText}>sign out</Text>
       </TouchableOpacity>
+      <TouchableOpacity
+        style={styles.deleteAccountBtn}
+        onPress={() => setDeleteSheetVisible(true)}
+        accessibilityRole="button"
+        accessibilityLabel="delete account"
+      >
+        <Text style={styles.deleteAccountText}>delete account</Text>
+      </TouchableOpacity>
       <View style={styles.divider} />
     </>
   ), [profileData, handlePickAvatar, handleSignOut, openList]);
@@ -325,7 +337,98 @@ if (updated?.id) setProfileData((prev) => ({ ...prev, profile_picture: updated.p
         userId={viewingUserId}
         onClose={() => setViewingUserId(null)}
       />
+      <DeleteAccountSheet
+        visible={deleteSheetVisible}
+        onClose={() => setDeleteSheetVisible(false)}
+        onDeleted={onSignOut}
+      />
     </SafeAreaView>
+  );
+}
+
+// ============================================================================
+// Delete account bottom sheet (App Store Guideline 5.1.1(v))
+// ============================================================================
+// Password re-entry is the confirmation step — it doubles as proof of intent
+// and protection against a borrowed unlocked phone. Deletion is immediate and
+// permanent; the server cascades events, rsvps, follows, and tokens.
+function DeleteAccountSheet({ visible, onClose, onDeleted }) {
+  const [password, setPassword] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+
+  const close = useCallback(() => {
+    if (busy) return;
+    setPassword('');
+    setError(null);
+    onClose();
+  }, [busy, onClose]);
+
+  const handleDelete = useCallback(async () => {
+    if (!password || busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      // Clears local tokens on success — the app lands back on the auth screen.
+      await users.deleteAccount(password);
+      onDeleted();
+    } catch (err) {
+      setError(
+        err.message === 'Incorrect password'
+          ? "that password doesn't match."
+          : err.message || 'something went wrong — try again.'
+      );
+      setBusy(false);
+    }
+  }, [password, busy, onDeleted]);
+
+  return (
+    <BottomSheet visible={visible} onClose={close}>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <View style={deleteStyles.body}>
+          <Text style={deleteStyles.title}>delete your account?</Text>
+          <Text style={deleteStyles.copy}>
+            this permanently deletes your profile, your parties, your rsvps, and your
+            followers. there's no undo.
+          </Text>
+          <TextInput
+            style={deleteStyles.input}
+            value={password}
+            onChangeText={setPassword}
+            placeholder="enter your password to confirm"
+            placeholderTextColor={PALETTE.inkFaint}
+            secureTextEntry
+            autoCapitalize="none"
+            autoCorrect={false}
+            editable={!busy}
+            accessibilityLabel="password"
+          />
+          {error ? <Text style={deleteStyles.error}>{error}</Text> : null}
+          <TouchableOpacity
+            style={[deleteStyles.deleteBtn, (!password || busy) && deleteStyles.deleteBtnDisabled]}
+            onPress={handleDelete}
+            disabled={!password || busy}
+            accessibilityRole="button"
+            accessibilityLabel="permanently delete account"
+          >
+            {busy ? (
+              <ActivityIndicator color={PALETTE.errorRed} />
+            ) : (
+              <Text style={deleteStyles.deleteText}>delete forever</Text>
+            )}
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={deleteStyles.cancelBtn}
+            onPress={close}
+            disabled={busy}
+            accessibilityRole="button"
+            accessibilityLabel="keep my account"
+          >
+            <Text style={deleteStyles.cancelText}>keep my account</Text>
+          </TouchableOpacity>
+        </View>
+      </KeyboardAvoidingView>
+    </BottomSheet>
   );
 }
 
@@ -483,6 +586,17 @@ const styles = StyleSheet.create({
   },
   signOutText: { color: PALETTE.errorRed, fontWeight: '600' },
 
+  // Delete account — deliberately quieter than sign out (text-only, muted) so
+  // it's findable without inviting exploratory taps.
+  deleteAccountBtn: {
+    marginHorizontal: 16,
+    marginBottom: 8,
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  deleteAccountText: { color: PALETTE.inkFaint, fontSize: 13, fontWeight: '600' },
+
   // Divider
   divider: {
     height: StyleSheet.hairlineWidth,
@@ -598,4 +712,49 @@ const sheetStyles = StyleSheet.create({
   username: { color: PALETTE.ink, fontSize: 15, fontWeight: '600' },
   meta: { color: PALETTE.inkSecondary, fontSize: 12, marginTop: 2 },
   empty: { color: PALETTE.inkSecondary, textAlign: 'center', marginTop: 32, marginBottom: 32 },
+});
+
+const deleteStyles = StyleSheet.create({
+  body: {
+    paddingHorizontal: 16,
+    paddingBottom: 40,
+  },
+  title: { color: PALETTE.ink, fontSize: 17, fontWeight: '700', marginBottom: 8 },
+  copy: {
+    color: PALETTE.inkSecondary,
+    fontSize: 14,
+    lineHeight: 19,
+    marginBottom: 16,
+  },
+  input: {
+    backgroundColor: PALETTE.card,
+    borderWidth: 1,
+    borderColor: PALETTE.border,
+    color: PALETTE.ink,
+    paddingHorizontal: 14,
+    minHeight: 48,
+    fontSize: 15,
+    marginBottom: 12,
+  },
+  error: {
+    color: PALETTE.errorRed,
+    fontSize: 13,
+    marginBottom: 12,
+  },
+  deleteBtn: {
+    minHeight: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: PALETTE.errorRed,
+    marginBottom: 8,
+  },
+  deleteBtnDisabled: { opacity: 0.4 },
+  deleteText: { color: PALETTE.errorRed, fontWeight: '700' },
+  cancelBtn: {
+    minHeight: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cancelText: { color: PALETTE.inkSecondary, fontWeight: '600' },
 });
