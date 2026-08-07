@@ -88,20 +88,25 @@ export default function MapScreen({ onRegionChangeComplete, currentUserId, focus
   const [selectedEvent, setSelectedEvent] = useState(null);
   const [viewingUserId, setViewingUserId] = useState(null);
   const [postedToast, setPostedToast] = useState(null); // the just-created event
+  const [fallbackNotice, setFallbackNotice] = useState(false);
   const { top: safeTop } = useSafeAreaInsets();
   const mapRef = useRef(null);
   // Refs for debounce and movement guard — never trigger re-renders.
   const debounceRef = useRef(null);
   const lastFetchRef = useRef(null); // { lat, lng, region }
   const toastTimerRef = useRef(null);
+  const noticeTimerRef = useRef(null);
 
   const fetchPins = useCallback(async (region) => {
     try {
       const data = await mapApi.eventPins(regionToBounds(region));
-      setPins(Array.isArray(data) ? data : []);
+      const list = Array.isArray(data) ? data : [];
+      setPins(list);
       setFetchError(false);
+      return list;
     } catch {
       setFetchError(true);
+      return null;
     }
   }, []);
 
@@ -118,12 +123,33 @@ export default function MapScreen({ onRegionChangeComplete, currentUserId, focus
             longitudeDelta: 0.05,
           };
           mapRef.current?.animateToRegion(region, 0);
-          fetchPins(region);
+          const nearby = await fetchPins(region);
+          if (!nearby || nearby.length > 0) return;
+
+          // Nothing in view — probe the whole metro (~100km) before giving up
+          // on this location. The probe must not touch pin state: its results
+          // would be off-screen at the current zoom.
+          const metro = await mapApi
+            .eventPins(regionToBounds({ ...region, latitudeDelta: 1, longitudeDelta: 1 }))
+            .catch(() => null);
+          if (metro && metro.length === 0) {
+            mapRef.current?.animateToRegion(initialRegion, 600);
+            lastFetchRef.current = {
+              lat: initialRegion.latitude,
+              lng: initialRegion.longitude,
+              region: initialRegion,
+            };
+            fetchPins(initialRegion);
+            setFallbackNotice(true);
+            clearTimeout(noticeTimerRef.current);
+            noticeTimerRef.current = setTimeout(() => setFallbackNotice(false), 6000);
+          }
           return;
         }
       } catch {}
       fetchPins(initialRegion);
     })();
+    return () => clearTimeout(noticeTimerRef.current);
   }, [fetchPins]);
 
   // A party was just posted: fly to it, drop its pin immediately (the debounced
@@ -277,6 +303,13 @@ export default function MapScreen({ onRegionChangeComplete, currentUserId, focus
         >
           <Text style={styles.errorBannerText}>couldn't load the pins — tap to retry</Text>
         </TouchableOpacity>
+      )}
+
+      {fallbackNotice && (
+        <View style={[styles.postedToast, { top: safeTop + 8 }]}>
+          <Text style={styles.postedToastTitle}>nothing near you yet.</Text>
+          <Text style={styles.postedToastSub}>showing new york — where scene is live</Text>
+        </View>
       )}
 
       {postedToast && (
