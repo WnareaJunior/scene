@@ -28,6 +28,9 @@ const { scoreConfidence, stripEntities } = require('../stages/02-parse');
 const { reciprocalRankFusion, route } = require('../stages/05-fuse');
 const { rerank, tagAffinity, minMaxNormalizer, haversineMeters } = require('../stages/06-rerank');
 const { RERANK_WEIGHTS, ROUTER_WEIGHTS } = require('../config');
+const { PARSE_SCHEMA, SYSTEM_PROMPT } = require('../adapters/llm');
+const parseTool = require('../eval/parse-tool.json');
+const parsePrompt = require('../eval/parse-prompt.json');
 
 const NEEDS_DB = 'needs the Dockerized PostGIS+pgvector+pg_trgm fixture DB; not yet wired up';
 
@@ -269,6 +272,33 @@ test('haversine agrees with the frontend geo helper to within a metre', () => {
   // Williamsburg → Lower East Side, ~2.83 km.
   const d = haversineMeters(40.7081, -73.9571, 40.7180, -73.9880);
   assert.ok(d > 2800 && d < 2860, `got ${d}m`);
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Promptfoo drift guards
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// The eval is only worth running if it exercises the contract production sends.
+// The config that shipped before this one tested prose generation against a
+// provider the pipeline never calls, and passed — which is worse than no eval,
+// because CLAUDE.md gates PRs on it. These two tests make that failure loud.
+
+test('promptfoo tool schema matches the schema the adapter sends', () => {
+  assert.deepStrictEqual(parseTool.input_schema, PARSE_SCHEMA);
+});
+
+test('promptfoo system prompt matches the adapter system prompt', () => {
+  const evalSystem = parsePrompt.find(m => m.role === 'system')?.content;
+  assert.strictEqual(evalSystem, SYSTEM_PROMPT);
+});
+
+test('promptfoo user template carries the time context the adapter sends', () => {
+  // The parser resolves "tonight" against these; an eval that omits them is
+  // testing a different prompt than production runs.
+  const userTemplate = parsePrompt.find(m => m.role === 'user')?.content || '';
+  for (const token of ['{{now}}', '{{tz}}', '{{query}}']) {
+    assert.ok(userTemplate.includes(token), `user template must interpolate ${token}`);
+  }
 });
 
 // ═══════════════════════════════════════════════════════════════════════════

@@ -9,7 +9,11 @@
 const { EMBEDDING_DIM } = require('../config');
 
 const PROVIDER = process.env.EMBEDDING_PROVIDER || (process.env.VOYAGE_API_KEY ? 'voyage' : 'stub');
-const MODEL = process.env.EMBEDDING_MODEL || 'voyage-3';
+// voyage-4-lite: $0.02/1M tokens, Matryoshka dims of 2048/1024/512/256. 1024
+// matches EMBEDDING_DIM. Dropping to 512 halves pgvector storage and speeds up
+// HNSW at some recall cost — a knob to measure against the relevance harness,
+// not to turn speculatively. Changing it means a re-embed and an index rebuild.
+const MODEL = process.env.EMBEDDING_MODEL || 'voyage-4-lite';
 
 /**
  * FNV-1a over the input, used to seed a deterministic PRNG.

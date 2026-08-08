@@ -57,13 +57,50 @@ LLM_TIMEOUT_MS=2500
 
 EMBEDDING_PROVIDER=voyage       # voyage | openai | stub
 VOYAGE_API_KEY=...
-EMBEDDING_MODEL=voyage-3
+EMBEDDING_MODEL=voyage-4-lite
 ```
 
 With no keys set, both adapters run in stub mode and the whole pipeline works
 end to end — the semantic path returns deterministic pseudo-vectors. Good enough
 to prove wiring, useless for relevance. **Do not assert recall@5 or MRR against
 the stub.**
+
+## Cost
+
+Two paid calls, and they are not close to equal.
+
+| Component | When it fires | Cost per 1k searches |
+|---|---|---|
+| Query embedding (voyage-4-lite, $0.02/1M) | Every non-`@handle` search | **~$0.0003** |
+| LLM parse (claude-haiku-4-5, $1/$5 per 1M) | Only below `LLM_ESCALATION_THRESHOLD` | **~$0.0009 × escalation rate** |
+| Event embedding | Once per event, plus edits | ~$0.0000026/event |
+
+At a 25% escalation rate the parse is roughly **700× the cost of query
+embeddings**. Embeddings are effectively free — Voyage's 200M-token free tier
+covers ~1.5M events plus millions of queries. Escalation rate is the only number
+that matters.
+
+**Prompt caching does not apply to the parser.** The minimum cacheable prefix on
+Haiku 4.5 is 4096 tokens; system prompt + tool schema + query is ~470. It would
+silently not cache (`cache_creation_input_tokens: 0`, no error). Don't add
+`cache_control` here expecting a discount.
+
+**The Batch API does not apply either** — 50% off, but up to 24h turnaround
+against a 300ms search path. It *is* the right tool for a one-off tag backfill
+or an offline eval sweep.
+
+The real lever is **caching parse results by normalized query**, not model
+choice: search traffic has a heavy head, and `search_logs` already records
+`sanitized_query` and `parse_confidence` to size it. Before paying anything, run
+with `LLM_PROVIDER=stub` and query the logs — stage 8 records
+`parse_confidence` and `llm_escalated` on every row, so the escalation rate
+comes from real traffic rather than a guess:
+
+```sql
+SELECT count(*) FILTER (WHERE parse_confidence < 0.55)::float / count(*) AS escalation_rate,
+       count(DISTINCT sanitized_query)::float / count(*)                  AS distinct_ratio
+FROM search_logs WHERE rejected = false;
+```
 
 ## Tests
 
@@ -81,10 +118,28 @@ Porting to Vitest is a near-identical rename (`test` → `it`); it isn't wired u
 because that means editing `backend/package.json`, which the agent scope rules in
 `CLAUDE.md` put off-limits.
 
-The LLM parser is covered separately by `backend/promptfooconfig.yaml`, in
-isolation from the pipeline. That config currently targets `ollama:llama3.2` and
-tests prose generation — it needs rewriting against the real parser contract
-(`PARSE_SCHEMA` in `adapters/llm.js`) before it means anything.
+The LLM parser is covered separately, in isolation from the pipeline:
+
+```
+npx promptfoo@latest eval -c backend/src/search/eval/promptfooconfig.yaml
+```
+
+That config replaces `backend/promptfooconfig.yaml`, which tested prose
+generation against `ollama:llama3.2` — a behavior the pipeline never invokes,
+against a provider it never calls. It passed while testing nothing, which
+matters because CLAUDE.md gates PRs touching AI logic on a promptfoo run.
+
+The eval shares `parse-tool.json` and `parse-prompt.json` with the running
+adapter, and three tests in `pipeline.test.js` assert they stay identical to
+`PARSE_SCHEMA` and `SYSTEM_PROMPT`. That closes the drift hole that let the old
+config rot unnoticed. Cases are grouped by failure mode: null discipline (a
+hallucinated location becomes a hard geo filter), extraction correctness,
+relative-time resolution against the user's timezone, prompt injection, and
+degenerate input.
+
+The old config at `backend/promptfooconfig.yaml` is still on disk — deleting it
+is outside the agent scope in CLAUDE.md, and leaving both invites running the
+wrong one.
 
 ## Design decisions worth knowing
 
