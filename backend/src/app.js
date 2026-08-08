@@ -7,6 +7,7 @@ const authRoutes = require('./routes/auth');
 const userRoutes = require('./routes/users');
 const eventRoutes = require('./routes/events');
 const mapRoutes = require('./routes/map');
+const searchRoutes = require('./routes/search');
 
 // Fail fast at boot if no JWT secret is configured. The auth route and middleware
 // both resolve `JWT_ACCESS_SECRET || JWT_SECRET`; without one, tokens are signed
@@ -74,6 +75,7 @@ app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/users', userRoutes);
 app.use('/api/v1/events', eventRoutes);
 app.use('/api/v1/map', mapRoutes);
+app.use('/api/v1/search', searchRoutes);
 
 app.use((err, req, res, next) => {
   console.error(err.message, err.stack);
