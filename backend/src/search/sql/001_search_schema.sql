@@ -41,6 +41,41 @@ $$;
 
 
 -- ═══════════════════════════════════════════════════════════════════════════
+-- 2b. Immutable helpers required by the generated column
+-- ═══════════════════════════════════════════════════════════════════════════
+--
+-- A generated column's expression must be IMMUTABLE, and `array_to_string` is
+-- marked STABLE — so calling it inside the generated column below fails with
+-- "generation expression is not immutable".
+--
+-- Why array_to_string is STABLE at all: its signature is generic over anyarray,
+-- and converting an arbitrary element type to text goes through that type's
+-- output function, which is not immutable for every type (timestamptz depends
+-- on TimeZone, for instance). The marking is about the general case.
+--
+-- For `text[]` specifically the operation is a deterministic join of values that
+-- are already text — no locale, no session state, no type conversion. So this
+-- wrapper's IMMUTABLE declaration is an assertion about the narrowed signature,
+-- not a lie about the general one. Postgres does not verify the claim; it is on
+-- us to keep the body genuinely deterministic.
+--
+-- NOT STRICT on purpose. A STRICT function returns NULL for NULL input, and
+-- `NULL::tsvector || anything` is NULL — a single event with NULL hashtags would
+-- nullify its entire search_document and vanish from lexical search with no
+-- error. The coalesce inside must actually execute.
+--
+-- ⚠️  Changing this function's semantics later does NOT recompute already-stored
+--     generated values. A redefinition needs a column drop and re-add, which
+--     rewrites the table again.
+CREATE OR REPLACE FUNCTION scene_tags_text(tags text[])
+RETURNS text
+LANGUAGE sql
+IMMUTABLE
+PARALLEL SAFE
+AS $$ SELECT coalesce(array_to_string(tags, ' '), '') $$;
+
+
+-- ═══════════════════════════════════════════════════════════════════════════
 -- 3. events — lexical + semantic columns
 -- ═══════════════════════════════════════════════════════════════════════════
 
@@ -60,7 +95,7 @@ ALTER TABLE events
   ADD COLUMN IF NOT EXISTS search_document tsvector
   GENERATED ALWAYS AS (
     setweight(to_tsvector('english', coalesce(title, '')), 'A') ||
-    setweight(to_tsvector('english', array_to_string(coalesce(hashtags, '{}'), ' ')), 'B') ||
+    setweight(to_tsvector('english', scene_tags_text(hashtags)), 'B') ||
     setweight(to_tsvector('english', coalesce(description, '')), 'C') ||
     setweight(to_tsvector('english', coalesce(address, '')), 'D')
   ) STORED;
@@ -82,6 +117,44 @@ ALTER TABLE events
 -- swap shouldn't cost an API call), and makes drift debuggable after the fact.
 ALTER TABLE events
   ADD COLUMN IF NOT EXISTS embedding_source text;
+
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- 3b. users.display_name — repairs a live bug, not just a search dependency
+-- ═══════════════════════════════════════════════════════════════════════════
+--
+-- ⚠️  READ THIS BEFORE RUNNING. This adds a column to an existing user-facing
+--     table. It is additive and reversible, but it is not a search-only change.
+--
+-- `src/routes/users.js` already queries this column — lines 220, 224, and 234 of
+-- the existing GET /users/search endpoint select it and filter on it. That code
+-- predates the search pipeline. If the column is genuinely absent in production,
+-- **that endpoint has been throwing on every request**, and the failure is
+-- invisible from the app: SearchSheet.jsx catches the error and renders
+-- "couldn't load parties — pull down to retry", which reads as a network blip
+-- rather than as @-search being broken.
+--
+-- So the question is not "should search match on display name?" — the codebase
+-- answered that already. The question is why the column is missing. Two
+-- possibilities, and they want different responses:
+--
+--   1. It was never added. Then /users/search is broken in production right now,
+--      this ALTER fixes it, and it should ship regardless of the search work.
+--   2. The connected database is stale or is not the one the API talks to.
+--      Then nothing here should be applied until that is sorted out.
+--
+-- Confirm which before running. `SELECT count(*) FROM users;` against the same
+-- connection string the API uses is the fastest way to tell.
+--
+-- Mechanically this is cheap: ADD COLUMN with no default and no NOT NULL is
+-- metadata-only on PostgreSQL 11+ — instant, no table rewrite, no lock beyond a
+-- brief catalog update. Existing rows read as NULL, which every consumer already
+-- handles (users.js uses ILIKE, where NULL yields false; parse/username.js
+-- wraps it in COALESCE).
+--
+-- To reverse: DROP COLUMN display_name, and drop the trigram index below.
+ALTER TABLE users
+  ADD COLUMN IF NOT EXISTS display_name text;
 
 
 -- ═══════════════════════════════════════════════════════════════════════════
@@ -255,7 +328,12 @@ CREATE OR REPLACE FUNCTION scene_embedding_source(
 LANGUAGE sql IMMUTABLE AS $$
   SELECT trim(both ' ' FROM concat_ws(E'\n',
     nullif(p_title, ''),
-    nullif(array_to_string(coalesce(p_hashtags, '{}'), ' '), ''),
+    -- Same helper as the generated column (section 2b). This function is
+    -- declared IMMUTABLE and would carry the identical array_to_string problem;
+    -- it doesn't error here only because Postgres verifies declared volatility
+    -- for generated columns, not for function bodies. Routing both through one
+    -- helper keeps the assertion in a single place.
+    nullif(scene_tags_text(p_hashtags), ''),
     nullif(p_description, ''),
     nullif(p_address, '')
   ));

@@ -98,6 +98,24 @@ dashboard under Database → Extensions before continuing.
 psql "$DATABASE_URL" -f backend/src/search/sql/001_search_schema.sql
 ```
 
+### If you are re-running after the first attempt failed
+
+Two bugs surfaced on first contact with a real database and are now fixed:
+
+1. **`generation expression is not immutable`** — the generated column called
+   `array_to_string`, which Postgres marks STABLE. Now routed through an
+   `IMMUTABLE` wrapper (`scene_tags_text`, section 2b).
+2. **`column "display_name" does not exist`** — see section 3b, which now adds
+   it. **Read that section's warning before running:** the column is already
+   queried by the pre-existing `GET /users/search` endpoint, so its absence
+   means that endpoint is broken in production independently of this work.
+   Confirm you're pointed at the database the API actually uses before applying.
+
+The file is `IF NOT EXISTS` throughout and is safe to re-run over the partial
+state the first attempt left. The `events` table rewrite has **not** happened yet
+— `search_document` was never created — so the ACCESS EXCLUSIVE lock warning
+above still applies in full to this run.
+
 ### Verify
 ```sql
 -- All four extensions installed
