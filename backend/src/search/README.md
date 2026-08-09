@@ -40,12 +40,34 @@ nothing in the codebase executes it. Run it against Supabase yourself, in
 section order — the HNSW index at the end must be built *after* embeddings are
 backfilled, or the build is dramatically slower.
 
-**2. Seed `neighborhoods`.** Stage 2b returns "no location" against an empty
-dictionary, which is correct but means every query searches the whole viewport.
+> ⚠️ Adding `search_document` as a `GENERATED ALWAYS AS ... STORED` column takes
+> an **ACCESS EXCLUSIVE lock on `events` and rewrites the table** — every query
+> against `events` blocks until it completes. Run it in a quiet window, not
+> mid-traffic. The HNSW build in section 6 is heavy too.
 
-**3. Backfill embeddings.** `events_needing_embedding` is the work queue. The
-worker that drains it is *not* scaffolded — it wants a queue and a retry policy,
-and the batch size depends on your provider's rate limit.
+**2. Seed `neighborhoods`.** Run `sql/002_seed_neighborhoods.sql` — 36 NYC
+neighborhoods and boroughs with colloquial aliases (`wburg`, `les`, `bed stuy`,
+`bk`). Idempotent on `slug`. Coordinates are **approximate centroids**; spot-check
+before launch, and populate `boundary` with real polygons when you have them —
+neighborhoods aren't circles. The file ends with three verification queries,
+including an alias-collision check that must return zero rows.
+
+**3. Backfill embeddings.**
+
+```
+node src/search/worker/embed-events.js --once --dry-run   # cost estimate, no calls
+node src/search/worker/embed-events.js --once             # drain the queue
+node src/search/worker/embed-events.js --loop             # keep draining
+```
+
+`events_needing_embedding` *is* the queue — no separate state. An edited event
+re-enters automatically; a finished one drops out. No locking: duplicate work is
+idempotent, and an event edited mid-flight is self-correcting because the worker
+stores the source it actually embedded. Failed batches are skipped, not fatal.
+
+**The worker refuses to run in stub mode.** Without a key it would fill the
+column with deterministic pseudo-vectors that look valid, index fine, and return
+meaningless neighbors — the worst kind of failure, because nothing errors.
 
 **4. Set the env vars** (all optional — absent means stub):
 
@@ -173,9 +195,11 @@ weight so a missing retriever doesn't flatten the survivor's scores.
 
 ## Known gaps
 
-- **Embedding worker** — the queue view exists, the worker doesn't.
-- **`neighborhoods` seed data** — table defined, empty.
 - **Fixture DB + relevance harness** — 17 skipped tests describe the contract.
+- **Neighborhood polygons** — seed data ships centroids only; `boundary` is null,
+  so geo scoping is a radius rather than the real shape.
+- **Worker scheduling** — `--loop` is a foreground process. Wire it to whatever
+  runs alongside the API on Render; nothing supervises it today.
 - **`promptfooconfig.yaml`** — still tests the old prose prompts.
 - **Block list in stage 1** — narrow by design; confirm with Trust & Safety
   before launch. False positives read to the user as "search is broken".
