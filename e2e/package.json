@@ -1,0 +1,14 @@
+{
+  "name": "scene-e2e",
+  "private": true,
+  "scripts": {
+    "test": "playwright test",
+    "test:webkit": "playwright test --project=mobile-webkit",
+    "report": "playwright show-report"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.55.0",
+    "dotenv": "^16.4.5",
+    "serve": "^14.2.3"
+  }
+}
