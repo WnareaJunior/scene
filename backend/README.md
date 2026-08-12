@@ -20,14 +20,39 @@ Edit `.env`:
 
 ```env
 DATABASE_URL=postgres://user:password@localhost:5432/scene_dev
-JWT_SECRET=a_long_random_secret
+JWT_ACCESS_SECRET=a_long_random_secret
+JWT_REFRESH_SECRET=another_long_random_secret
 JWT_ACCESS_EXPIRES_IN=15m
 JWT_REFRESH_EXPIRES_IN=7d
 PORT=3000
 SUPABASE_URL=https://<project>.supabase.co
 SUPABASE_SERVICE_KEY=<service_role_key>
 SUPABASE_BUCKET=scene-images
+SEARCH_ENABLED=true   # /api/v1/search is 404 unless this is set
 ```
+
+### Environments — staging vs production
+
+There are two Supabase projects. **`.env` points at staging and is what
+every local run uses by default. Production credentials live only in
+`.env.production` (gitignored) and must never be the ambient default** —
+touching prod should always be a deliberate act:
+
+```bash
+# run something against production, explicitly:
+env $(grep -v '^#' .env.production | xargs) node src/search/worker/embed-events.js --once
+```
+
+| | project ref | used by |
+|---|---|---|
+| staging | `rpjnkjoyxeykqlppwfkp` (scene-staging) | local dev, tests, destructive experiments |
+| production | `kxtrlrtuanjcchwwfqvj` (scene) | Render deploy + the released app — via Render env vars, not a local file |
+
+Staging gotchas: connect via the direct host (`db.<ref>.supabase.co`) —
+the pooler works too once the tenant registers. JWT secrets differ from
+prod on purpose (a leaked dev token can't be replayed against prod).
+`AWS_*` upload keys are still the prod bucket's; create staging-scoped
+keys if upload testing matters.
 
 ### Database
 
@@ -37,6 +62,11 @@ psql scene_dev < migrations/001_init.sql
 psql scene_dev < migrations/002_refresh_token_varchar.sql
 psql scene_dev < migrations/003_user_search.sql
 psql scene_dev < migrations/004_event_image.sql
+psql scene_dev < migrations/005_reports_blocks.sql
+psql scene_dev < migrations/seed_nyc.sql          # optional: NYC test data
+psql scene_dev < src/search/sql/001_search_schema.sql
+psql scene_dev < src/search/sql/002_seed_neighborhoods.sql
+# src/search/sql/003_hnsw_index.sql runs only after the embedding backfill
 ```
 
 The migration enables `uuid-ossp` and `postgis`, creates all tables, and adds spatial + time indexes.
