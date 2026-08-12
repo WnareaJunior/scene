@@ -75,7 +75,12 @@ app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/users', userRoutes);
 app.use('/api/v1/events', eventRoutes);
 app.use('/api/v1/map', mapRoutes);
-app.use('/api/v1/search', searchRoutes);
+// Ships dark: the search pipeline can merge to main before its embedding
+// backfill has run. Until SEARCH_ENABLED=true is set in the environment,
+// the route does not exist (404), so a deploy cannot expose half-built search.
+if (process.env.SEARCH_ENABLED === 'true') {
+  app.use('/api/v1/search', searchRoutes);
+}
 
 app.use((err, req, res, next) => {
   console.error(err.message, err.stack);
