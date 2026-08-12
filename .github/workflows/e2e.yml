@@ -1,0 +1,70 @@
+# Web v1 e2e suite — runs on every PR and on main.
+#
+# The suite builds the Expo web bundle, serves it locally inside the job, and
+# runs Playwright against it with real network calls to the deployed API.
+#
+# Deploy-side prerequisites on the API (Render env vars), one-time setup:
+#   ALLOWED_ORIGINS          must include http://localhost:4173
+#   E2E_RATE_LIMIT_BYPASS    must equal the E2E_RATE_LIMIT_BYPASS repo secret
+#     (without it the auth limiter, 10 req/15 min/IP, 429s the suite)
+#
+# Repo secrets: E2E_EMAIL, E2E_PASSWORD (seeded account), E2E_RATE_LIMIT_BYPASS.
+# Optional repo vars: E2E_API_URL (defaults to prod), E2E_USERNAME.
+name: e2e
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  playwright:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      EXPO_PUBLIC_API_URL: ${{ vars.E2E_API_URL || 'https://scene-19ss.onrender.com' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            frontend/package-lock.json
+            e2e/package-lock.json
+
+      - name: Install frontend dependencies
+        run: npm ci
+        working-directory: frontend
+
+      - name: Export web build
+        run: npx expo export --platform web
+        working-directory: frontend
+
+      - name: Install e2e dependencies
+        run: npm ci
+        working-directory: e2e
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps webkit chromium
+        working-directory: e2e
+
+      - name: Run Playwright suite
+        run: npx playwright test
+        working-directory: e2e
+        env:
+          E2E_EMAIL: ${{ secrets.E2E_EMAIL }}
+          E2E_PASSWORD: ${{ secrets.E2E_PASSWORD }}
+          E2E_USERNAME: ${{ vars.E2E_USERNAME || 'scene_e2e' }}
+          E2E_KEY: ${{ secrets.E2E_RATE_LIMIT_BYPASS }}
+
+      - name: Upload report and traces
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: |
+            e2e/playwright-report
+            e2e/test-results
+          retention-days: 7

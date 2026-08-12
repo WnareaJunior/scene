@@ -1,5 +1,6 @@
 const express = require('express');
 const cors = require('cors');
+const crypto = require('crypto');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 
@@ -33,28 +34,48 @@ const corsOptions = {
     callback(Object.assign(new Error(`Origin '${origin}' not allowed by CORS`), { status: 403 }));
   },
   methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Authorization', 'Content-Type'],
+  // X-E2E-Key: see isE2eBypass below — without it here, the browser's CORS
+  // preflight rejects the header before the limiter ever sees it.
+  allowedHeaders: ['Authorization', 'Content-Type', 'X-E2E-Key'],
 };
 
 const rateLimitResponse = (req, res) =>
   res.status(429).json({ error: 'Too many attempts, please try again later' });
 
+// E2E test support. The Playwright suite runs its whole auth matrix from a
+// single CI IP, which would trip the 10-per-15-min auth limiter on the third
+// test. When the E2E_RATE_LIMIT_BYPASS env var is set, requests carrying the
+// matching X-E2E-Key header skip rate limiting. Unset (the default everywhere
+// except a test-enabled deploy), this is dead code — no request can bypass.
+// timingSafeEqual so the header can't be brute-forced via a timing oracle.
+function isE2eBypass(req) {
+  const secret = process.env.E2E_RATE_LIMIT_BYPASS;
+  if (!secret) return false;
+  const key = req.get('x-e2e-key') || '';
+  const a = Buffer.from(key);
+  const b = Buffer.from(secret);
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
+
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 10,
   handler: rateLimitResponse,
+  skip: isE2eBypass,
 });
 
 const refreshLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: 30,
   handler: rateLimitResponse,
+  skip: isE2eBypass,
 });
 
 const apiLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: 200,
   handler: rateLimitResponse,
+  skip: isE2eBypass,
 });
 
 const app = express();
@@ -69,6 +90,13 @@ app.post('/api/v1/auth/login', authLimiter);
 app.post('/api/v1/auth/register', authLimiter);
 app.post('/api/v1/auth/refresh', refreshLimiter);
 
+// Every /api/v1 response is private, per-user JSON — never disk-cacheable.
+// Without this, Chromium can revive a pre-edit GET /users/me from cache after
+// a reload and show stale profile data.
+app.use('/api/v1', (req, res, next) => {
+  res.set('Cache-Control', 'no-store');
+  next();
+});
 app.use('/api/v1', apiLimiter);
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/users', userRoutes);

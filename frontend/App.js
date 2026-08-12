@@ -11,8 +11,10 @@ import Scene from './Scene';
 import OnboardingScreen from './src/screens/OnboardingScreen';
 import { COLORS } from './src/constants/colors';
 import { users, auth, saveTokens, getStoredToken, clearTokens } from './src/api';
+import { isWeb, getPath, replacePath, onPathChange } from './src/urlSync';
 
 const ONBOARDING_KEY = 'scene.onboarding.v1.seen';
+const AUTH_PATHS = ['/login', '/signup'];
 
 class ErrorBoundary extends React.Component {
   state = { hasError: false };
@@ -48,10 +50,29 @@ export default function App() {
     bootstrap();
   }, []);
 
+  // Web auth guard: unauthenticated hits on app routes land on /login;
+  // authenticated users never see /login, /signup, or a bare /. Native: no-op
+  // (isWeb is false and the effect returns immediately).
+  useEffect(() => {
+    if (!isWeb || loading) return undefined;
+    const guard = () => {
+      const path = getPath();
+      if (!user && !AUTH_PATHS.includes(path)) {
+        replacePath('/login');
+      } else if (user && (path === '/' || AUTH_PATHS.includes(path))) {
+        replacePath('/feed');
+      }
+    };
+    guard();
+    return onPathChange(guard);
+  }, [user, loading]);
+
   async function bootstrap() {
     try {
+      // Web skips the swipe-through intro — it's built around native gestures,
+      // and the web v1 surface (feed + profile) doesn't need it.
       const seen = await AsyncStorage.getItem(ONBOARDING_KEY).catch(() => null);
-      setOnboarded(seen === '1');
+      setOnboarded(isWeb || seen === '1');
       const token = await getStoredToken();
       if (token) {
         const me = await users.me();
