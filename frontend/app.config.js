@@ -87,6 +87,12 @@ module.exports = {
     web: {
       favicon: './assets/favicon.png',
     },
+    // Subpath hosting (GitHub Pages project sites live at /<repo>/): prefixes
+    // every asset URL in the web export. urlSync.web.js strips/re-adds the
+    // same prefix for routing. Unset for local dev, CI e2e, and root hosting.
+    ...(process.env.EXPO_PUBLIC_WEB_BASE_PATH
+      ? { experiments: { baseUrl: process.env.EXPO_PUBLIC_WEB_BASE_PATH } }
+      : {}),
     // Keys exposed to JS runtime via Constants.expoConfig.extra
     // (platform-specific config blocks above are native-only and not readable at runtime)
     extra: {
