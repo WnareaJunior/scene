@@ -1,7 +1,16 @@
-import * as SecureStore from 'expo-secure-store';
-import { File } from 'expo-file-system';
+// Token storage and multipart file parts are platform-split modules: Metro
+// resolves the .web.js variants on web (localStorage / upload-unsupported
+// stub) and the .js variants on native (SecureStore / expo-file-system).
+import {
+  getAccessToken, getRefreshToken, setAccessToken,
+  saveTokens, clearTokens,
+} from './tokenStore';
+import { makeUploadPart } from './uploadPart';
 
-const BASE_URL = 'https://scene-19ss.onrender.com/api/v1';
+export { saveTokens, clearTokens };
+
+// Overridable so web builds and e2e runs can point at a local or staging API.
+const BASE_URL = `${process.env.EXPO_PUBLIC_API_URL || 'https://scene-19ss.onrender.com'}/api/v1`;
 
 // ── Fetch with retry ──────────────────────────────────────────────────────────
 // Render free tier spins the server down when idle; the first request during a
@@ -25,27 +34,14 @@ async function fetchWithRetry(url, options) {
   }
 }
 
-// ── Token storage (SecureStore — encrypted on-device) ─────────────────────────
-
-export async function saveTokens({ accessToken, refreshToken }) {
-  const ops = [SecureStore.setItemAsync('accessToken', accessToken)];
-  if (refreshToken) ops.push(SecureStore.setItemAsync('refreshToken', refreshToken));
-  await Promise.all(ops);
-}
-
-export async function clearTokens() {
-  await Promise.all([
-    SecureStore.deleteItemAsync('accessToken'),
-    SecureStore.deleteItemAsync('refreshToken'),
-  ]);
-}
+// ── Token refresh ─────────────────────────────────────────────────────────────
 
 export async function getStoredToken() {
-  return SecureStore.getItemAsync('accessToken');
+  return getAccessToken();
 }
 
 async function refreshAccessToken() {
-  const refreshToken = await SecureStore.getItemAsync('refreshToken');
+  const refreshToken = await getRefreshToken();
   if (!refreshToken) throw new Error('No refresh token');
 
   const res = await fetchWithRetry(`${BASE_URL}/auth/refresh`, {
@@ -60,7 +56,7 @@ async function refreshAccessToken() {
   }
 
   const data = await res.json();
-  await SecureStore.setItemAsync('accessToken', data.accessToken);
+  await setAccessToken(data.accessToken);
   return data.accessToken;
 }
 
@@ -98,11 +94,8 @@ async function request(method, path, body, retry = true) {
 
 async function uploadFile(path, fieldName, imageUri, retry = true) {
   let token = await getStoredToken();
-  // SDK 54+ global fetch is Expo's WinterCG fetch, which rejects React Native's
-  // proprietary {uri, name, type} FormData parts ("Unsupported FormDataPart
-  // implementation"). expo-file-system's File implements Blob, which it accepts.
   const formData = new FormData();
-  formData.append(fieldName, new File(imageUri));
+  formData.append(fieldName, makeUploadPart(imageUri));
   const res = await fetchWithRetry(`${BASE_URL}${path}`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${token}` },
@@ -136,7 +129,7 @@ export const auth = {
     request('POST', '/auth/login', { email, password }),
 
   logout: async () => {
-    const refreshToken = await SecureStore.getItemAsync('refreshToken');
+    const refreshToken = await getRefreshToken();
     if (refreshToken) {
       await request('POST', '/auth/logout', { refreshToken }).catch(() => {});
     }

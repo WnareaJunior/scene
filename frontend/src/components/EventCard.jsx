@@ -2,7 +2,10 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
 import { COLORS } from '../constants/colors';
 
-export default function EventCard({ event, onRsvp, onPress }) {
+// `onRsvp` is optional: the read-only web feed omits it and the RSVP button
+// disappears (writes are out of scope on web v1). `showHost` adds the host's
+// @username — the web feed has no map context to identify whose party it is.
+export default function EventCard({ event, onRsvp, onPress, showHost = false, testID }) {
   const date = event.start_time
     ? new Date(event.start_time).toLocaleDateString(undefined, {
         month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
@@ -37,6 +40,9 @@ export default function EventCard({ event, onRsvp, onPress }) {
           <Text style={styles.cardTag}>#{event.hashtags[0]}</Text>
         )}
       </View>
+      {showHost && event.host_username ? (
+        <Text style={styles.cardHost} testID="feed-post-host">@{event.host_username}</Text>
+      ) : null}
       <Text style={styles.cardMeta}>{date}{event.address ? ` · ${event.address}` : ''}</Text>
       <View style={styles.cardFooter}>
         <View>
@@ -48,6 +54,7 @@ export default function EventCard({ event, onRsvp, onPress }) {
               : null
           }
         </View>
+        {onRsvp ? (
         <TouchableOpacity
           style={[styles.rsvpBtn, hasRsvp && styles.rsvpBtnActive, isFull && !hasRsvp && styles.rsvpBtnDisabled]}
           onPress={handleRsvpPress}
@@ -59,6 +66,7 @@ export default function EventCard({ event, onRsvp, onPress }) {
             {hasRsvp ? 'going ✓' : 'RSVP'}
           </Text>
         </TouchableOpacity>
+        ) : null}
       </View>
     </>
   );
@@ -69,6 +77,7 @@ export default function EventCard({ event, onRsvp, onPress }) {
         style={styles.card}
         onPress={onPress}
         activeOpacity={0.85}
+        testID={testID}
         accessibilityRole="button"
         accessibilityLabel={`${event.title}, ${date}`}
       >
@@ -76,7 +85,7 @@ export default function EventCard({ event, onRsvp, onPress }) {
       </TouchableOpacity>
     );
   }
-  return <View style={styles.card}>{inner}</View>;
+  return <View style={styles.card} testID={testID}>{inner}</View>;
 }
 
 const styles = StyleSheet.create({
@@ -88,6 +97,7 @@ const styles = StyleSheet.create({
   cardHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 },
   cardTitle: { color: COLORS.ink, fontSize: 16, fontWeight: '600', flex: 1 },
   cardTag: { color: COLORS.accent, fontSize: 12 },
+  cardHost: { color: COLORS.inkSecondary, fontSize: 13, marginBottom: 2 },
   cardMeta: { color: COLORS.inkSecondary, fontSize: 13, marginBottom: 10 },
   cardFooter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   cardCount: { color: COLORS.inkSecondary, fontSize: 13 },
