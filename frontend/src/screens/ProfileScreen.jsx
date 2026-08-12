@@ -208,10 +208,12 @@ export default function ProfileScreen({ user, onSignOut, refreshKey = 0 }) {
     setListData([]);
     setListLoading(true);
     try {
-      const data = type === 'followers'
+      const res = type === 'followers'
         ? await users.followers(profileData.id)
         : await users.following(profileData.id);
-      setListData(Array.isArray(data) ? data : []);
+      // endpoint returns a paginated envelope: { data, total, limit, offset }
+      const rows = Array.isArray(res) ? res : res?.data;
+      setListData(Array.isArray(rows) ? rows : []);
     } catch {
       setListData([]);
     } finally {

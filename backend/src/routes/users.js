@@ -383,7 +383,8 @@ router.get('/:userId/followers', requireAuth, async (req, res, next) => {
         [req.params.userId]
       ),
       db.query(
-        `SELECT u.id, u.username, u.profile_picture
+        `SELECT u.id, u.username, u.profile_picture,
+                (SELECT count(*) FROM follows WHERE followed_id = u.id)::int AS followers_count
          FROM follows f
          JOIN users u ON u.id = f.follower_id
          WHERE f.followed_id = $1
@@ -411,7 +412,8 @@ router.get('/:userId/following', requireAuth, async (req, res, next) => {
         [req.params.userId]
       ),
       db.query(
-        `SELECT u.id, u.username, u.profile_picture
+        `SELECT u.id, u.username, u.profile_picture,
+                (SELECT count(*) FROM follows WHERE followed_id = u.id)::int AS followers_count
          FROM follows f
          JOIN users u ON u.id = f.followed_id
          WHERE f.follower_id = $1
