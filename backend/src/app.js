@@ -8,6 +8,7 @@ const authRoutes = require('./routes/auth');
 const userRoutes = require('./routes/users');
 const eventRoutes = require('./routes/events');
 const mapRoutes = require('./routes/map');
+const searchRoutes = require('./routes/search');
 
 // Fail fast at boot if no JWT secret is configured. The auth route and middleware
 // both resolve `JWT_ACCESS_SECRET || JWT_SECRET`; without one, tokens are signed
@@ -102,6 +103,12 @@ app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/users', userRoutes);
 app.use('/api/v1/events', eventRoutes);
 app.use('/api/v1/map', mapRoutes);
+// Ships dark: the search pipeline can merge to main before its embedding
+// backfill has run. Until SEARCH_ENABLED=true is set in the environment,
+// the route does not exist (404), so a deploy cannot expose half-built search.
+if (process.env.SEARCH_ENABLED === 'true') {
+  app.use('/api/v1/search', searchRoutes);
+}
 
 app.use((err, req, res, next) => {
   console.error(err.message, err.stack);

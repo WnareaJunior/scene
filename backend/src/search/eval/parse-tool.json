@@ -1,0 +1,38 @@
+{
+  "name": "record_entities",
+  "description": "Record the entities extracted from the search query.",
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "vibe": {
+        "type": ["string", "null"],
+        "description": "The mood/activity the user is after, with time, place, and handle removed. Null if the query is purely entities."
+      },
+      "location": {
+        "type": ["string", "null"],
+        "description": "A neighborhood, venue, or city name mentioned in the query. Null if absent."
+      },
+      "time": {
+        "type": ["object", "null"],
+        "properties": {
+          "start": {
+            "type": ["string", "null"],
+            "description": "ISO 8601 start of the implied window"
+          },
+          "end": {
+            "type": ["string", "null"],
+            "description": "ISO 8601 end of the implied window"
+          }
+        },
+        "required": ["start", "end"],
+        "additionalProperties": false
+      },
+      "username": {
+        "type": ["string", "null"],
+        "description": "A handle the user is searching for, without the @ prefix. Null if absent."
+      }
+    },
+    "required": ["vibe", "location", "time", "username"],
+    "additionalProperties": false
+  }
+}

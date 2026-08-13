@@ -186,3 +186,49 @@ export const events = {
 export const map = {
   eventPins: (params = {}) => request('GET', `/map/events?${qs(params)}`),
 };
+
+// ── Search ────────────────────────────────────────────────────────────────────
+//
+// Unified search — one call replaces the client-side branch between
+// events.discover() and users.search(). All parsing (time, place, @handle) is
+// server-side; the client just forwards the raw string.
+//
+// SearchSheet still uses the old two-call path. This is wired up but not yet
+// switched over, so the two can be compared on the same traffic before the
+// cutover.
+
+export const search = {
+  /**
+   * @param {string} q Raw query, exactly as typed
+   * @param {object} [params] lat, lng, radius, limit, offset
+   * @returns {Promise<{events: object[], users: object[], meta: object}>}
+   */
+  query: (q, params = {}) =>
+    request(
+      'GET',
+      `/search?${qs({
+        q,
+        // The server runs in UTC. Without the client's offset, "tonight" after
+        // 20:00 EDT resolves to tomorrow and silently returns the wrong day.
+        tzOffset: -new Date().getTimezoneOffset(),
+        ...params,
+      })}`
+    ),
+
+  /**
+   * Click attribution for the search log. Fire-and-forget — a failure here must
+   * never block navigation into the detail sheet.
+   *
+   * @param {string} searchId From the previous response's meta.searchId
+   * @param {{resultId: string, resultType: 'event'|'user', position: number}} tap
+   *   `position` is 1-based; it's what makes the log usable as click data.
+   */
+  tap: (searchId, { resultId, resultType, position }) => {
+    if (!searchId) return Promise.resolve();
+    return request('POST', `/search/${searchId}/tap`, {
+      resultId,
+      resultType,
+      position,
+    }).catch(() => {});
+  },
+};
