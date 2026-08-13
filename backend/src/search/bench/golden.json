@@ -1,0 +1,39 @@
+{
+  "comment": "Golden query set for the search bench. Each case: q (raw query), match (case-insensitive regex a relevant result's title+description must satisfy), and optional expectations. Categories group the report. Viewport defaults to central Brooklyn unless overridden.",
+  "defaultViewport": { "lat": 40.7205, "lng": -73.9565 },
+  "cases": [
+    { "cat": "lexical",  "q": "techno tonight in bushwick",        "match": "techno|warehouse",        "expectPlace": "Bushwick" },
+    { "cat": "lexical",  "q": "live jazz in harlem",               "match": "jazz",                    "expectPlace": "Harlem" },
+    { "cat": "lexical",  "q": "karaoke night",                     "match": "karaoke" },
+    { "cat": "lexical",  "q": "pub trivia",                        "match": "trivia" },
+    { "cat": "lexical",  "q": "open mic",                          "match": "open mic" },
+    { "cat": "lexical",  "q": "poetry slam",                       "match": "poetry|verses" },
+    { "cat": "lexical",  "q": "salsa night",                       "match": "salsa|bachata|latin" },
+    { "cat": "lexical",  "q": "afrobeats party this weekend",      "match": "afrobeats|amapiano" },
+    { "cat": "lexical",  "q": "gallery opening",                   "match": "gallery|art walk|studio" },
+    { "cat": "lexical",  "q": "night market",                      "match": "market|vendors" },
+
+    { "cat": "semantic", "q": "somewhere to hear saxophone",       "match": "jazz" },
+    { "cat": "semantic", "q": "electronic music all night",        "match": "techno|house|warehouse|rave" },
+    { "cat": "semantic", "q": "dance lessons for beginners",       "match": "salsa|bachata|lesson" },
+    { "cat": "semantic", "q": "watch short films by local directors", "match": "film|screening|movies" },
+    { "cat": "semantic", "q": "play chess outside",                "match": "chess" },
+    { "cat": "semantic", "q": "morning workout in the park",       "match": "run|yoga|basketball|5k" },
+    { "cat": "semantic", "q": "low key hang with books",           "match": "book|reading" },
+    { "cat": "semantic", "q": "listen to records with strangers",  "match": "vinyl|record|listening" },
+    { "cat": "semantic", "q": "stand up comics trying new jokes",  "match": "comedy|stand-?up|comics" },
+    { "cat": "semantic", "q": "eat my way through a neighborhood", "match": "food|supper|market|crawl" },
+
+    { "cat": "parse",    "q": "jazz tomorrow night in greenpoint", "match": "jazz",                    "expectPlace": "Greenpoint", "expectTime": true },
+    { "cat": "parse",    "q": "picnic this weekend in astoria",    "match": "picnic|chess|book|park",  "expectPlace": "Astoria",    "expectTime": true },
+    { "cat": "parse",    "q": "rooftop party friday in williamsburg", "match": "rooftop|house",        "expectPlace": "Williamsburg", "expectTime": true },
+
+    { "cat": "borough",  "q": "comedy in the bronx",               "match": "comedy|stand-?up",        "resultsNear": { "lat": 40.837, "lng": -73.885, "km": 15 } },
+    { "cat": "borough",  "q": "live music in staten island",       "match": "jazz|open mic|music|vinyl", "resultsNear": { "lat": 40.61, "lng": -74.11, "km": 20 } },
+    { "cat": "borough",  "q": "food in queens",                    "match": "market|supper|food|crawl", "resultsNear": { "lat": 40.75, "lng": -73.88, "km": 12 } },
+
+    { "cat": "users",    "q": "@miabk",                            "expectMode": "users", "expectUser": "miabk" },
+    { "cat": "users",    "q": "@ninaharlem",                       "expectMode": "users", "expectUser": "ninaharlem" },
+    { "cat": "users",    "q": "@zz_no_such_user_zz",               "expectMode": "users", "expectEmptyUsers": true }
+  ]
+}
