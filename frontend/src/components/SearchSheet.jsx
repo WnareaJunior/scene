@@ -9,7 +9,7 @@ import Animated, {
   useSharedValue, useAnimatedStyle, withSpring, runOnJS, ReduceMotion,
 } from 'react-native-reanimated';
 
-import { events, users } from '../api';
+import { events, search } from '../api';
 import { COLORS } from '../constants/colors';
 import EventCard from './EventCard';
 import EventDetailSheet from './EventDetailSheet';
@@ -64,6 +64,9 @@ export default function SearchSheet({ slideX, screenW, viewport, onNavigate, cur
   const [viewingUserId, setViewingUserId] = useState(null);
   const [selectedEvent, setSelectedEvent] = useState(null);
   const debounceRef           = useRef(null);
+  // searchId of the results currently on screen, for tap attribution in the
+  // search log; null whenever the list is the browse feed.
+  const searchIdRef           = useRef(null);
   const viewportTimerRef      = useRef(null);
   const feedGenRef            = useRef(0);
   const lastFetchPosRef       = useRef(null);
@@ -76,6 +79,7 @@ export default function SearchSheet({ slideX, screenW, viewport, onNavigate, cur
   // load nearby public events — stable reference, reads viewport via ref
   const loadFeed = useCallback(async () => {
     const gen = ++feedGenRef.current;
+    searchIdRef.current = null;
     setLoading(true);
     setMode('events');
     setErrorMsg(null);
@@ -186,28 +190,21 @@ export default function SearchSheet({ slideX, screenW, viewport, onNavigate, cur
       setLoading(true);
       setErrorMsg(null);
       try {
-        if (query.startsWith('@')) {
-          const username = query.slice(1).trim();
+        // One unified call — the server parses time ("tonight"), place
+        // ("bushwick"), and @handles out of the raw string, retrieves
+        // lexically + semantically, and returns {events, users, meta}.
+        const vp = viewportRef.current;
+        const data = await search.query(
+          query.trim(),
+          vp ? { lat: vp.latitude, lng: vp.longitude, limit: 20 } : { limit: 20 }
+        );
+        searchIdRef.current = data.meta?.searchId ?? null;
+        if (data.meta?.parsed?.username != null) {
           setMode('users');
-          if (username) {
-            const data = await users.search(username);
-            setResults(Array.isArray(data) ? data : []);
-          } else {
-            setResults([]);
-          }
+          setResults(Array.isArray(data.users) ? data.users : []);
         } else {
           setMode('events');
-          const params = { hashtags: query.trim(), limit: 20, startAfter: new Date().toISOString() };
-          if (viewport) {
-            const latD = viewport.latitudeDelta / 2;
-            const lngD = viewport.longitudeDelta / 2;
-            params.swLat = viewport.latitude - latD;
-            params.swLng = viewport.longitude - lngD;
-            params.neLat = viewport.latitude + latD;
-            params.neLng = viewport.longitude + lngD;
-          }
-          const data = await events.discover(params);
-          setResults(Array.isArray(data) ? data : []);
+          setResults(Array.isArray(data.events) ? data.events : []);
         }
       } catch {
         setResults([]);
@@ -219,6 +216,17 @@ export default function SearchSheet({ slideX, screenW, viewport, onNavigate, cur
 
     return () => clearTimeout(debounceRef.current);
   }, [query, loadFeed]);
+
+  // Click attribution for the search log — fire-and-forget (search.tap
+  // swallows failures), and a no-op when the list is the browse feed.
+  function reportTap(item, index) {
+    if (!searchIdRef.current) return;
+    search.tap(searchIdRef.current, {
+      resultId: item.id,
+      resultType: mode === 'users' ? 'user' : 'event',
+      position: index + 1,
+    });
+  }
 
   async function handleRsvp(eventId, status) {
     const prevEvent = results.find(ev => ev.id === eventId);
@@ -314,9 +322,9 @@ export default function SearchSheet({ slideX, screenW, viewport, onNavigate, cur
           <View style={styles.searchRow}>
             <TextInput
               style={styles.searchInput}
-              placeholder="search tags… or @username"
+              placeholder={'try "jazz tonight in harlem"… or @username'}
               placeholderTextColor={COLORS.inkSecondary}
-              accessibilityLabel="search parties by tag or people by username"
+              accessibilityLabel="search parties in plain language, or people by username"
               returnKeyType="search"
               value={query}
               onChangeText={setQuery}
@@ -358,11 +366,11 @@ export default function SearchSheet({ slideX, screenW, viewport, onNavigate, cur
                   tintColor={COLORS.accent}
                 />
               }
-              renderItem={({ item }) =>
+              renderItem={({ item, index }) =>
                 mode === 'users' ? (
                   <TouchableOpacity
                     style={styles.userCard}
-                    onPress={() => setViewingUserId(item.id)}
+                    onPress={() => { reportTap(item, index); setViewingUserId(item.id); }}
                     activeOpacity={0.7}
                   >
                     <Text style={styles.userName}>@{item.username}</Text>
@@ -373,7 +381,7 @@ export default function SearchSheet({ slideX, screenW, viewport, onNavigate, cur
                   <EventCard
                     event={item}
                     onRsvp={handleRsvp}
-                    onPress={() => setSelectedEvent(item)}
+                    onPress={() => { reportTap(item, index); setSelectedEvent(item); }}
                   />
                 )
               }
