@@ -4,9 +4,7 @@ const requireAuth = require('../middleware/auth');
 const multer = require('multer');
 const { v4: uuidv4 } = require('uuid');
 
-const SUPABASE_URL = process.env.SUPABASE_URL;
-const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;
-const SUPABASE_BUCKET = process.env.SUPABASE_BUCKET;
+const storage = require('../storage');
 
 const ALLOWED_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 const MIME_TO_EXT = { 'image/jpeg': '.jpg', 'image/png': '.png', 'image/webp': '.webp' };
@@ -18,26 +16,6 @@ function detectMime(buf) {
   if (buf[0] === 0x52 && buf[1] === 0x49 && buf[2] === 0x46 && buf[3] === 0x46 &&
       buf[8] === 0x57 && buf[9] === 0x45 && buf[10] === 0x42 && buf[11] === 0x50) return 'image/webp';
   return null;
-}
-
-async function uploadToSupabase(buffer, filename, mimetype) {
-  const res = await fetch(
-    `${SUPABASE_URL}/storage/v1/object/${SUPABASE_BUCKET}/events/${filename}`,
-    {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${SUPABASE_SERVICE_KEY}`,
-        'Content-Type': mimetype,
-        'x-upsert': 'true',
-      },
-      body: buffer,
-    }
-  );
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.message || `Storage upload failed: ${res.status}`);
-  }
-  return `${SUPABASE_URL}/storage/v1/object/public/${SUPABASE_BUCKET}/events/${filename}`;
 }
 
 const upload = multer({
@@ -63,7 +41,7 @@ router.post('/image', requireAuth, upload.single('image'), async (req, res, next
     }
     const ext = MIME_TO_EXT[detectedMime];
     const filename = `${uuidv4()}${ext}`;
-    const url = await uploadToSupabase(req.file.buffer, filename, detectedMime);
+    const url = await storage.upload('events', filename, req.file.buffer, detectedMime);
     res.json({ url });
   } catch (err) { next(err); }
 });

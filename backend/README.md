@@ -31,6 +31,28 @@ SUPABASE_BUCKET=scene-images
 SEARCH_ENABLED=true   # /api/v1/search is 404 unless this is set
 ```
 
+### Local: everything on the devbox (no cloud accounts)
+
+The home server runs a Postgres 17 (PostGIS + pgvector) and a MinIO that
+replace Supabase entirely for local dev. The `scene` database already has
+migrations 001–005 and the search schema applied; the `scene` MinIO bucket
+exists with public-read downloads. Point `.env` at them:
+
+```env
+DATABASE_URL=postgresql://dev:<password>@devbox:5433/scene
+DATABASE_SSL=disable            # local Postgres has no TLS
+
+STORAGE_DRIVER=s3               # src/storage.js switches drivers
+S3_ENDPOINT=http://devbox:9000
+S3_BUCKET=scene
+S3_ACCESS_KEY=devbox
+S3_SECRET_KEY=<minio password>
+```
+
+Passwords live in the home-server repo under `.secrets/` (`data.env`,
+`devtools.env`). Works from any Tailscale device — the app on your phone can
+hit a backend running on the devbox too.
+
 ### Environments — staging vs production
 
 There are two Supabase projects. **`.env` points at staging and is what
@@ -179,6 +201,7 @@ backend/
 ├── src/
 │   ├── app.js            Express app, middleware, route mounting
 │   ├── db.js             pg Pool wrapper
+│   ├── storage.js        Image storage driver (Supabase prod / S3-MinIO local)
 │   ├── middleware/
 │   │   └── auth.js       JWT Bearer verification
 │   └── routes/
@@ -205,8 +228,8 @@ backend/
 
 - Images are uploaded via `POST /events/image` or `POST /users/me/avatar` as `multipart/form-data`.
 - Server validates MIME type from magic bytes (not the `Content-Type` header) before accepting the file.
-- Files are stored in a Supabase Storage bucket (`SUPABASE_BUCKET` env var). The returned public URL is then stored in `events.image_url` or `users.profile_picture`.
-- Requires `SUPABASE_URL` and `SUPABASE_SERVICE_KEY` in `.env`.
+- Storage sits behind `src/storage.js`, which has two drivers selected by `STORAGE_DRIVER`: `supabase` (default — Supabase Storage REST, needs `SUPABASE_URL`/`SUPABASE_SERVICE_KEY`/`SUPABASE_BUCKET`) and `s3` (any S3-compatible endpoint — MinIO on the devbox locally, needs `S3_ENDPOINT`/`S3_BUCKET`/`S3_ACCESS_KEY`/`S3_SECRET_KEY`).
+- Either way the returned public URL is stored in `events.image_url` or `users.profile_picture`.
 
 ## Search notes
 
