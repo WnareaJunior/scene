@@ -4,29 +4,7 @@ const db = require('../db');
 const requireAuth = require('../middleware/auth');
 const multer = require('multer');
 
-const SUPABASE_URL = process.env.SUPABASE_URL;
-const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;
-const SUPABASE_BUCKET = process.env.SUPABASE_BUCKET;
-
-async function uploadToSupabase(buffer, filename, mimetype) {
-  const res = await fetch(
-    `${SUPABASE_URL}/storage/v1/object/${SUPABASE_BUCKET}/avatars/${filename}`,
-    {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${SUPABASE_SERVICE_KEY}`,
-        'Content-Type': mimetype,
-        'x-upsert': 'true',
-      },
-      body: buffer,
-    }
-  );
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.message || `Storage upload failed: ${res.status}`);
-  }
-  return `${SUPABASE_URL}/storage/v1/object/public/${SUPABASE_BUCKET}/avatars/${filename}`;
-}
+const storage = require('../storage');
 
 const ALLOWED_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 const MIME_TO_EXT = { 'image/jpeg': '.jpg', 'image/png': '.png', 'image/webp': '.webp' };
@@ -123,12 +101,9 @@ router.delete('/me', requireAuth, async (req, res, next) => {
 
     // Best-effort avatar cleanup — the account row is already gone, so a
     // storage failure must not surface as a failed deletion to the client.
-    if (rows[0].profile_picture && SUPABASE_URL && SUPABASE_SERVICE_KEY) {
+    if (rows[0].profile_picture && storage.configured) {
       const filename = rows[0].profile_picture.split('/').pop();
-      fetch(`${SUPABASE_URL}/storage/v1/object/${SUPABASE_BUCKET}/avatars/${filename}`, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${SUPABASE_SERVICE_KEY}` },
-      }).catch(() => {});
+      storage.remove('avatars', filename).catch(() => {});
     }
 
     res.status(204).end();
@@ -147,7 +122,7 @@ router.post('/me/avatar', requireAuth, upload.single('avatar'), async (req, res,
     }
     const ext = MIME_TO_EXT[detectedMime];
     const filename = `${req.user.sub}${ext}`;
-    const url = await uploadToSupabase(req.file.buffer, filename, detectedMime);
+    const url = await storage.upload('avatars', filename, req.file.buffer, detectedMime);
     const { rows } = await db.query(
       `UPDATE users SET profile_picture = $1, updated_at = now() WHERE id = $2
        RETURNING id, email, username, bio, profile_picture`,
