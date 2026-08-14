@@ -22,7 +22,7 @@ Location-based event discovery platform connecting micro-venue hosts and indepen
 | Database | PostgreSQL + PostGIS |
 | Auth | JWT (access + refresh tokens) |
 | Geo | PostGIS `ST_Within` (bbox) · `ST_DWithin` (radius) |
-| Storage | Supabase Storage (event images, avatars) |
+| Storage | Supabase Storage in prod · MinIO (S3 driver) for local dev — `backend/src/storage.js` |
 | Search | PostgreSQL `pg_trgm` (username / display name) |
 
 ## Monorepo structure
@@ -64,6 +64,11 @@ Location-based event discovery platform connecting micro-venue hosts and indepen
 ## Quick start
 
 See [`backend/README.md`](./backend/README.md) and [`frontend/README.md`](./frontend/README.md) for full setup instructions.
+
+Local development needs no cloud accounts: the devbox home server provides
+the Postgres (PostGIS + pgvector, migrations pre-applied) and an S3-compatible
+MinIO for image uploads — see "Local: everything on the devbox" in the backend
+README.
 
 ## License
 
