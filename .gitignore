@@ -12,6 +12,7 @@ node_modules/
 *.sql
 *.dump
 !backend/migrations/*.sql
+!backend/migrations/legacy/*.sql
 
 # React Native
 .expo/
