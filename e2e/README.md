@@ -22,9 +22,11 @@ npm install && npx playwright install webkit chromium
 npm test
 ```
 
-In CI (`.github/workflows/e2e.yml`) the same build runs against the deployed
-API. That deploy must have `ALLOWED_ORIGINS` including `http://localhost:4173`
-and `E2E_RATE_LIMIT_BYPASS` matching the repo secret — see the workflow header.
+In CI (`.github/workflows/ci.yml`, job `web-e2e`) the same build runs against
+an API started inside the job: a throwaway Postgres, the tracked migrations,
+30 seeded NYC events and the e2e account (`backend/scripts/seed-e2e-account.js`).
+No deployed host, no repo secrets. The suite no longer runs against
+production.
 
 ## Seeded account
 
@@ -40,8 +42,13 @@ curl -X PATCH $API/api/v1/users/me -H "Authorization: Bearer <accessToken>" \
 ```
 
 The feed tests need **≥21 upcoming public events** on the target DB so page 1
-is full and page 2 is non-empty (`backend/scripts/seed.js` provides this;
-seeded events expire 0–21 days out, so a long-dormant DB needs a re-seed).
+is full and page 2 is non-empty (`backend/scripts/seed-nyc-events.js --count 30`;
+seeded events expire 1–5 weeks out, so a long-dormant DB needs a re-seed).
+The devbox stack's `reset.sh` seeds 60. Create the account the same way CI does:
+
+```bash
+E2E_EMAIL=scene.e2e@e2e.test E2E_PASSWORD=<pw> node scripts/seed-e2e-account.js
+```
 
 ## Conventions
 
@@ -83,14 +90,15 @@ seeded events expire 0–21 days out, so a long-dormant DB needs a re-seed).
 | Token storage | `localStorage` (`tokenStore.web.js`) vs SecureStore on native — **not httpOnly cookies; revisit before public launch** |
 | Sign-out confirm | Plain button on web (native's `Alert.alert` confirm is a no-op in RNW) |
 
-**Backend changes that must be deployed before CI can go green against prod:**
-rate-limit bypass (`E2E_RATE_LIMIT_BYPASS` + `X-E2E-Key`), `Cache-Control:
-no-store` on `/api/v1` (chromium revived stale `GET /users/me` from disk cache
-after reload without it), CORS `allowedHeaders` + `ALLOWED_ORIGINS` for the
-web origins.
+**Backend behaviors the suite relies on** (all on main): rate-limit bypass
+(`E2E_RATE_LIMIT_BYPASS` + `X-E2E-Key`), `Cache-Control: no-store` on `/api/v1`
+(chromium revived stale `GET /users/me` from disk cache after reload without
+it), CORS `allowedHeaders` + `ALLOWED_ORIGINS` for the web origins.
 
 **Known issues (accepted for v1):**
-- `e2e+*@e2e.test` users accumulate on the target DB — cleanup script later.
+- `e2e+*@e2e.test` users accumulate on the target DB. Harmless in CI (the
+  database is thrown away) and on the devbox (`reset.sh`); the ones left on
+  production by the old workflow still need a one-time cleanup.
 - No password reset on web.
 - Web deploy to a static host (Vercel et al.) is not set up yet; the web app
   currently exists as `npx expo export --platform web` output only. When
