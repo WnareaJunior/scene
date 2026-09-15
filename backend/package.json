@@ -6,6 +6,8 @@
   "scripts": {
     "start": "node index.js",
     "dev": "nodemon index.js",
+    "migrate": "node scripts/migrate.js",
+    "migrate:status": "node scripts/migrate.js --status",
     "seed": "node scripts/seed.js",
     "unseed": "node scripts/seed.js --unseed"
   },

@@ -56,20 +56,59 @@ keys if upload testing matters.
 
 ### Database
 
+Schema lives in `backend/migrations/` as plain SQL files, applied in order by
+`scripts/migrate.js`, which records each file in a `schema_migrations` table
+(version, checksum, applied time). Migrations are the one `*.sql` path that is
+tracked in git; dumps and snapshots stay ignored.
+
 ```bash
-createdb scene_dev
-psql scene_dev < migrations/001_init.sql
-psql scene_dev < migrations/002_refresh_token_varchar.sql
-psql scene_dev < migrations/003_user_search.sql
-psql scene_dev < migrations/004_event_image.sql
-psql scene_dev < migrations/005_reports_blocks.sql
-psql scene_dev < migrations/seed_nyc.sql          # optional: NYC test data
-psql scene_dev < src/search/sql/001_search_schema.sql
-psql scene_dev < src/search/sql/002_seed_neighborhoods.sql
-# src/search/sql/003_hnsw_index.sql runs only after the embedding backfill
+npm run migrate            # apply every pending migration
+npm run migrate:status     # what is applied / pending
+node scripts/migrate.js --dry-run
 ```
 
-The migration enables `uuid-ossp` and `postgis`, creates all tables, and adds spatial + time indexes.
+| File | What |
+|---|---|
+| `0001_baseline.sql` | Everything through the old 001–005 migrations plus the search schema, captured 2026-09-15 from the devbox database |
+| `0002_seed_neighborhoods.sql` | NYC neighborhood rows for the search parser (idempotent) |
+| `0003_hnsw_index.sql` | pgvector HNSW index; runs outside a transaction |
+
+**Fresh database** (CI, a devbox reset): `createdb scene && npm run migrate`.
+Needs PostGIS, pgvector, pg_trgm and unaccent available to `CREATE EXTENSION`.
+
+**Existing database** (staging, production, the devbox `scene` DB) already has
+the schema, so mark it instead of running it. The runner refuses to apply the
+baseline to a database that already has a `users` table until this is done:
+
+```bash
+# once per existing database, with that database's DATABASE_URL:
+node scripts/migrate.js --baseline 0003     # 0002 if the HNSW index is absent
+node scripts/migrate.js --status
+```
+
+Before baselining staging or production, confirm their schema matches the
+baseline file. From a machine that can reach them:
+
+```bash
+pg_dump "$DATABASE_URL" --schema-only --no-owner --no-privileges \
+  | grep -vE '^(SET |SELECT pg_catalog|--|\\|$)' > /tmp/live.sql
+# compare table/column/index/constraint lines against migrations/0001_baseline.sql;
+# the two duplicate-index pairs noted in that file's header are expected extras.
+```
+
+**Adding a migration:** create `backend/migrations/NNNN_short_name.sql` with the
+next number. Additive changes only in a normal PR (new table, new nullable
+column, new index). Never edit a file that has been applied anywhere; the
+runner checks checksums and will stop. Put `-- migrate:no-transaction` on the
+first line for statements that cannot run in a transaction
+(`CREATE INDEX CONCURRENTLY`).
+
+**Deploy:** `npm start` does not run migrations yet. Until every environment is
+baselined, apply migrations by hand with that environment's `DATABASE_URL`;
+after that, `start` becomes `node scripts/migrate.js && node index.js`.
+
+Local Postgres without TLS (the devbox `dev-postgres`): set
+`DATABASE_SSL=disable` alongside `DATABASE_URL`.
 
 ### Run
 
@@ -186,11 +225,12 @@ backend/
 │       ├── events.js     CRUD + RSVPs + feed + random + image upload
 │       ├── map.js        Viewport pins
 │       └── users.js      Profile + social graph + avatar + search
-├── migrations/
-│   ├── 001_init.sql              Base schema (PostGIS, uuid-ossp, indexes)
-│   ├── 002_refresh_token_varchar.sql
-│   ├── 003_user_search.sql       display_name + pg_trgm trigram indexes
-│   └── 004_event_image.sql       image_url column on events
+├── migrations/           Plain SQL, applied in order by scripts/migrate.js
+│   ├── 0001_baseline.sql
+│   ├── 0002_seed_neighborhoods.sql
+│   └── 0003_hnsw_index.sql
+├── scripts/
+│   └── migrate.js        Migration runner (schema_migrations table, checksums)
 └── .env.example
 ```
 

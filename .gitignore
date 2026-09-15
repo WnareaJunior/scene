@@ -8,9 +8,10 @@ node_modules/
 .env.development
 .env.production
 
-# Database
+# Database (dumps stay out; tracked migrations are the exception)
 *.sql
 *.dump
+!backend/migrations/*.sql
 
 # React Native
 .expo/
