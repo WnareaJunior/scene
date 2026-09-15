@@ -156,6 +156,41 @@ npm start       # production
 
 ---
 
+## Seed data
+
+`scripts/seed.js` builds a deterministic dataset: the fixed `@example.com`
+host roster, extra `@seed.test` users, NYC events across all five boroughs,
+follows, and RSVPs weighted toward parties starting soon.
+
+```bash
+npm run seed                                  # profile smoke: 12 hosts, 30 events
+node scripts/seed.js --profile nyc --seed 7   # 200 events, 40 extra users
+node scripts/seed.js --profile load           # 2,000 users, 20,000 events
+npm run seed:reset                            # truncate app tables first — local hosts only
+node scripts/seed.js --profile nyc --events 60 --dry-run
+```
+
+`--reset` refuses to run unless `DATABASE_URL` points at a local host
+(`localhost`, `127.0.0.1`, `devbox`, `dev-postgres`, `postgres`); pass
+`--i-mean-it` to override. All seeded passwords are `SeedHost123!` (hosts) and
+`SeedUser123!` (extra users). The e2e login account is separate:
+`scripts/seed-e2e-account.js`. Embeddings are not seeded; the in-process sweep
+or `src/search/worker/embed-events.js --once` fills them in.
+
+### Snapshot a cloud database into a local one
+
+```bash
+scripts/snapshot-restore.sh staging postgresql://dev:<pw>@localhost:5433/scene_snapshot
+```
+
+Dumps the source through `with-env.sh` (so the environment name is typed),
+excludes `search_logs` and `refresh_tokens`, restores into the local target,
+then runs `scripts/scrub.sql`: every email becomes `<id>@scrub.test`, every
+password becomes `password123`, sessions/reports/blocks are emptied. The
+target host must be local. Needs `pg_dump`, `pg_restore` and `psql` on PATH.
+
+---
+
 ## Tests
 
 Integration tests run against a real Postgres with the tracked migrations

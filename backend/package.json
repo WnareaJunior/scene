@@ -10,8 +10,8 @@
     "migrate:status": "node scripts/migrate.js --status",
     "test": "node scripts/migrate.js && node --test --test-concurrency=1 src/__tests__/*.test.js src/search/__tests__/*.test.js",
     "test:unit": "node --test src/__tests__/auth.middleware.test.js src/search/__tests__/*.test.js",
-    "seed": "node scripts/seed.js",
-    "unseed": "node scripts/seed.js --unseed"
+    "seed": "node scripts/seed.js --profile smoke",
+    "seed:reset": "node scripts/seed.js --profile smoke --reset"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1053.0",
