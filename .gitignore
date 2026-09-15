@@ -6,6 +6,7 @@ node_modules/
 .env
 .env.local
 .env.development
+.env.staging
 .env.production
 
 # Database (dumps stay out; tracked migrations are the exception)

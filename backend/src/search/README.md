@@ -159,9 +159,8 @@ hallucinated location becomes a hard geo filter), extraction correctness,
 relative-time resolution against the user's timezone, prompt injection, and
 degenerate input.
 
-The old config at `backend/promptfooconfig.yaml` is still on disk — deleting it
-is outside the agent scope in CLAUDE.md, and leaving both invites running the
-wrong one.
+The old config at `backend/promptfooconfig.yaml` has been deleted; this is the
+only promptfoo config in the repo.
 
 ## Design decisions worth knowing
 
@@ -200,7 +199,6 @@ weight so a missing retriever doesn't flatten the survivor's scores.
   so geo scoping is a radius rather than the real shape.
 - **Worker scheduling** — `--loop` is a foreground process. Wire it to whatever
   runs alongside the API on Render; nothing supervises it today.
-- **`promptfooconfig.yaml`** — still tests the old prose prompts.
 - **Block list in stage 1** — narrow by design; confirm with Trust & Safety
   before launch. False positives read to the user as "search is broken".
 - **`search_logs` retention** — holds raw user queries. Pick a window and

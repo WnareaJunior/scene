@@ -18,7 +18,7 @@ OpenViking is running at http://localhost:1933. You have a `viking` MCP tool ava
 - Never edit an applied migration. New schema changes go in a new numbered file under `backend/migrations/` (see backend/README.md, "Database")
 - All new routes follow existing pattern in events.js
 - Open a PR for every change, never push directly to main
-- Run promptfoo eval before any PR touching AI logic
+- Run the parser eval before any PR touching the search parser: `npx promptfoo@latest eval -c backend/src/search/eval/promptfooconfig.yaml`
 
 ## Agent Scope — Mandatory
 - Only write or edit files inside `backend/src/` and `frontend/`

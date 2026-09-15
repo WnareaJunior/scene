@@ -61,22 +61,29 @@ and `~/stacks/devtools/.env` (`MINIO_ROOT_USER`, `MINIO_ROOT_PASSWORD`); both
 files are gitignored there. Works from any Tailscale device — the app on your
 phone can hit a backend running on the devbox too.
 
-### Environments — staging vs production
+### Environments — local, staging, production
 
-There are two Supabase projects. **`.env` points at staging and is what
-every local run uses by default. Production credentials live only in
-`.env.production` (gitignored) and must never be the ambient default** —
-touching prod should always be a deliberate act:
+`backend/.env` is the **local** target: the devbox Postgres and MinIO (section
+above). It is what every plain `node …` and `npm run …` uses, and it cannot
+reach Supabase.
+
+The two Supabase projects are reached only through `scripts/with-env.sh`,
+which loads a named file and runs one command with it:
 
 ```bash
-# run something against production, explicitly:
-env $(grep -v '^#' .env.production | xargs) node src/search/worker/embed-events.js --once
+scripts/with-env.sh staging    node scripts/migrate.js --status
+scripts/with-env.sh production node scripts/migrate.js --baseline 0003
+scripts/with-env.sh production node src/search/worker/embed-events.js --once
 ```
 
-| | project ref | used by |
-|---|---|---|
-| staging | `rpjnkjoyxeykqlppwfkp` (scene-staging) | local dev, tests, destructive experiments |
-| production | `kxtrlrtuanjcchwwfqvj` (scene) | Render deploy + the released app — via Render env vars, not a local file |
+| | file | project ref | used by |
+|---|---|---|---|
+| local | `.env` | devbox `scene` DB | every plain command, the devbox stack, tests (`scene_test`) |
+| staging | `.env.staging` | `rpjnkjoyxeykqlppwfkp` (scene-staging) | rehearsals, the staging Render service (via its own env vars) |
+| production | `.env.production` | `kxtrlrtuanjcchwwfqvj` (scene) | Render deploy + the released app — via Render env vars, never a local default |
+
+All three files are gitignored. If an older checkout still has `.env` pointing
+at staging, rename it to `.env.staging` and rebuild `.env` for the devbox.
 
 Staging gotchas: connect via the direct host (`db.<ref>.supabase.co`) —
 the pooler works too once the tenant registers. JWT secrets differ from
