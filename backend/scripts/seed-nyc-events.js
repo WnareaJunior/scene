@@ -15,8 +15,8 @@
 //   DELETE FROM events e USING users u
 //    WHERE u.id = e.host_id AND u.email LIKE '%@example.com';
 //
-// Uses DATABASE_URL from the environment (backend/.env by default — staging).
-// Aim it at prod by exporting .env.production first.
+// Also a module: scripts/seed.js imports ensureHosts() and buildEvent() to add
+// follows and RSVPs on top. Uses DATABASE_URL from the environment.
 
 require('dotenv').config();
 const bcrypt = require('bcryptjs');
@@ -40,7 +40,8 @@ function argVal(flag, dflt) {
 const COUNT = Number(argVal('--count', 200));
 const SEED = Number(argVal('--seed', 1));
 const DRY = args.includes('--dry-run');
-const rand = mulberry32(SEED);
+let rand = mulberry32(SEED);
+function setSeed(seed) { rand = mulberry32(seed); }
 
 const pick = (arr) => arr[Math.floor(rand() * arr.length)];
 const randInt = (lo, hi) => lo + Math.floor(rand() * (hi - lo + 1));
@@ -309,6 +310,21 @@ function buildEvent(hostIds, now) {
   };
 }
 
+async function insertEvent(e) {
+  const { rows } = await db.query(
+    `INSERT INTO events
+       (host_id, title, description, location, latitude, longitude, address,
+        start_time, end_time, capacity, hashtags, is_private, show_attendees)
+     VALUES
+       ($1, $2, $3, ST_SetSRID(ST_MakePoint($5, $4), 4326)::geography,
+        $4, $5, $6, $7, $8, $9, $10, false, true)
+     RETURNING id, capacity, start_time`,
+    [e.host_id, e.title, e.description, e.latitude, e.longitude,
+     e.address, e.start_time, e.end_time, e.capacity, e.hashtags]
+  );
+  return rows[0];
+}
+
 async function main() {
   const now = new Date();
   const events = [];
@@ -324,19 +340,7 @@ async function main() {
   }
 
   let inserted = 0;
-  for (const e of events) {
-    await db.query(
-      `INSERT INTO events
-         (host_id, title, description, location, latitude, longitude, address,
-          start_time, end_time, capacity, hashtags, is_private, show_attendees)
-       VALUES
-         ($1, $2, $3, ST_SetSRID(ST_MakePoint($5, $4), 4326)::geography,
-          $4, $5, $6, $7, $8, $9, $10, false, true)`,
-      [e.host_id, e.title, e.description, e.latitude, e.longitude,
-       e.address, e.start_time, e.end_time, e.capacity, e.hashtags]
-    );
-    inserted++;
-  }
+  for (const e of events) { await insertEvent(e); inserted++; }
 
   const { rows } = await db.query(
     `SELECT count(*) FILTER (WHERE start_time > now()) AS upcoming,
@@ -346,6 +350,10 @@ async function main() {
   console.log(`[seed] inserted ${inserted} events (seed=${SEED}) · upcoming now: ${rows[0].upcoming} · awaiting embedding: ${rows[0].needs_embedding}`);
 }
 
-main()
-  .then(() => process.exit(0))
-  .catch((err) => { console.error('[seed] fatal:', err.message); process.exit(1); });
+module.exports = { HOSTS, ensureHosts, buildEvent, insertEvent, setSeed, mulberry32 };
+
+if (require.main === module) {
+  main()
+    .then(() => process.exit(0))
+    .catch((err) => { console.error('[seed] fatal:', err.message); process.exit(1); });
+}

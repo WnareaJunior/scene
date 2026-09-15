@@ -1,169 +1,190 @@
-// scripts/seed.js
-import { faker } from '@faker-js/faker';
-import bcrypt from 'bcrypt';
-import pg from 'pg';
-import dotenv from 'dotenv';
+#!/usr/bin/env node
+// Seed the database with a deterministic, realistic dataset.
+//
+//   node scripts/seed.js --profile smoke              # 12 hosts, 30 events, follows, RSVPs
+//   node scripts/seed.js --profile nyc  --seed 7      # 200 events + 40 extra users
+//   node scripts/seed.js --profile load               # 2,000 users, 20,000 events
+//   node scripts/seed.js --profile nyc  --reset       # wipe app tables first (local only)
+//   node scripts/seed.js --profile smoke --events 60 --users 20   # override a profile
+//   node scripts/seed.js --profile smoke --dry-run
+//
+// Profiles are defaults, flags override. Everything is derived from --seed
+// (default 1) so two runs produce the same data. Hosts are the fixed
+// @example.com roster from seed-nyc-events.js (teo@example.com is reserved for
+// the search bench); extra users are @seed.test.
+//
+// --reset truncates users, events, rsvps, follows, blocks, reports,
+// refresh_tokens and search_logs. It refuses unless DATABASE_URL points at a
+// local host (localhost, 127.0.0.1, devbox, dev-postgres, postgres) or
+// --i-mean-it is passed. This is the guard the old --unseed never had.
+//
+// Not seeded here: the e2e login account (scripts/seed-e2e-account.js) and
+// embeddings (the in-process sweep or worker/embed-events.js).
+'use strict';
 
-dotenv.config();
+require('dotenv').config();
+const bcrypt = require('bcryptjs');
+const db = require('../src/db');
+const nyc = require('./seed-nyc-events');
 
-const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
-
-// NYC bounding box — good for SCENE
-const nycBounds = {
-  lat: { min: 40.4774, max: 40.9176 },
-  lng: { min: -74.2591, max: -73.7004 },
+const PROFILES = {
+  smoke: { events: 30,    users: 12,   followsPerUser: [2, 5],  rsvpsPerEvent: [0, 6]  },
+  nyc:   { events: 200,   users: 40,   followsPerUser: [3, 8],  rsvpsPerEvent: [0, 15] },
+  load:  { events: 20000, users: 2000, followsPerUser: [3, 10], rsvpsPerEvent: [0, 25] },
 };
+const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', 'devbox', 'dev-postgres', 'postgres', '::1']);
 
-const randomNYCCoords = () => ({
-  lat: faker.number.float({ min: nycBounds.lat.min, max: nycBounds.lat.max, fractionDigits: 6 }),
-  lng: faker.number.float({ min: nycBounds.lng.min, max: nycBounds.lng.max, fractionDigits: 6 }),
-});
+const args = process.argv.slice(2);
+const argVal = (flag, dflt) => { const i = args.indexOf(flag); return i >= 0 ? args[i + 1] : dflt; };
+const has = (flag) => args.includes(flag);
 
-const INTERESTS = ['music', 'art', 'food', 'nightlife', 'sports', 'tech', 'comedy', 'film', 'dance', 'wellness'];
-const HASHTAGS   = ['#nyc', '#brooklyn', '#manhattan', '#queens', '#livemusic', '#popup', '#rooftop', '#openmic', '#artshow', '#brunch'];
+const profileName = argVal('--profile', 'smoke');
+const profile = PROFILES[profileName];
+if (!profile) {
+  console.error(`seed: unknown profile "${profileName}" (smoke | nyc | load)`);
+  process.exit(2);
+}
+const SEED = Number(argVal('--seed', 1));
+const EVENTS = Number(argVal('--events', profile.events));
+const USERS = Number(argVal('--users', profile.users));
+const DRY = has('--dry-run');
 
-// ─── Seed Users ───────────────────────────────────────────────────────────────
-const seedUsers = async (count = 30) => {
-  console.log(`Creating ${count} users...`);
-  const passwordHash = await bcrypt.hash('password123', 10); // same hash for all test users
+const rand = nyc.mulberry32(SEED * 7919 + 17);
+const randInt = (lo, hi) => lo + Math.floor(rand() * (hi - lo + 1));
+const pick = (arr) => arr[Math.floor(rand() * arr.length)];
+
+function dbHost() {
+  try { return new URL(process.env.DATABASE_URL).hostname; } catch { return ''; }
+}
+
+function assertLocalForReset() {
+  const host = dbHost();
+  if (LOCAL_HOSTS.has(host) || has('--i-mean-it')) return;
+  console.error(
+    `seed: --reset refused — DATABASE_URL points at "${host || '?'}", which is not a local host.\n` +
+    `  This would truncate every user and event there. If that is really what you want,\n` +
+    `  pass --i-mean-it.`
+  );
+  process.exit(1);
+}
+
+async function reset() {
+  await db.query(`TRUNCATE users, events, rsvps, follows, blocks, reports, refresh_tokens, search_logs CASCADE`);
+}
+
+const FIRST = ['ari', 'bea', 'cal', 'dee', 'eli', 'fay', 'gus', 'hal', 'ivy', 'jo', 'kit', 'lou', 'max', 'nia', 'oz', 'pia', 'quin', 'rae', 'sam', 'tao', 'uma', 'val', 'wes', 'xi', 'yas', 'zed'];
+const BIOS = [
+  'here for the music', 'will bring snacks', 'dj by night, nurse by day', 'new to the city, show me around',
+  'rooftops > basements', 'basements > rooftops', 'only at parties with a dog', 'i know a guy',
+  'chronically early', 'chronically late', 'ask me about my playlists', '',
+];
+
+// Extra (non-host) users: deterministic handles, all @seed.test.
+async function ensureUsers(n) {
+  const hash = await bcrypt.hash('SeedUser123!', 4);
   const ids = [];
-
-  for (let i = 0; i < count; i++) {
-    const { rows } = await pool.query(
-      `INSERT INTO users (email, password_hash, username, bio, gender, interests, profile_picture)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
-       ON CONFLICT DO NOTHING
+  for (let i = 0; i < n; i++) {
+    const username = `${pick(FIRST)}${String(i).padStart(4, '0')}`;
+    const { rows } = await db.query(
+      `INSERT INTO users (email, password_hash, username, bio)
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT (email) DO UPDATE SET username = users.username
        RETURNING id`,
-      [
-        faker.internet.email().toLowerCase(),
-        passwordHash,
-        faker.internet.username().toLowerCase().slice(0, 20),
-        faker.lorem.sentence(),
-        faker.helpers.arrayElement(['male', 'female', 'nonbinary', null]),
-        faker.helpers.arrayElements(INTERESTS, faker.number.int({ min: 1, max: 4 })),
-        faker.image.avatar(),
-      ]
+      [`${username}@seed.test`, hash, username, pick(BIOS)]
     );
-    if (rows[0]) ids.push(rows[0].id);
+    ids.push(rows[0].id);
   }
-
-  console.log(`  ✓ ${ids.length} users created`);
   return ids;
-};
+}
 
-// ─── Seed Follows ─────────────────────────────────────────────────────────────
-const seedFollows = async (userIds) => {
-  console.log('Creating follows...');
-  let count = 0;
-
-  for (const userId of userIds) {
-    const targets = faker.helpers.arrayElements(
-      userIds.filter(id => id !== userId),
-      faker.number.int({ min: 2, max: 8 })
-    );
-
-    for (const targetId of targets) {
-      await pool.query(
-        `INSERT INTO follows (follower_id, followed_id)
-         VALUES ($1, $2) ON CONFLICT DO NOTHING`,
-        [userId, targetId]
+async function seedFollows(userIds, [lo, hi]) {
+  let n = 0;
+  for (const follower of userIds) {
+    const want = randInt(lo, Math.min(hi, userIds.length - 1));
+    const chosen = new Set();
+    while (chosen.size < want) {
+      const target = pick(userIds);
+      if (target !== follower) chosen.add(target);
+    }
+    for (const followed of chosen) {
+      await db.query(
+        `INSERT INTO follows (follower_id, followed_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+        [follower, followed]
       );
-      count++;
+      n++;
     }
   }
+  return n;
+}
 
-  console.log(`  ✓ ${count} follows created`);
-};
-
-// ─── Seed Events ──────────────────────────────────────────────────────────────
-const seedEvents = async (userIds, count = 20) => {
-  console.log(`Creating ${count} events...`);
-  const ids = [];
-
-  for (let i = 0; i < count; i++) {
-    const { lat, lng } = randomNYCCoords();
-    const startTime = faker.date.soon({ days: 21 });
-    const endTime   = new Date(startTime.getTime() + faker.number.int({ min: 1, max: 5 }) * 3600000);
-
-    const { rows } = await pool.query(
-      `INSERT INTO events
-         (host_id, title, description, location, latitude, longitude, address,
-          start_time, end_time, capacity, hashtags, is_private)
-       VALUES ($1, $2, $3, ST_SetSRID(ST_MakePoint($5, $4), 4326), $4, $5, $6, $7, $8, $9, $10, $11)
-       RETURNING id`,
-      [
-        faker.helpers.arrayElement(userIds),
-        faker.helpers.arrayElement([
-          'Rooftop Session', 'Open Mic Night', 'Pop-Up Market', 'Gallery Opening',
-          'Block Party', 'Jazz Night', 'Film Screening', 'DJ Set', 'Wellness Workshop',
-          'Networking Mixer'
-        ]) + ' – ' + faker.location.city(),
-        faker.lorem.sentences(2),
-        lat,
-        lng,
-        faker.location.streetAddress() + ', New York, NY',
-        startTime,
-        endTime,
-        faker.helpers.arrayElement([null, 20, 50, 100, 200]),
-        faker.helpers.arrayElements(HASHTAGS, faker.number.int({ min: 1, max: 4 })),
-        faker.datatype.boolean({ probability: 0.15 }), // 15% private
-      ]
-    );
-    if (rows[0]) ids.push(rows[0].id);
-  }
-
-  console.log(`  ✓ ${ids.length} events created`);
-  return ids;
-};
-
-// ─── Seed RSVPs ───────────────────────────────────────────────────────────────
-const seedRsvps = async (userIds, eventIds) => {
-  console.log('Creating RSVPs...');
-  let count = 0;
-
-  for (const eventId of eventIds) {
-    const attendees = faker.helpers.arrayElements(
-      userIds,
-      faker.number.int({ min: 1, max: Math.min(10, userIds.length) })
-    );
-
-    for (const userId of attendees) {
-      await pool.query(
-        `INSERT INTO rsvps (event_id, user_id, status)
-         VALUES ($1, $2, $3) ON CONFLICT DO NOTHING`,
-        [eventId, userId, faker.helpers.arrayElement(['going', 'interested'])]
+// RSVPs are "velocity-shaped": parties starting sooner draw more of them,
+// which is what the search re-ranker's popularity signal expects to see.
+async function seedRsvps(events, userIds, [lo, hi], now) {
+  let going = 0, interested = 0;
+  for (const ev of events) {
+    const daysOut = (new Date(ev.start_time) - now) / 86400000;
+    const soonBoost = daysOut < 7 ? 1.6 : daysOut < 14 ? 1.2 : 0.8;
+    let want = Math.round(randInt(lo, hi) * soonBoost);
+    if (ev.capacity) want = Math.min(want, ev.capacity);
+    const chosen = new Set();
+    while (chosen.size < Math.min(want, userIds.length)) chosen.add(pick(userIds));
+    for (const userId of chosen) {
+      const status = rand() < 0.7 ? 'going' : 'interested';
+      await db.query(
+        `INSERT INTO rsvps (event_id, user_id, status) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING`,
+        [ev.id, userId, status]
       );
-      count++;
+      if (status === 'going') going++; else interested++;
     }
   }
+  return { going, interested };
+}
 
-  console.log(`  ✓ ${count} RSVPs created`);
-};
-
-// ─── Teardown ─────────────────────────────────────────────────────────────────
-const unseed = async () => {
-  console.log('Removing seed data...');
-  // Cascades handle rsvps, follows, refresh_tokens
-  await pool.query(`DELETE FROM events WHERE title LIKE '%–%'`);
-  await pool.query(`DELETE FROM users WHERE email NOT LIKE '%your-real-accounts%'`);
-  console.log('  ✓ Done');
-};
-
-// ─── Main ─────────────────────────────────────────────────────────────────────
-const seed = async () => {
-  try {
-    const userIds  = await seedUsers(30);
-    await seedFollows(userIds);
-    const eventIds = await seedEvents(userIds, 20);
-    await seedRsvps(userIds, eventIds);
-    console.log('\n✅ Seed complete');
-  } catch (err) {
-    console.error('Seed failed:', err);
-  } finally {
-    await pool.end();
+async function main() {
+  const now = new Date();
+  console.log(`[seed] profile=${profileName} seed=${SEED} events=${EVENTS} users=${USERS}${DRY ? ' (dry run)' : ''}`);
+  if (DRY) {
+    nyc.setSeed(SEED);
+    for (let i = 0; i < Math.min(EVENTS, 5); i++) {
+      const e = nyc.buildEvent(['dry-run'], now);
+      console.log(`  ${e.start_time.slice(0, 16)}  ${e.title}  (${e.address})`);
+    }
+    console.log(`[seed] would insert ${EVENTS} events, ${USERS} users, follows and RSVPs`);
+    return;
   }
-};
 
-// Run: node scripts/seed.js
-// Teardown: node scripts/seed.js --unseed
-process.argv.includes('--unseed') ? unseed().finally(() => pool.end()) : seed();
+  if (has('--reset')) {
+    assertLocalForReset();
+    await reset();
+    console.log(`[seed] reset: app tables truncated on ${dbHost()}`);
+  }
+
+  const hostIds = await nyc.ensureHosts();
+  const userIds = await ensureUsers(USERS);
+  const everyone = [...hostIds, ...userIds];
+
+  nyc.setSeed(SEED);
+  const events = [];
+  for (let i = 0; i < EVENTS; i++) {
+    events.push(await nyc.insertEvent(nyc.buildEvent(hostIds, now)));
+    if (EVENTS >= 1000 && (i + 1) % 1000 === 0) console.log(`  … ${i + 1} events`);
+  }
+
+  const follows = await seedFollows(everyone, profile.followsPerUser);
+  const rsvps = await seedRsvps(events, everyone, profile.rsvpsPerEvent, now);
+
+  const { rows } = await db.query(
+    `SELECT (SELECT count(*) FROM users) AS users,
+            (SELECT count(*) FROM events WHERE status = 'active' AND start_time > now()) AS upcoming,
+            (SELECT count(*) FROM events WHERE embedding IS NULL) AS needs_embedding`
+  );
+  console.log(
+    `[seed] done · users ${rows[0].users} · events +${events.length} (upcoming ${rows[0].upcoming}) · ` +
+    `follows +${follows} · rsvps +${rsvps.going} going / +${rsvps.interested} interested · ` +
+    `awaiting embedding: ${rows[0].needs_embedding}`
+  );
+}
+
+main()
+  .then(() => db.end())
+  .catch((err) => { console.error('[seed] fatal:', err.message); process.exit(1); });
