@@ -40,3 +40,8 @@ Thumbs.db
 # Coverage
 coverage/
 .nyc_output
+
+# Claude Code worktrees — scratch checkouts, never part of the repo.
+# One was committed as a bare gitlink (no .gitmodules), which made
+# actions/checkout fail cleanup on every PR.
+.claude/worktrees/
