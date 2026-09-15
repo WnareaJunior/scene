@@ -6,6 +6,7 @@ import {
 } from 'react-native';
 import { events as eventsApi } from '../api';
 import AttendeeList from './AttendeeList';
+import CommentThread from './CommentThread';
 import { COLORS } from '../constants/colors';
 
 const STATE_COLORS = { live: COLORS.liveGreen, upcoming: COLORS.accent, past: COLORS.inkFaint };
@@ -197,6 +198,11 @@ export default function EventDetailSheet({ event: eventProp, onClose, onRsvp, on
               showsVerticalScrollIndicator={false}
               onScroll={(e) => { scrollOffsetRef.current = e.nativeEvent.contentOffset.y; }}
               scrollEventThrottle={16}
+              // The comment composer lives in this scroll view, so the keyboard
+              // would otherwise cover it. Insets beat wrapping the sheet in a
+              // KeyboardAvoidingView, which would reinterpret its maxHeight.
+              automaticallyAdjustKeyboardInsets
+              keyboardShouldPersistTaps="handled"
             >
               {/* Hero image */}
               {event.image_url ? (
@@ -280,6 +286,14 @@ export default function EventDetailSheet({ event: eventProp, onClose, onRsvp, on
               <AttendeeList
                 eventId={event.id}
                 goingCount={goingCount}
+                onUserPress={onHostPress}
+              />
+
+              {/* Comments — posting needs an RSVP; the server enforces it too */}
+              <CommentThread
+                eventId={event.id}
+                canPost={hasRsvp || isHost}
+                isHost={isHost}
                 onUserPress={onHostPress}
               />
 
