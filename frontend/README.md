@@ -17,15 +17,26 @@ npm install
 
 ### Point to your backend
 
-Open `src/api.js` and update `BASE_URL` to match where your backend is running:
+`src/api.js` reads `EXPO_PUBLIC_API_URL` at build time and falls back to the
+production API. Set it in `.env` for `expo start`, or rely on the per-profile
+value in `eas.json` for EAS builds:
 
-```js
-// Local simulator (iOS)
-const BASE_URL = 'http://localhost:3000/api/v1';
+| Profile | `EXPO_PUBLIC_API_URL` | Talks to |
+|---|---|---|
+| `development` | `http://100.64.203.64:3005` | the devbox stack (`stacks/scene`), phone on Tailscale |
+| `preview` | *(unset → production)* | will point at the staging Render service once it exists |
+| `production` | `https://scene-19ss.onrender.com` | production |
 
-// Physical device or Android emulator
-const BASE_URL = 'http://192.168.x.x:3000/api/v1';  // your machine's LAN IP
+```bash
+# dev server against the devbox
+EXPO_PUBLIC_API_URL=http://100.64.203.64:3005 npx expo start
+
+# simulator against a backend on this machine
+EXPO_PUBLIC_API_URL=http://localhost:3000 npx expo start
 ```
+
+Metro does not key its cache on env vars: pass `-c` after changing the URL or
+the old value stays baked in.
 
 ### Run
 

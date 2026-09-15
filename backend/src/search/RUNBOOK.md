@@ -297,6 +297,6 @@ yours. Stay on `claude/scene-search-pipeline-c4wqjj`.
 ### Known-remaining after this runbook
 Not your job unless asked, but so you don't think they were missed: the fixture
 DB and relevance harness (17 skipped tests), switching `SearchSheet.jsx` to
-`api.search`, deleting the stale `backend/promptfooconfig.yaml`, the tagger
+`api.search`, the tagger
 (doesn't exist), a Trust & Safety review of the stage-1 block list, and a
 `search_logs` retention policy reconciled with `PRIVACY.md`.

@@ -98,7 +98,7 @@ echo "✓ Dev agent complete"
 # ── Step 2: PromptFoo Evals ───────────────────────────────────────────────────
 echo ""
 echo "🧪 [2/4] Running PromptFoo evals..."
-if cd "$REPO_ROOT/backend" && promptfoo eval --no-cache -c "$REPO_ROOT/backend/promptfooconfig.yaml" 2>&1 | tee /tmp/eval_out.txt | tail -5; then
+if cd "$REPO_ROOT/backend" && promptfoo eval --no-cache -c "$REPO_ROOT/backend/src/search/eval/promptfooconfig.yaml" 2>&1 | tee /tmp/eval_out.txt | tail -5; then
   echo "✓ Evals complete"
 else
   echo "⚠️  Evals failed — review /tmp/eval_out.txt before merging"

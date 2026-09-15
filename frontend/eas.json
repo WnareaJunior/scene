@@ -6,14 +6,20 @@
   "build": {
     "development": {
       "developmentClient": true,
-      "distribution": "internal"
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_API_URL": "http://100.64.203.64:3005"
+      }
     },
     "preview": {
       "distribution": "internal"
     },
     "production": {
       "distribution": "store",
-      "autoIncrement": true
+      "autoIncrement": true,
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://scene-19ss.onrender.com"
+      }
     }
   },
   "submit": {
