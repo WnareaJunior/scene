@@ -66,7 +66,7 @@ Location-based event discovery platform connecting micro-venue hosts and indepen
 See [`backend/README.md`](./backend/README.md) and [`frontend/README.md`](./frontend/README.md) for full setup instructions.
 
 Local development needs no cloud accounts: the devbox home server provides
-the Postgres (PostGIS + pgvector, migrations pre-applied) and an S3-compatible
+the Postgres (PostGIS + pgvector, schema via `npm run migrate`) and an S3-compatible
 MinIO for image uploads — see "Local: everything on the devbox" in the backend
 README.
 

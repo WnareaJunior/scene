@@ -34,24 +34,32 @@ SEARCH_ENABLED=true   # /api/v1/search is 404 unless this is set
 ### Local: everything on the devbox (no cloud accounts)
 
 The home server runs a Postgres 17 (PostGIS + pgvector) and a MinIO that
-replace Supabase entirely for local dev. The `scene` database already has
-migrations 001–005 and the search schema applied; the `scene` MinIO bucket
-exists with public-read downloads. Point `.env` at them:
+replace Supabase entirely for local dev. The `scene` database is managed by
+`scripts/migrate.js` (see "Database" below); the `scene` MinIO bucket allows
+anonymous downloads so stored image URLs work from a phone. Point `.env` at
+them:
 
 ```env
 DATABASE_URL=postgresql://dev:<password>@devbox:5433/scene
 DATABASE_SSL=disable            # local Postgres has no TLS
 
 STORAGE_DRIVER=s3               # src/storage.js switches drivers
-S3_ENDPOINT=http://devbox:9000
+S3_ENDPOINT=http://devbox:9000  # where the API uploads to
+S3_PUBLIC_URL=http://<devbox LAN or Tailscale IP>:9000   # what gets stored in image URLs
 S3_BUCKET=scene
 S3_ACCESS_KEY=devbox
 S3_SECRET_KEY=<minio password>
 ```
 
-Passwords live in the home-server repo under `.secrets/` (`data.env`,
-`devtools.env`). Works from any Tailscale device — the app on your phone can
-hit a backend running on the devbox too.
+`S3_PUBLIC_URL` matters: the URL the API stores in `events.image_url` is what
+the phone later fetches, so it must be an address the phone can resolve. Over
+Tailscale that is the devbox's tailnet IP; on the LAN its LAN IP. It defaults
+to `S3_ENDPOINT` when unset.
+
+Passwords live on the devbox in `~/stacks/data/.env` (`DEV_POSTGRES_PASSWORD`)
+and `~/stacks/devtools/.env` (`MINIO_ROOT_USER`, `MINIO_ROOT_PASSWORD`); both
+files are gitignored there. Works from any Tailscale device — the app on your
+phone can hit a backend running on the devbox too.
 
 ### Environments — staging vs production
 
