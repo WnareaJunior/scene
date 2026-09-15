@@ -714,14 +714,15 @@ KINDS.forEach(([k,name,desc])=>{
 });
 FL.forEach(f=>{const b=hel('button',{'data-id':f.id},flowsEl);b.innerHTML=`<span>${esc(f.t)}</span><small>${esc(f.w)}</small>`;b.onclick=()=>selectFlow(f.id);});
 const ctrs=N.filter(n=>n.k==='ctr').length;
-document.getElementById('counts').textContent=`${N.length} entities · ${ctrs} containers · ${E.length} edges · ${FL.length} processes`;
+document.getElementById('counts').textContent=`${N.length} entities · ${E.length} edges · ${FL.length} processes`;
 const files=arr=>arr&&arr.length?`<div class="files">${arr.map(f=>`<code>${esc(f)}</code>`).join('')}</div>`:'';
 function overview(){
-  detail.innerHTML=`<div class="hd"><h3>The whole box on one sheet</h3></div>
-  <p>Every entity the home-server repo configures — ${ctrs} containers in ${G.filter(g=>g.c==='stack').length} compose stacks, the Windows-side services, systemd units, filesystems and the off-box watchers — and the ${FL.length} processes that run through them.</p>
-  <p>Left: your devices and the internet. Right: the devbox, Windows above WSL2. Edges are colored by what moves along them; toggle layers below.</p>
-  <ul><li>Click a <b>process</b> to light up its path and read the steps.</li><li>Click any <b>entity</b> for what it does, its ports and the repo files behind it.</li><li>Click a <b>stack or region title</b> on the map to frame it.</li></ul>
-  <p>Sources: README.md, connecting.md, MEDIA.md, docs/, every compose.yaml, unit and script in the repo.</p>`;
+  detail.innerHTML=`<div class="hd"><h3>The whole repo on one sheet</h3></div>
+  <p>Every entity in the Scene repo — the Expo screens and platform-split modules, the Express routers and middleware, the eight search stages, the scripts, migrations, workflows and tests — and the ${FL.length} processes that run through them.</p>
+  <p>Left: the clients, and the off-repo services none of this works without. Right: the repository itself, frontend above backend above the search pipeline. Edges are colored by what moves along them; toggle layers below.</p>
+  <ul><li>Click a <b>process</b> to light up its path and read the steps.</li><li>Click any <b>entity</b> for what it does and the repo files behind it.</li><li>Click a <b>group or region title</b> on the map to frame it.</li></ul>
+  <p>It records absence too: the staging Render service that was never built, the domain that was never bought, and the data still waiting to be cleaned out of production.</p>
+  <p>Sources: README.md, backend/README.md, e2e/README.md, and every route, stage, script, migration and workflow in the repo.</p>`;
 }
 function renderNode(id){
   const n=NM[id];const tags=[{ctr:'container',win:'windows',unit:'systemd',path:'filesystem',ext:'off-box',plan:'planned',hw:'hardware',scr:'script',note:'note',dev:'device',fact:'network fact'}[n.k]];
