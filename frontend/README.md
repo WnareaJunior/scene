@@ -24,7 +24,7 @@ value in `eas.json` for EAS builds:
 | Profile | `EXPO_PUBLIC_API_URL` | Talks to |
 |---|---|---|
 | `development` | `http://100.64.203.64:3005` | the devbox stack (`stacks/scene`), phone on Tailscale |
-| `preview` | *(unset → production)* | will point at the staging Render service once it exists |
+| `preview` | `https://scene-staging-pr6j.onrender.com` | the staging Render service (`staging-api.<domain>` once the domain exists) |
 | `production` | `https://scene-19ss.onrender.com` | production |
 
 ```bash

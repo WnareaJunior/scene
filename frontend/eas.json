@@ -12,7 +12,10 @@
       }
     },
     "preview": {
-      "distribution": "internal"
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://scene-staging-pr6j.onrender.com"
+      }
     },
     "production": {
       "distribution": "store",
