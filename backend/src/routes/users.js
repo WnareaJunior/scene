@@ -5,6 +5,7 @@ const requireAuth = require('../middleware/auth');
 const multer = require('multer');
 
 const storage = require('../storage');
+const { eventVisibilitySql } = require('../eventVisibility');
 
 const ALLOWED_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 const MIME_TO_EXT = { 'image/jpeg': '.jpg', 'image/png': '.png', 'image/webp': '.webp' };
