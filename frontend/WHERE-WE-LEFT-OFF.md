@@ -1,5 +1,13 @@
 # Where We Left Off — Device Testing + TestFlight + Design System (2026-07-19)
 
+> **Superseded in part (2026-09-15).** This is a dated session log, kept as a
+> record rather than rewritten. Two things in it are no longer true:
+> the accent is **Electric Cyan #22d3ee**, not Sodium Amber — amber is now
+> retired alongside the older purple (DESIGN.md, The Retired-Accent Rule); and
+> Render no longer auto-deploys production from `main` (gated behind the
+> `deploy-prod` workflow since #68). TODO items 4 and 6 are also done.
+> `frontend/src/constants/colors.js` is the authoritative palette.
+
 ## Milestone reached
 On-device testing round-trip complete (2 fix rounds), **TestFlight external
 testing is live pending Apple beta review**, and the design system was

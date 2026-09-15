@@ -84,43 +84,52 @@ components:
 
 **Creative North Star: "The Unlisted Map"**
 
-Scene's interface is a city map at 2am crossed with an address that was never posted publicly. The world is near-black asphalt; the only light is Sodium Amber — the color of streetlights and open-late signs — and it appears exclusively on the things that matter right now: the action you can take, the party that's live, the pin you're heading to. Everything else recedes into tonal darkness and hairline borders.
+Scene's interface is a city map at 2am crossed with an address that was never posted publicly. The world is near-black asphalt; the only light is Electric Cyan — the cold glow of an LED sign, or a phone screen held up in the dark — and it appears exclusively on the things that matter right now: the action you can take, the party that's live, the pin you're heading to. Everything else recedes into tonal darkness and hairline borders.
 
 The system rejects everything PRODUCT.md rejects: no Eventbrite commerce chrome, no Instagram engagement decoration, no campus-app confetti — and no stock AI-palette accents. Components are **barely there**: flat dark surfaces, borderless where possible, content floating on black. The interface should feel passed hand-to-hand, not marketed.
 
 **Key Characteristics:**
-- One accent, used like a streetlight: sparse, warm, meaningful
+- One accent, used like a streetlight: sparse, cold, meaningful
 - Tonal depth (black → asphalt → card) instead of shadows
-- Hairline borders (#2a2a2a) as the only edge treatment
+- Hairline borders (#484848) as the only edge treatment
 - System typography, heavy at the top (800 titles), quiet everywhere else
 - Gesture-first surfaces: sheets and swipes, not chrome and buttons
 
 ## 2. Colors
 
-A near-monochrome night palette with a single warm glow.
+A near-monochrome night palette with a single cold glow.
+
+`frontend/src/constants/colors.js` is the authoritative source; this section
+documents it. If the two ever disagree, the code is right and this file is stale.
 
 ### Primary
-- **Sodium Amber** (#ffa028): the streetlight. Primary actions (RSVP, Post event), selection states, the map crosshair and event pins, active chips, links to people. If it glows amber, you can act on it.
-- **Amber Pressed** (#e08010): pressed/active state of any amber control.
-- **Amber Tint** (#2b1d0a): the glow's spill — background for chips, tag pills, and avatar placeholders. Never for large surfaces.
-- **Amber Ink** (#1a0d00): text/icon color *on* amber fills. Never white on amber — it fails contrast.
+- **Electric Cyan** (#22d3ee): the streetlight. Primary actions (RSVP, Post event), selection states, the map crosshair and event pins, active chips, links to people. If it glows cyan, you can act on it.
+- **Cyan Pressed** (#06b6d4): pressed/active state of any accent control.
+- **Cyan Tint** (#062a33): the glow's spill — background for chips, tag pills, and avatar placeholders. Never for large surfaces.
+- **Cyan Ink** (#001418): text/icon color *on* cyan fills. Never white on cyan — it fails contrast.
 
 ### Neutral
 - **Void** (#000000): the root — profile screen, status bar wells.
 - **Asphalt** (#0a0a0a): app background and detail sheets.
 - **Surface** (#111111): the search sheet and secondary sheets.
 - **Card** (#1a1a1a): cards, inputs, list rows.
-- **Border** (#2a2a2a): hairline edges on cards and inputs; **Divider** (#1c1c1e) for list separators.
-- **Ink** (#ffffff) for titles and primary text; **Ink Secondary** (#8e8e93) for bios/meta; **Ink Meta** (#666666) for counts; **Ink Hint** (#555555) for placeholders and labels.
+- **Border** (#484848): hairline edges on cards and inputs.
+- **Divider** (#2e2e30): list separators.
+- **Handle** (#58585c): drag handles and non-text ornaments only — never text.
+- **Ink** (#ffffff): titles and primary text.
+- **Ink Secondary** (#8e8e93): bios, meta, counts, placeholders, labels. Passes 4.5:1 on all four dark surfaces.
+- **Ink Faint** (#6e6e73): ≥18pt or decorative text only (≥3:1). Never body copy.
 
 ### Tertiary
 - **Live Green** (#22c55e): exclusively the "happening right now" state. Nothing else is green.
 - **Error Red** (#ef4444): errors and "Full" capacity only.
+- **Scrim** (rgba(0,0,0,0.55)): the backdrop behind any sheet.
 
 ### Named Rules
-**The One Streetlight Rule.** Sodium Amber appears on at most 10% of any screen. If two large amber elements are visible at once, one of them is wrong.
-**The No-Purple Rule.** The legacy accent #a855f7 (and #7c3aed, #2a1a3e) is retired. Replace on sight; never introduce it in new work.
-**The Scarcity-Is-Amber Rule.** Low-capacity warnings ("3 spots left") use Sodium Amber, not a separate orange — scarcity is the glow, not an alarm.
+**The One Streetlight Rule.** The accent appears on at most 10% of any screen. If two large cyan elements are visible at once, one of them is wrong.
+**The Retired-Accent Rule.** Scene has had three accents; two are retired and must never reappear: the AI purple #a855f7 (with #7c3aed, #2a1a3e), and Sodium Amber #ffa028 (with #e08010, #2b1d0a, #1a0d00). Replace on sight.
+**The Scarcity-Is-Accent Rule.** Low-capacity warnings ("3 spots left") use the accent, not a separate orange — scarcity is the glow, not an alarm.
+**The Legible-Gray Rule.** #555555 and #666666 are banned as text colors: they measure 2.3–3.4:1 on Scene's surfaces. Ink Secondary is the floor for anything under 18pt.
 
 ## 3. Typography
 
@@ -149,41 +158,43 @@ Flat by doctrine. Depth is tonal — Void beneath Asphalt beneath Card — plus 
 
 ### Buttons
 - **Shape:** Softly rounded (10px); full-width for primary screen actions.
-- **Primary:** Sodium Amber fill, Amber Ink text (700, 15–16pt), 15px vertical padding.
-- **Pressed:** Amber Pressed fill. **Disabled:** Card fill, Ink Meta text, hairline border.
+- **Primary:** Electric Cyan fill, Cyan Ink text (700, 15–16pt), 15px vertical padding.
+- **Pressed:** Cyan Pressed fill. **Disabled:** Card fill, Ink Secondary text, hairline border.
 - **Destructive (sign out):** Card fill, Error Red text — never a red fill.
 
 ### Chips
-- **Style:** Amber Tint background, Sodium Amber text (600, 12–13pt), pill radius (20px), 1px Sodium Amber border at 40% opacity or none.
+- **Style:** Cyan Tint background, Electric Cyan text (600, 12–13pt), pill radius (20px), 1px Electric Cyan border at 40% opacity or none.
 - **State:** selected/tag chips only; chips are never navigation.
 
 ### Cards / Containers
-- **Corner Style:** 12px. **Background:** Card (#1a1a1a). **Border:** 1px Border (#2a2a2a). **Shadow:** none (see Elevation). **Internal padding:** 14px.
+- **Corner Style:** 12px. **Background:** Card (#1a1a1a). **Border:** 1px Border (#484848). **Shadow:** none (see Elevation). **Internal padding:** 14px.
 
 ### Inputs / Fields
-- **Style:** Card background, 1px Border, 10px radius, 13px padding, Ink text, Ink Hint placeholder.
-- **Focus:** border shifts to Sodium Amber; no glow.
+- **Style:** Card background, 1px Border, 10px radius, 13px padding, Ink text, Ink Secondary placeholder.
+- **Focus:** border shifts to Electric Cyan; no glow.
 
 ### Sheets (signature component)
 - Bottom sheets are the app's core surface: Surface/Asphalt background, top radius 20–24px, 40×5px handle bar, backdrop scrim. Sheets must track the finger (translateY transforms only) and snap with a settle, never a jump.
 
 ### State Pills
-- Border-only pills (1px colored border, 6px radius, transparent fill): Live Green for live, Sodium Amber for upcoming, Ink Hint for past.
+- Border-only pills (1px colored border, 6px radius, transparent fill): Live Green for live, Electric Cyan for upcoming, Ink Secondary for past.
 
 ### Map Pins
-- The chip-marker is the label: Card background, 1.5px Sodium Amber border, white event title, pointer beneath. No default pins, no callout bubbles.
+- The chip-marker is the label: Card background, 1.5px Electric Cyan border, white event title, pointer beneath. No default pins, no callout bubbles.
 
 ## 6. Do's and Don'ts
 
 ### Do:
-- **Do** keep Sodium Amber under 10% of any screen — it is the only light in the room.
-- **Do** use tonal steps (Void → Asphalt → Card) and hairline #2a2a2a borders for all separation.
-- **Do** use Amber Ink (#1a0d00) for text on amber fills; the pairing is the brand handshake.
+- **Do** keep Electric Cyan under 10% of any screen — it is the only light in the room.
+- **Do** use tonal steps (Void → Asphalt → Card) and hairline #484848 borders for all separation.
+- **Do** use Cyan Ink (#001418) for text on cyan fills; the pairing is the brand handshake.
+- **Do** import from `frontend/src/constants/colors.js` rather than writing a hex inline.
 - **Do** keep lowercase screen titles and heavy (800) title weight — that's the flyer voice.
 - **Do** honor swipe-to-dismiss and finger-tracking on every sheet (PRODUCT.md: "gestures must feel physical").
 
 ### Don't:
-- **Don't** use the legacy AI purple #a855f7 / #7c3aed / #2a1a3e anywhere — retired by The No-Purple Rule.
+- **Don't** use either retired accent — the AI purple #a855f7 / #7c3aed / #2a1a3e, or Sodium Amber #ffa028 / #e08010 / #2b1d0a / #1a0d00. See The Retired-Accent Rule.
+- **Don't** use #555555 or #666666 for text; they fail contrast on every Scene surface.
 - **Don't** ship Eventbrite energy: no ticket-tier cards, no checkout chrome, no beige commerce surfaces.
 - **Don't** ship Instagram energy: no like-counts as decoration, no stories rails, no engagement-bait badges.
 - **Don't** ship campus-app clip-art energy: no mascots, no confetti, no bubbly oversized radii (nothing above 24px except circles).

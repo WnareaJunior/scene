@@ -22,7 +22,7 @@ See tonight on a map. Every screen reinforces live, spatial, right-now discovery
 
 ## Brand Personality
 
-Underground, exclusive, raw. The app should feel like knowing the right people — word-of-mouth energy, not a commercial marketplace. Dark, minimal surfaces; the purple accent is the light in the room. Confidence over decoration; nothing begs for engagement.
+Underground, exclusive, raw. The app should feel like knowing the right people — word-of-mouth energy, not a commercial marketplace. Dark, minimal surfaces; a single cyan accent is the light in the room. Confidence over decoration; nothing begs for engagement.
 
 ## Anti-references
 
@@ -34,10 +34,12 @@ Underground, exclusive, raw. The app should feel like knowing the right people �
 
 - **The map is the home.** Discovery is spatial. Screens and sheets orbit the map; nothing should bury it under list-first navigation.
 - **Fast like a text, not a form.** RSVPing and posting a party compete with sending a group chat message. Every required field and modal must earn its place.
-- **Dark is the venue.** The UI is night-native: near-black surfaces are the setting, purple (#a855f7) is the accent light. Never flood a screen with bright chrome.
+- **Dark is the venue.** The UI is night-native: near-black surfaces are the setting, electric cyan (#22d3ee) is the accent light. Never flood a screen with bright chrome. See DESIGN.md §2; `frontend/src/constants/colors.js` is the authoritative palette, and the two accents that came before it are retired.
 - **Word of mouth, not marketplace.** No commerce patterns, no engagement metrics as ornament. The product feels passed hand-to-hand.
 - **Gestures must feel physical.** Sheets, swipes, and map moves are the core interaction language; they must track the finger and settle naturally. A janky drag breaks the spell faster than a missing feature.
 
 ## Accessibility & Inclusion
 
-Deferred for v1 by explicit decision (ship-fast phase, colleague beta). Revisit after TestFlight feedback; the dark theme's muted grays (#555 on #0a0a0a) will need a contrast pass when this is picked up.
+Partly addressed. The text-contrast pass happened when the palette was extracted to `frontend/src/constants/colors.js`: #555555 and #666666 measured 2.3–3.4:1 on Scene's surfaces and were replaced by Ink Secondary (#8e8e93, ≥4.5:1 on all four dark surfaces) and Ink Faint (#6e6e73, ≥18pt or decorative only).
+
+Still deferred: VoiceOver labels and Reduce Motion support. Revisit after colleague beta feedback.
