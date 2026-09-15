@@ -1,0 +1,792 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="Zoomable map of every entity, route, pipeline stage and process in the Scene repo — the Expo app, the Express API, the search pipeline, and the environments they run in.">
+<title>Scene Atlas</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root{
+  --paper:#EDF0F3; --card:#FAFBFC; --card-win:#FBF6F1; --card-path:#F1F7F7; --card-ext:#F3F2F8; --card-unit:#F5F7F9;
+  --ink:#1B2431; --ink-2:#4F5D6E; --ink-3:#8593A4; --line:#B9C3CF; --line-2:#D5DCE4;
+  --accent:#B8541C; --data:#0E7A84; --alert:#C0392B; --probe:#5A4EBB; --backup:#5F7C1E; --gpu:#9A7B00;
+  --off-tint:rgba(90,78,187,.045); --win-tint:rgba(184,84,28,.05); --wsl-tint:rgba(14,122,132,.045);
+  --sub-tint:rgba(27,36,49,.025); --stack-tint:rgba(27,36,49,.04); --sel-tint:rgba(184,84,28,.10);
+  --sans:'Barlow Semi Condensed',"Arial Narrow",Arial,sans-serif; --mono:'IBM Plex Mono',ui-monospace,Menlo,Consolas,monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --paper:#12171E; --card:#1B222C; --card-win:#241E19; --card-path:#17252A; --card-ext:#1E1E2B; --card-unit:#1A2028;
+    --ink:#DCE3EB; --ink-2:#A6B2C1; --ink-3:#6F7D8E; --line:#3A4654; --line-2:#2A343F;
+    --accent:#E5873F; --data:#3FB4BE; --alert:#EF6A5F; --probe:#A59BEE; --backup:#9FC44A; --gpu:#D4B23A;
+    --off-tint:rgba(165,155,238,.06); --win-tint:rgba(229,135,63,.06); --wsl-tint:rgba(63,180,190,.06);
+    --sub-tint:rgba(220,227,235,.03); --stack-tint:rgba(220,227,235,.045); --sel-tint:rgba(229,135,63,.14);
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#12171E; --card:#1B222C; --card-win:#241E19; --card-path:#17252A; --card-ext:#1E1E2B; --card-unit:#1A2028;
+  --ink:#DCE3EB; --ink-2:#A6B2C1; --ink-3:#6F7D8E; --line:#3A4654; --line-2:#2A343F;
+  --accent:#E5873F; --data:#3FB4BE; --alert:#EF6A5F; --probe:#A59BEE; --backup:#9FC44A; --gpu:#D4B23A;
+  --off-tint:rgba(165,155,238,.06); --win-tint:rgba(229,135,63,.06); --wsl-tint:rgba(63,180,190,.06);
+  --sub-tint:rgba(220,227,235,.03); --stack-tint:rgba(220,227,235,.045); --sel-tint:rgba(229,135,63,.14);
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--sans);font-size:14px;line-height:1.4;overflow:hidden}
+button,input{font-family:inherit;font-size:inherit;color:inherit}
+button{cursor:pointer}
+button:focus-visible,input:focus-visible,[tabindex]:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.app{display:grid;grid-template-rows:54px 1fr;grid-template-columns:344px 1fr;height:100vh;height:100dvh}
+.top{grid-column:1/-1;display:flex;align-items:center;gap:14px;padding:0 14px 0 16px;border-bottom:1px solid var(--line-2);background:var(--paper)}
+.brand{display:flex;align-items:baseline;gap:10px;white-space:nowrap}
+.brand h1{margin:0;font-size:19px;font-weight:700;letter-spacing:.01em}
+.brand .sub{font-family:var(--mono);font-size:11px;color:var(--ink-3)}
+.regions{display:flex;gap:4px;margin-left:8px;overflow-x:auto;scrollbar-width:none}
+.regions::-webkit-scrollbar{display:none}
+.chip{border:1px solid var(--line);background:transparent;border-radius:3px;padding:4px 9px;font-size:12.5px;font-weight:500;color:var(--ink-2);white-space:nowrap}
+.chip:hover{border-color:var(--ink-3);color:var(--ink)}
+.spacer{flex:1}
+.zoomctl{display:flex;align-items:center;gap:2px;border:1px solid var(--line);border-radius:3px;overflow:hidden}
+.zoomctl button{border:0;background:transparent;width:32px;height:30px;font-size:16px;color:var(--ink-2)}
+.zoomctl button:hover{background:var(--sub-tint);color:var(--ink)}
+.zoomctl .pct{font-family:var(--mono);font-size:11px;color:var(--ink-3);min-width:44px;text-align:center}
+#panelToggle{display:none}
+.side{border-right:1px solid var(--line-2);overflow:auto;background:var(--paper);padding:14px 16px 28px;display:flex;flex-direction:column;gap:18px}
+.side h2{margin:0 0 8px;font-size:11.5px;font-weight:600;text-transform:uppercase;letter-spacing:.12em;color:var(--ink-3)}
+.search{position:relative}
+.search input{width:100%;border:1px solid var(--line);background:var(--card);border-radius:3px;padding:8px 10px;font-size:13.5px}
+.search input::placeholder{color:var(--ink-3)}
+.results{margin-top:6px;border:1px solid var(--line-2);border-radius:3px;background:var(--card);max-height:260px;overflow:auto}
+.results:empty{display:none}
+.results button{display:flex;justify-content:space-between;gap:8px;width:100%;text-align:left;border:0;border-bottom:1px solid var(--line-2);background:transparent;padding:6px 10px;font-size:13px}
+.results button:last-child{border-bottom:0}
+.results button:hover{background:var(--sub-tint)}
+.results .k{font-family:var(--mono);font-size:10.5px;color:var(--ink-3)}
+.detail{border:1px solid var(--line);border-radius:3px;background:var(--card);padding:12px 14px 14px}
+.detail .hd{display:flex;align-items:flex-start;gap:10px}
+.detail .hd h3{margin:0;font-size:17px;font-weight:600;line-height:1.2;text-wrap:balance;flex:1}
+.detail .hd .x{border:0;background:transparent;color:var(--ink-3);font-size:18px;line-height:1;padding:0 2px}
+.detail .hd .x:hover{color:var(--ink)}
+.tag{display:inline-block;font-family:var(--mono);font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-2);border:1px solid var(--line);border-radius:2px;padding:1px 6px;margin:6px 6px 0 0}
+.tag.acc{color:var(--accent);border-color:var(--accent)}
+.detail p{margin:8px 0 0;color:var(--ink-2);font-size:13.5px}
+.detail ul{margin:8px 0 0;padding-left:18px;color:var(--ink-2);font-size:13.5px}
+.detail li{margin:4px 0}
+.detail ol{margin:8px 0 0;padding-left:20px;font-size:13.5px}
+.detail ol li{margin:6px 0;color:var(--ink);cursor:pointer}
+.detail ol li:hover{color:var(--accent)}
+.detail ol li small{display:block;color:var(--ink-3);font-family:var(--mono);font-size:10.5px;margin-top:2px}
+.files{display:flex;flex-wrap:wrap;gap:4px;margin-top:8px}
+.files code{font-family:var(--mono);font-size:10.5px;background:var(--sub-tint);border:1px solid var(--line-2);border-radius:2px;padding:1px 5px;color:var(--ink-2)}
+.conns{margin-top:10px;display:flex;flex-direction:column;gap:2px}
+.conns button{border:0;background:transparent;text-align:left;padding:3px 0;font-size:12.5px;color:var(--ink-2);display:grid;grid-template-columns:14px 1fr;gap:6px;align-items:baseline}
+.conns button:hover{color:var(--ink)}
+.conns i{display:inline-block;width:12px;height:3px;border-radius:1px;align-self:center}
+.conns b{font-weight:600;color:var(--ink)}
+.conns span{font-family:var(--mono);font-size:10.5px;color:var(--ink-3)}
+.flows{display:flex;flex-direction:column;gap:2px}
+.flows button{border:1px solid transparent;background:transparent;text-align:left;padding:6px 8px;border-radius:3px;font-size:13.5px;display:flex;flex-direction:column;gap:1px;align-items:flex-start}
+.flows button:hover{background:var(--sub-tint)}
+.flows button.on{border-color:var(--accent);background:var(--sel-tint)}
+.flows button small{font-family:var(--mono);font-size:10.5px;color:var(--ink-3)}
+.legend{display:flex;flex-direction:column;gap:3px}
+.legend label{display:grid;grid-template-columns:16px 44px 1fr;gap:8px;align-items:center;padding:3px 0;font-size:13px;cursor:pointer}
+.legend input{margin:0;accent-color:var(--accent)}
+.legend svg{width:44px;height:10px;display:block;overflow:visible}
+.legend svg line{stroke-width:2;fill:none}
+.legend .n{color:var(--ink-2)}
+.legend .n b{color:var(--ink);font-weight:600}
+.kinds{display:grid;grid-template-columns:1fr 1fr;gap:4px 10px;font-size:12.5px;color:var(--ink-2)}
+.kinds span{display:flex;align-items:center;gap:7px}
+.kinds i{width:14px;height:10px;border:1px solid var(--line);border-radius:2px;background:var(--card);display:inline-block}
+.kinds i.win{background:var(--card-win)} .kinds i.path{background:var(--card-path)} .kinds i.ext{background:var(--card-ext)} .kinds i.unit{background:var(--card-unit)} .kinds i.plan{border-style:dashed;background:transparent}
+.hint{font-size:12.5px;color:var(--ink-3);margin:0}
+.stage{position:relative;overflow:hidden;background:var(--paper)}
+svg#map{width:100%;height:100%;display:block;touch-action:none;cursor:grab;user-select:none}
+svg#map.dragging{cursor:grabbing}
+.mini{position:absolute;right:14px;bottom:14px;width:236px;border:1px solid var(--line);background:var(--card);border-radius:3px;overflow:hidden;box-shadow:0 2px 10px rgba(0,0,0,.08)}
+.mini svg{display:block;width:100%;height:auto;cursor:crosshair}
+.mini rect.g{fill:var(--ink-3);opacity:.18;stroke:none}
+.mini rect.g.stack{opacity:.32}
+.mini rect.g.box{fill:none;stroke:var(--ink-3);stroke-width:8;opacity:.6}
+.mini #vp{fill:var(--accent);fill-opacity:.12;stroke:var(--accent);stroke-width:10}
+.lod{position:absolute;left:14px;bottom:14px;font-family:var(--mono);font-size:10.5px;color:var(--ink-3);background:var(--card);border:1px solid var(--line-2);border-radius:3px;padding:4px 8px;pointer-events:none}
+
+/* ---- map drawing ---- */
+.grp rect{vector-effect:non-scaling-stroke}
+.grp.off rect{fill:var(--off-tint);stroke:var(--line);stroke-dasharray:6 4}
+.grp.box rect{fill:none;stroke:var(--ink-3);stroke-width:1.6}
+.grp.win rect{fill:var(--win-tint);stroke:var(--line)}
+.grp.wsl rect{fill:var(--wsl-tint);stroke:var(--line)}
+.grp.sub rect{fill:var(--sub-tint);stroke:var(--line-2)}
+.grp.stack rect{fill:var(--stack-tint);stroke:var(--line)}
+.grp text{font-family:var(--sans);fill:var(--ink-2);pointer-events:none}
+.grp text.t{font-weight:600;font-size:18px;text-transform:uppercase;letter-spacing:.08em;cursor:pointer;pointer-events:all}
+.grp text.t:hover{fill:var(--accent)}
+.grp.box text.t{font-size:46px;letter-spacing:.06em;fill:var(--ink)}
+.grp.win text.t,.grp.wsl text.t{font-size:30px}
+.grp.off text.t{font-size:24px}
+.grp text.s{font-family:var(--mono);font-size:11.5px;fill:var(--ink-3)}
+.grp.box text.s{font-size:15px}
+.grp.win text.s,.grp.wsl text.s{font-size:13px}
+.node{cursor:pointer}
+.node rect.bg{fill:var(--card);stroke:var(--line);vector-effect:non-scaling-stroke}
+.node.k-win rect.bg,.node.k-hw rect.bg{fill:var(--card-win)}
+.node.k-path rect.bg,.node.k-fact rect.bg{fill:var(--card-path)}
+.node.k-ext rect.bg,.node.k-dev rect.bg{fill:var(--card-ext)}
+.node.k-unit rect.bg,.node.k-scr rect.bg{fill:var(--card-unit)}
+.node.k-note rect.bg{fill:transparent;stroke-dasharray:3 3}
+.node.k-plan rect.bg{fill:transparent;stroke-dasharray:5 4}
+.node.k-plan text{fill:var(--ink-3)}
+.node:hover rect.bg{stroke:var(--ink-2)}
+.node text{pointer-events:none}
+.node text.n{font-family:var(--sans);font-weight:600;font-size:13px;fill:var(--ink)}
+.node.k-fact text.n,.node.k-note text.n{font-size:14px}
+.node text.s{font-family:var(--mono);font-size:10px;fill:var(--ink-2)}
+.node text.p{font-family:var(--mono);font-weight:500;font-size:10px;fill:var(--accent)}
+.node.sel rect.bg{stroke:var(--accent);stroke-width:2.5;fill:var(--sel-tint)}
+.node.lit rect.bg{stroke:var(--ink);stroke-width:1.8}
+.edge{fill:none;stroke-width:1.4;vector-effect:non-scaling-stroke;opacity:.75}
+.hit{fill:none;stroke:transparent;stroke-width:14;vector-effect:non-scaling-stroke;pointer-events:stroke;cursor:pointer}
+.k-http{stroke:var(--ink-3)}
+.k-proxy{stroke:var(--accent)}
+.k-data{stroke:var(--data)}
+.k-probe{stroke:var(--probe);stroke-dasharray:2 4}
+.k-alert{stroke:var(--alert);stroke-dasharray:7 4}
+.k-backup{stroke:var(--backup);stroke-dasharray:9 3 2 3}
+.k-ctl{stroke:var(--ink-2);stroke-dasharray:4 3}
+.k-heal{stroke:var(--accent);stroke-dasharray:4 3}
+.k-gpu{stroke:var(--gpu);stroke-dasharray:1 3}
+.k-plan{stroke:var(--ink-3);stroke-dasharray:3 6;opacity:.5}
+.edge.lit{stroke-width:2.8;opacity:1}
+.edge.sel{stroke-width:3.4;opacity:1}
+#ah-http path{fill:var(--ink-3)} #ah-proxy path,#ah-heal path{fill:var(--accent)} #ah-data path{fill:var(--data)} #ah-probe path{fill:var(--probe)} #ah-alert path{fill:var(--alert)} #ah-backup path{fill:var(--backup)} #ah-ctl path{fill:var(--ink-2)} #ah-gpu path{fill:var(--gpu)} #ah-plan path{fill:var(--ink-3)}
+.elabel{font-family:var(--mono);font-size:10.5px;fill:var(--ink-2);paint-order:stroke;stroke:var(--paper);stroke-width:4px;stroke-linejoin:round;text-anchor:middle;pointer-events:none}
+.elabel.lit{fill:var(--ink);font-weight:500}
+.dim{opacity:.13}
+.edge.dim{opacity:.07}
+svg.z0 .node text,svg.z0 .elabel,svg.z0 .grp.sub text.s,svg.z0 .grp.stack text.s{display:none}
+svg.z1 .node text.s,svg.z1 .elabel{display:none}
+svg.z1 .elabel.lit{display:block}
+svg.hide-http .k-http,svg.hide-proxy .k-proxy,svg.hide-data .k-data,svg.hide-probe .k-probe,svg.hide-alert .k-alert,svg.hide-backup .k-backup,svg.hide-ctl .k-ctl,svg.hide-heal .k-heal,svg.hide-gpu .k-gpu,svg.hide-plan .k-plan{display:none}
+@media (max-width:820px){
+  .app{grid-template-columns:1fr}
+  .side{position:absolute;top:54px;left:0;bottom:0;width:min(92vw,344px);z-index:5;box-shadow:0 0 30px rgba(0,0,0,.2);transform:translateX(-100%);transition:transform .2s}
+  .side.open{transform:none}
+  #panelToggle{display:inline-block}
+  .brand .sub,.regions{display:none}
+  .mini{width:150px}
+}
+@media (prefers-reduced-motion:reduce){.side{transition:none}}
+</style>
+</head>
+<body>
+
+<div class="app">
+  <header class="top">
+    <div class="brand"><h1>Scene Atlas</h1><span class="sub" id="counts"></span></div>
+    <nav class="regions" id="regions" aria-label="Jump to a region"></nav>
+    <div class="spacer"></div>
+    <button class="chip" id="panelToggle" aria-label="Toggle panel">Panel</button>
+    <div class="zoomctl" role="group" aria-label="Zoom">
+      <button id="zout" aria-label="Zoom out">−</button>
+      <span class="pct" id="pct">100%</span>
+      <button id="zin" aria-label="Zoom in">+</button>
+      <button id="zfit" aria-label="Fit everything" title="Fit (0)">⤢</button>
+    </div>
+  </header>
+
+  <aside class="side" id="side">
+    <div class="search">
+      <input id="q" type="search" placeholder="Find a route, module, stage, script or env var…" aria-label="Search entities" autocomplete="off">
+      <div class="results" id="results"></div>
+    </div>
+    <section id="detail" class="detail" aria-live="polite"></section>
+    <section>
+      <h2>Processes</h2>
+      <div class="flows" id="flows"></div>
+    </section>
+    <section>
+      <h2>Edge layers</h2>
+      <div class="legend" id="legend"></div>
+    </section>
+    <section>
+      <h2>Entity kinds</h2>
+      <div class="kinds">
+        <span><i></i>backend module</span><span><i class="win"></i>app / client code</span>
+        <span><i class="unit"></i>script / workflow</span><span><i class="path"></i>data store / env fact</span>
+        <span><i class="ext"></i>off-repo service</span><span><i class="plan"></i>planned, not built</span>
+      </div>
+    </section>
+    <p class="hint">Drag to pan · wheel or pinch to zoom · click a group or region title to frame it · Esc clears the selection · keys + − 0.</p>
+  </aside>
+
+  <main class="stage" id="stage">
+    <svg id="map" class="z1" role="img" aria-label="Zoomable map of the Scene repo: clients and off-repo services on the left, the repository on the right — the Expo frontend, the Express backend and its routes, the eight-stage search pipeline, scripts, migrations, CI workflows, tests, and the environment facts they depend on. Edges are colored by kind: request, deploy hop, data, test probe, auth, backup, control, fallback and embedding."></svg>
+    <div class="lod" id="lod"></div>
+    <div class="mini"><svg id="mini" aria-hidden="true"></svg></div>
+  </main>
+</div>
+<script>
+const W=4240,H=1820;
+const G=[
+ {id:'g_cli',x:40,y:80,w:640,h:300,t:'Clients',s:'what actually talks to the API',c:'off'},
+ {id:'g_ext',x:40,y:420,w:640,h:620,t:'Off-repo services',s:'nothing here is in the repo; all of it is in the critical path',c:'off'},
+ {id:'g_repo',x:740,y:60,w:3460,h:1720,t:'WnareaJunior/scene',s:'Expo app + Express API + PostGIS/pgvector search · one repo, four package manifests, three environments',c:'box'},
+ {id:'g_fe',x:770,y:110,w:3400,h:340,t:'frontend/ — Expo · React Native',s:'one codebase, three targets: iOS (store), Expo web (GitHub Pages), dev client on the devbox · platform-split modules resolve .web.js on web',c:'win'},
+ {id:'g_be',x:770,y:490,w:3400,h:220,t:'backend/ — Node · Express · PostGIS',s:'src/app.js builds the middleware chain and mounts five routers under /api/v1 · helmet, CORS allowlist, three rate limiters, no-store',c:'wsl'},
+ {id:'g_srch',x:770,y:750,w:3400,h:320,t:'backend/src/search/ — the eight-stage pipeline',s:'sanitize → parse → filters → retrieve → fuse → rerank → (fallback once) → log · ships dark behind SEARCH_ENABLED',c:'sub'},
+ {id:'g_scr',x:770,y:1110,w:1240,h:370,t:'backend/scripts/',s:'the things you run by hand',c:'sub'},
+ {id:'g_mig',x:2050,y:1110,w:700,h:370,t:'backend/migrations/',s:'tracked in git since #62 · additive only',c:'sub'},
+ {id:'g_ci',x:2790,y:1110,w:700,h:370,t:'.github/workflows/',s:'CI on every PR · deploys are separate',c:'sub'},
+ {id:'g_tst',x:3530,y:1110,w:640,h:370,t:'Tests',s:'unit · pipeline · browser',c:'sub'},
+ {id:'g_facts',x:770,y:1520,w:3400,h:230,t:'Environment, flags & facts everything above depends on',s:'',c:'sub'},
+];
+const N=[];
+const add=(o)=>{N.push(o);return o;};
+
+// ---- clients ----
+add({id:'ios',k:'dev',x:70,y:140,w:280,h:84,n:'iOS app',s:'com.wilsonnarea.scene · v1.0.0 · TestFlight + App Store',d:['The primary target. Built with EAS, submitted to App Store Connect (app id 6792423931).','Build 9 was cut from main at 08457bf and submitted 2026-08-12; it fixes the 5.1.1(v) account-deletion rejection and the 2.1(a) "couldn\'t verify features" rejection.','Gotcha that cost a review cycle: `eas build` alone does NOT upload to ASC. Build 8 compiled but was never submitted, which is why the ASC build picker looked empty. You need `eas submit --platform ios --profile production --id <build-id>`.','TestFlight external group "Colleagues" (limit 50), public link WG6cdp1k.','Maps: iOS renders Apple Maps — no provider prop, and deliberately no ios.config.googleMapsApiKey, because that makes prebuild link a pod react-native-maps no longer ships.'],f:['frontend/eas.json','frontend/app.config.js','backend/src/WHERE_WE_LEFT_OFF.md']});
+add({id:'web',k:'dev',x:370,y:140,w:280,h:84,n:'Web app',s:'Expo web export · GitHub Pages at /scene',d:['Web v1 is read-only-ish: a feed of upcoming public parties and a profile you can edit the bio on. Native never imports the web screens.','Served from a project site, so every asset URL needs the /scene prefix — EXPO_PUBLIC_WEB_BASE_PATH sets experiments.baseUrl, and urlSync.web.js strips and re-adds the same prefix for routing.','404.html is a copy of index.html: the SPA fallback, since Pages has no rewrite rules.','Token storage is localStorage here, SecureStore on native — same import, different module.'],f:['frontend/src/web/WebFeed.jsx','frontend/src/web/WebProfile.jsx','frontend/src/urlSync.web.js','.github/workflows/deploy-web.yml']});
+add({id:'bruno',k:'dev',x:70,y:246,w:280,h:62,n:'Bruno collection',s:'bruno/ · local + production environments',d:['Hand-driven API probes for auth, events, users and map. Checked into the repo.','Only two environments exist: local.bru and production.bru. There is no staging.bru — worth adding once the staging service exists.'],f:['bruno/environments/local.bru','bruno/environments/production.bru']});
+add({id:'devmac',k:'dev',x:370,y:246,w:280,h:62,n:'Dev machine',s:'Windows · Claude Code · gh CLI · npm ci',d:['Four package manifests install separately: root, backend/, frontend/, e2e/. The root package.json declares no workspaces, so `npm ci` runs four times.','Playwright browser binaries are a separate `npx playwright install` — npm ci does not fetch them.','backend/.env is the local target and points at the devbox, not Supabase. Reaching a Supabase project is always an explicit `scripts/with-env.sh <env> <cmd>`.'],f:['package.json','backend/README.md','e2e/README.md']});
+
+// ---- off-repo services ----
+add({id:'render',k:'ext',x:70,y:480,w:280,h:80,n:'Render · scene-19ss',s:'the production API · free tier · srv-d7fbu7c71suc738l4g1g',p:':443',d:['https://scene-19ss.onrender.com/api/v1 — the only deployed API that exists.','Free tier spins down when idle; the first request after a cold start can be dropped at the proxy ("The network connection was lost" on iOS). api.js retries network-level failures twice, which is safe because a dropped connection means the request never arrived.','Env vars live here, not in a file: DATABASE_URL, JWT secrets, SEARCH_ENABLED=true, VOYAGE_API_KEY, ALLOWED_ORIGINS.','Auto-deploy from main was switched OFF so deploy-prod.yml is the only path in. Before that change every merge shipped straight to production.','The old keep-warm cron pinged /health every 10 minutes and never actually kept it warm — GitHub ran the schedule hours apart. Retired in #68; Uptime Kuma on the devbox does it properly now.'],f:['.github/workflows/deploy-prod.yml','backend/README.md']});
+add({id:'renderstg',k:'plan',x:370,y:480,w:280,h:80,n:'Render staging service',s:'NOT BUILT — Phase 0 task 5',d:['The missing half of the staging/production split. The database split is done; the API split is not.','Consequence today: the EAS `preview` profile has no EXPO_PUBLIC_API_URL of its own, so preview builds fall back to the production API.','Once it exists it should stay on auto-deploy from main, so every merge is rehearsed against staging Supabase before anyone presses the production button.'],f:['frontend/eas.json','.github/workflows/deploy-prod.yml']});
+add({id:'supaprod',k:'ext',x:70,y:576,w:280,h:80,n:'Supabase · production',s:'project ref kxtrlrtuanjcchwwfqvj ("scene")',d:['Postgres + PostGIS + pgvector, plus the Storage bucket behind the supabase driver.','Reached only through Render env vars or an explicit `with-env.sh production`. Never the ambient local default.','Known debt: the DB password is still unrotated and still not URL-parseable (a raw % in it), so DATABASE_URL cannot be fed to tools that parse the URL — you need a wrapper that splits the components and passes PGPASSWORD.','Still carries junk from earlier sessions: seeded @scene-seed.app users pending post-approval cleanup, plus e2e+*@e2e.test, stagingsmoke@test.dev and bench users left behind by the retired e2e workflow.'],f:['backend/README.md','backend/src/search/DEPLOY_STATUS.md']});
+add({id:'supastg',k:'ext',x:370,y:576,w:280,h:80,n:'Supabase · staging',s:'project ref rpjnkjoyxeykqlppwfkp ("scene-staging")',d:['Identical stack to production including the HNSW index — the full search rollout was rehearsed here before prod.','Connect via the direct host db.<ref>.supabase.co; the pooler works too once the tenant registers.','JWT secrets differ from production on purpose, so a leaked dev token cannot be replayed against prod.','Gap: AWS_* upload keys still point at the production bucket. Create staging-scoped keys if upload testing matters.'],f:['backend/README.md']});
+add({id:'devboxpg',k:'ext',x:70,y:672,w:280,h:80,n:'devbox · Postgres + MinIO',s:'100.64.203.64 · the local target since #63',d:['The home server. backend/.env points here, so a plain `node ...` can never touch Supabase by accident.','Postgres has no TLS, hence DATABASE_SSL=disable. MinIO is the S3-compatible store behind STORAGE_DRIVER=s3; S3_PUBLIC_URL controls the host baked into stored image URLs.','Verified end to end on the devbox: register → avatar upload → anonymous GET 200 → DELETE /users/me → object gone.','The EAS `development` profile points the dev client at http://100.64.203.64:3005 over Tailscale.'],f:['backend/src/storage.js','backend/src/db.js','frontend/eas.json']});
+add({id:'voyage',k:'ext',x:370,y:672,w:280,h:80,n:'Voyage AI',s:'embeddings · 1024-dim · VOYAGE_API_KEY',d:['The only paid external dependency. 65 events cost ~2,866 tokens ≈ $0.0001 for the original backfill.','EMBEDDING_DIM=1024 must match the vector(N) width in the search schema. Changing it means a re-embed and an index rebuild.','Without the key the adapter falls back to a stub provider. The stub is deliberately refused by both the CLI and the in-process sweep — filling the embedding column with pseudo-vectors would look valid and return meaningless neighbors.'],f:['backend/src/search/adapters/embeddings.js','backend/src/search/config.js']});
+add({id:'gmaps',k:'ext',x:70,y:768,w:280,h:72,n:'Google Maps / Places',s:'Android render · Places + geocoding on both',d:['Two platform-restricted keys: EXPO_PUBLIC_GOOGLE_MAPS_API_KEY_IOS and _ANDROID. app.config.js warns loudly at build time if either is missing.','iOS uses the key only for the JS Places/geocoding calls — map tiles are Apple Maps.','Open hygiene item carried over from July: the original single unrestricted key still needs splitting, per-platform restriction and rotation.'],f:['frontend/app.config.js','frontend/src/constants/config.js']});
+add({id:'eas',k:'ext',x:370,y:768,w:280,h:72,n:'EAS Build / Submit',s:'project 36db5545 · owner wnareajunior',d:['Three profiles: development (devbox URL, dev client), preview (internal, still on the default API), production (store, autoIncrement, Render URL).','Uploads are ~1 MB thanks to a root .easignore — the 176 MB culprit was a repo-root .venv.','iOS production credentials are validated, so --non-interactive builds work.'],f:['frontend/eas.json']});
+add({id:'asc',k:'ext',x:70,y:856,w:280,h:72,n:'App Store Connect',s:'app id 6792423931 · TestFlight + review',d:['Build 9 was submitted 2026-08-12 and was still "waiting on Apple" when the notes were last written — that is a month stale now, so there is a verdict to go read.','ITSAppUsesNonExemptEncryption:false is set in app.config.js; without it every TestFlight build stalls on "Missing Compliance".','Two demo accounts exist for reviewers (the second is a spare in case the first gets deleted while they test account deletion).'],f:['frontend/app.config.js','backend/src/WHERE_WE_LEFT_OFF.md']});
+add({id:'ghact',k:'ext',x:370,y:856,w:280,h:72,n:'GitHub Actions',s:'ci on every PR · deploys are manual or on main',d:['Runs ci.yml on every pull request and on push to main; deploy-web.yml on main; deploy-prod.yml only by hand.','claude.yml and claude-code-review.yml are the Claude integrations. Both currently fail at checkout cleanup for a repo-level reason, not a code one — see the stray gitlink fact.'],f:['.github/workflows/ci.yml','.github/workflows/deploy-prod.yml']});
+add({id:'ghpages',k:'ext',x:70,y:944,w:280,h:72,n:'GitHub Pages',s:'project site · /scene base path',d:['Deploy target for the Expo web export. Environment name github-pages.','Reads vars.PROD_API_URL and falls back to the Render URL. This used to read E2E_API_URL — the same variable the test suite used — so pointing the tests at staging would have silently repointed the public web app. #65 split them.'],f:['.github/workflows/deploy-web.yml']});
+add({id:'domain',k:'plan',x:370,y:944,w:280,h:72,n:'Custom domain',s:'NOT BOUGHT — nothing in the repo references one',d:['Everything today is on onrender.com and github.io. No domain is configured anywhere in the repo.','Worth checking before buying: the production demo accounts use @getscene.app addresses, so that domain may already be owned.'],f:[]});
+
+// ---- frontend ----
+const FE=(i,row,id,n,s,d,f)=>add({id,k:'win',x:786+i*224,y:175+row*90,w:210,h:70,n,s,d,f});
+FE(0,0,'appjs','App.js','root · auth gate · screen switch',['Waits for the stored token before rendering Scene — an earlier bug rendered first and flashed a logged-out UI.','Chooses the web screens on web and the native screens on native.'],['frontend/App.js']);
+FE(1,0,'onboard','OnboardingScreen','register · login · interests',['Signup collects email, password, username, picture, gender, bio, interests. Those interests later feed the search re-ranker\'s tag-affinity signal.','Surfaces real API errors instead of a generic failure — fixed in #26.'],['frontend/src/screens/OnboardingScreen.jsx']);
+FE(2,0,'mapscr','MapScreen','the home surface · pins + sheets',['Apple Maps on iOS, Google on Android. Pins come from GET /map/events for the current viewport.','The NYC fallback fires only when the viewport returns exactly zero upcoming public events — which is why one junk event near Cupertino was enough to suppress it during App Review.','Known improvement, never shipped: fire the fallback when the nearby count is small rather than exactly zero.'],['frontend/src/screens/MapScreen.jsx','backend/src/routes/map.js']);
+FE(3,0,'create','CreateScreen','host a party · address autocomplete',['Places autocomplete with a geocode fallback and visible error alerts — it used to dead-end silently.','Image goes up via the events image endpoint before the event is created.'],['frontend/src/screens/CreateScreen.jsx']);
+FE(4,0,'profile','ProfileScreen','you · hosted · RSVPs · followers',['Hosts the DeleteAccountSheet that satisfies App Store guideline 5.1.1(v).','openList unwraps the response envelope and reads followers_count — before #54 the follower and following lists were always empty.'],['frontend/src/screens/ProfileScreen.jsx']);
+FE(5,0,'sheet','BottomSheet','pan-to-dismiss · velocity springs',['Drag uses a translateY transform rather than the layout `top` prop, which is what made snapping feel rigid.','Still runs on the JS thread via PanResponder. Converting to Reanimated needs a GestureHandlerRootView inside the Modal plus scroll arbitration — open item.'],['frontend/src/components/BottomSheet.jsx']);
+FE(6,0,'evcard','EventCard','list row · image + time + RSVP count',['Backend SELECTs had to be fixed to include image_url; profile party images were blank without it.'],['frontend/src/components/EventCard.jsx']);
+FE(7,0,'evsheet','EventDetailSheet','full event · RSVP · report',['Hero was clipped, the close control was buried and there was no swipe-down until the July pass.'],['frontend/src/components/EventDetailSheet.jsx']);
+FE(0,1,'searchsheet','SearchSheet','the search surface',['Cut over to the unified /api/v1/search pipeline in #59; before that it ran its own queries.','Sends the viewport and the client UTC offset so the pipeline can resolve "tonight" and "near me" correctly.','Renders a small user strip alongside events, which is why the pipeline returns users even for a non-@ query.'],['frontend/src/components/SearchSheet.jsx','backend/src/routes/search.js']);
+FE(1,1,'usersheet','UserProfileSheet','someone else · follow / block / report',[],['frontend/src/components/UserProfileSheet.jsx']);
+FE(2,1,'apijs','src/api.js','every network call · retry + refresh',['BASE_URL = EXPO_PUBLIC_API_URL || the hardcoded Render URL, + /api/v1. That fallback is why an unconfigured build still reaches production.','fetchWithRetry retries network-level failures twice with backoff — safe even for non-idempotent calls, because a transport failure means the request never landed.','Owns the access/refresh token dance.'],['frontend/src/api.js']);
+FE(3,1,'tokenstore','tokenStore(.web).js','SecureStore │ localStorage',['Platform-split module: Metro resolves .web.js on web and .js on native. Same import either side.'],['frontend/src/tokenStore.js','frontend/src/tokenStore.web.js']);
+FE(4,1,'uploadpart','uploadPart(.web).js','multipart parts │ web stub',['Native uses expo-file-system `File`. SDK 54+ WinterCG fetch rejects the old React Native {uri} part shape — that was the "Unsupported FormDataPart" crash.','Web is a stub: upload is unsupported there.'],['frontend/src/uploadPart.js','frontend/src/uploadPart.web.js']);
+FE(5,1,'urlsync','urlSync(.web).js','browser URL ↔ app state',['Strips and re-adds the /scene base path so deep links work on a Pages project site.'],['frontend/src/urlSync.web.js']);
+FE(6,1,'webfeed','web/WebFeed.jsx','web v1 feed · read-only',['Lists upcoming public parties from GET /events. Native never imports it.'],['frontend/src/web/WebFeed.jsx']);
+FE(7,1,'webprofile','web/WebProfile.jsx','web v1 profile · bio edit',[],['frontend/src/web/WebProfile.jsx']);
+FE(0,2,'appconfig','app.config.js','dynamic Expo config',['Reads the Maps keys from env and warns if absent. Sets updates.url only when EXPO_PUBLIC_UPDATE_URL exists — expo-updates crashes at launch if runtimeVersion is present without a valid updates.url.','Android permissions deliberately exclude ACCESS_BACKGROUND_LOCATION: Play Store approval would need a justification Scene does not have.'],['frontend/app.config.js']);
+FE(1,2,'easjson','eas.json','three build profiles',['development → devbox over Tailscale; production → Render; preview → still unset, waiting on the staging service.'],['frontend/eas.json']);
+FE(2,2,'colors','constants/','colors · mapStyles · config',['Sodium Amber #ffa028 is the accent; the old purple #a855f7 is banned by the design system ("No-Purple Rule").'],['frontend/src/constants/colors.js','DESIGN.md']);
+
+// ---- backend ----
+const BE=(i,id,n,s,p,d,f)=>add({id,k:'ctr',x:786+i*336,y:560,w:322,h:100,n,s,p,d,f});
+BE(0,'indexjs','backend/index.js','boot guard · listen · embed sweep','',['Hard-fails at startup if DATABASE_URL, JWT_ACCESS_SECRET or JWT_REFRESH_SECRET is missing — exit 1 rather than a mystery 401 later.','Waits on `SELECT 1` before listening, so a bad DATABASE_URL kills the boot instead of serving 500s.','Then starts the in-process embedding sweep.'],['backend/index.js']);
+BE(1,'appjs_be','src/app.js','the middleware chain · mounts /api/v1','',['Throws at require-time if no JWT secret is configured — both the route and the middleware resolve JWT_ACCESS_SECRET || JWT_SECRET, and signing with undefined 401s every protected request.','helmet with crossOriginResourcePolicy cross-origin (images are served to other origins).','CORS is an explicit ALLOWED_ORIGINS allowlist; localhost is allowed only when NODE_ENV !== production. X-E2E-Key has to be in allowedHeaders or the browser preflight rejects it before the limiter sees it.','Cache-Control: no-store on all of /api/v1 — without it Chromium can revive a pre-edit GET /users/me from cache after a reload.','Three limiters: auth 10/15min, refresh 30/min, api 200/min.'],['backend/src/app.js']);
+BE(2,'authmw','middleware/auth.js','Bearer · HS256 · iss/aud pinned','',['Verifies with algorithms:[HS256], issuer scene-api, audience scene-app — pinning the algorithm is what stops an alg:none swap.','Resolves JWT_ACCESS_SECRET || JWT_SECRET. That fallback was added because the deployed env only had JWT_SECRET and every protected route was 401ing.'],['backend/src/middleware/auth.js']);
+BE(3,'dbjs','src/db.js','pg Pool · max 10 · TLS toggle','',['ssl is on unless DATABASE_SSL=disable — Supabase needs TLS, the devbox Postgres does not speak it.','connectionTimeoutMillis 5s so a dead DB fails fast instead of hanging a request.','end() exists only for the test harness; the server never calls it.'],['backend/src/db.js']);
+BE(4,'storagejs','src/storage.js','image storage behind a driver switch','',['STORAGE_DRIVER=supabase (default, production) or s3 (MinIO on the devbox, or any S3-compatible store).','Both drivers expose the same contract: upload() resolves to the public URL that gets stored in Postgres, remove() is best-effort.','Introduced in #63 so events.js and users.js stopped inlining Supabase REST calls.'],['backend/src/storage.js']);
+BE(5,'rauth','routes/auth.js','register · login · refresh · logout',':4',['POST /register /login are behind the 10-per-15-minute limiter; /refresh behind 30/min.','Issues the access/refresh pair the middleware later verifies.'],['backend/src/routes/auth.js']);
+BE(6,'rusers','routes/users.js','profile · follow · block · report · delete',':16',['16 endpoints. GET/PATCH/DELETE /me, avatar upload, hosted-events, rsvps, user search, follow/unfollow, block/unblock, report, followers, following.','DELETE /users/me is the account-deletion flow Apple required under 5.1.1(v); it cascades and removes the stored avatar object.','followers/following carry followers_count and a response envelope the client has to unwrap.'],['backend/src/routes/users.js']);
+BE(7,'revents','routes/events.js','create · feed · RSVP · attendees · report',':13',['13 endpoints, and the pattern every new route is supposed to follow.','GET /feed is the following-parties feed; GET /random backs discovery; /:eventId/rsvp is POST/PATCH/DELETE.','SELECTs must include image_url — omitting it is what blanked party images on the profile.'],['backend/src/routes/events.js']);
+BE(8,'rmap','routes/map.js','GET /map/events · viewport pins',':1',['One endpoint, and the one App Review actually exercised. Filters to upcoming public events inside the requested envelope using PostGIS.','Any upcoming public event within roughly 100 km of the reviewer suppresses the client-side NYC fallback, because the fallback only fires on exactly zero.'],['backend/src/routes/map.js','frontend/src/screens/MapScreen.jsx']);
+BE(9,'rsearch','routes/search.js','GET /search · POST /:searchId/tap',':2',['Mounted only when SEARCH_ENABLED === true. Otherwise the route does not exist and the path 404s — so a deploy can never expose half-built search.','The tap endpoint attributes a result click back to the search row that produced it.'],['backend/src/routes/search.js','backend/src/app.js']);
+
+// ---- search pipeline ----
+const SS=(i,row,id,n,s,d,f)=>add({id,k:'ctr',x:786+i*374,y:820+row*115,w:360,h:90,n,s,d,f});
+SS(0,0,'srchidx','search/index.js','orchestrator · owns the fallback',['Composes stages 1–8. The stage-7 fallback lives here rather than in its own module because relaxing filters means re-running 3–6 — that is control flow over the pipeline, not a step within it.','The one hard invariant: exactly one retry. A ladder that stepped radius and time separately would cost up to four round trips on the queries that are already slowest.'],['backend/src/search/index.js']);
+SS(1,0,'s1','01 sanitize','the compliance gate · pure, no I/O',['Runs first on every query. Rejections are logged too — those are the rows abuse review actually needs.','MAX_QUERY_LENGTH 200.'],['backend/src/search/stages/01-sanitize.js']);
+SS(2,0,'s2','02 parse','rules first, LLM only on escalation',['Three extractors run concurrently: location, time, username.','Below LLM_ESCALATION_THRESHOLD (0.55) confidence, spend exactly one LLM call for structured entities. Above it, never call out.','LOCATION_MATCH_THRESHOLD (0.45) is deliberately higher than USERNAME_MATCH_THRESHOLD (0.3): a false-positive location silently geo-scopes the entire result set, which is worse than missing one.'],['backend/src/search/stages/02-parse.js']);
+SS(3,0,'s3','03 filters','the shared WHERE clause',['Both retrievers search the same candidate pool, so the hard filters are built once.','GRACE_PERIOD_MINUTES 90 — a party that started an hour ago is still a party you can walk into.','DEFAULT_RADIUS_M 5000, MAX_RADIUS_M 50000.'],['backend/src/search/stages/03-filters.js']);
+SS(4,0,'s4','04 retrieve','lexical + semantic, in parallel',['Two independent retrievers over the stage-3 pool, RETRIEVAL_LIMIT 100 each — deeper than the page size on purpose, because RRF needs tail overlap to work.','Semantic is skipped entirely when the query is an explicit @handle.','SEMANTIC_MAX_DISTANCE 0.75 cosine.'],['backend/src/search/stages/04-retrieve.js']);
+SS(5,0,'s5','05 fuse','Reciprocal Rank Fusion · pure',['RRF_K 60, the Cormack et al. 2009 value — flattens the head enough that a rank-1 hit in one list cannot alone beat consistent top-10 presence in both.','Router weights are chosen by parse confidence: a confidently parsed query has had its entities stripped, so what remains is vibe text → lean semantic. A low-confidence query is probably a literal name → lean lexical. Handle lookups and quoted strings bypass the router.'],['backend/src/search/stages/05-fuse.js','backend/src/search/config.js']);
+SS(6,0,'s6','06 rerank','blend in behavioral signals',['Weights must sum to 1.0 (asserted in the harness): fusion .55, rsvpVelocity .15, tagAffinity .12, distanceDecay .10, recency .08.','DISTANCE_HALF_LIFE_M 3000; VELOCITY_WINDOW_HOURS 48.','tagAffinity is why signup collects interests.'],['backend/src/search/stages/06-rerank.js']);
+SS(7,0,'s7','07 fallback','relax once, keep only if it helped',['Fires when results < WEAK_RESULT_THRESHOLD (3) and there is something to relax.','Never for an explicit handle: "@nobody" returning nothing is the correct answer, and widening a radius cannot conjure a user who does not exist.','Radius ×4 and a 30-day window, applied all at once. The retry is discarded unless it returned strictly more — a relaxed search with the same count bought nothing and cost precision.'],['backend/src/search/index.js']);
+SS(8,0,'s8','08 log','one row per search, one per tap',['Awaited on the success path, because the response carries searchId and there is nothing to attribute a tap to without it. Fire-and-forget on the rejection path.','LOG_TIMEOUT_MS 2000 bounds how long a failed insert can hold a pool connection.'],['backend/src/search/stages/08-log.js']);
+SS(0,1,'embadapter','adapters/embeddings.js','Voyage · 1024-dim · stub guard',['Exposes isStub/provider so callers can refuse to run with pseudo-vectors.'],['backend/src/search/adapters/embeddings.js']);
+SS(1,1,'llmadapter','adapters/llm.js','the escalation call',['Only reached when rules-based parse confidence is below threshold.'],['backend/src/search/adapters/llm.js']);
+SS(2,1,'parseloc','parse/location.js','neighborhood + venue dictionary',['Trigram match against the seeded neighborhood table.'],['backend/src/search/parse/location.js','backend/migrations/0002_seed_neighborhoods.sql']);
+SS(3,1,'parsetime','parse/time.js','"tonight", "this weekend"',['Resolved against the client\'s UTC offset, which is why SearchSheet sends it.'],['backend/src/search/parse/time.js']);
+SS(4,1,'parseuser','parse/username.js','@handle → users',['Trigram floor 0.3. An explicit handle turns off semantic retrieval and the fallback.'],['backend/src/search/parse/username.js']);
+SS(5,1,'embworker','worker/embed-events.js','backfill + the 5-minute sweep',['drain() is idempotent, so the in-process sweep coexists safely with a manual `--once` run.','The sweep reads the events_needing_embedding view, so newly created or edited events get vectors with no separate worker service to deploy.','EMBED_SWEEP_MS=0 disables it, for when a dedicated worker runs --loop.'],['backend/src/search/worker/embed-events.js','backend/index.js']);
+SS(6,1,'bench','bench/run-bench.js','relevance + latency harness',['Last recorded prod run: 29/29, hit@10 100%, MRR 0.888, p50 278 ms, p95 582 ms.','It caught the known relevance gap: exact keyword matches beyond the viewport radius lose to in-radius semantic results, and the fallback never widens for them. Candidate fix is per-retriever-emptiness fallback.'],['backend/src/search/bench/run-bench.js']);
+SS(7,1,'srchcfg','search/config.js','every tuning knob, in one file',['Deliberately one module so the test harness can import and assert on the numbers rather than re-deriving magic values, and so tuning is a one-line diff.'],['backend/src/search/config.js']);
+SS(8,1,'promptfoo','eval/promptfooconfig.yaml','LLM prompt eval',['CLAUDE.md requires a promptfoo run before any PR touching AI logic.','The old backend/promptfooconfig.yaml was deleted in #66 — it tested prose prompts the pipeline never sends, against a model it never calls. This is the real one.'],['backend/src/search/eval/promptfooconfig.yaml','CLAUDE.md']);
+
+// ---- scripts ----
+const SC=(i,row,id,n,s,d,f)=>add({id,k:'scr',x:786+i*402,y:1175+row*95,w:388,h:80,n,s,d,f});
+SC(0,0,'migrate','migrate.js','plain-SQL runner · --status --baseline',['Added in #62. Applies numbered files in order and records them; a second run is a no-op, which CI asserts.','--baseline marks existing schema as applied without running it — how staging and production get adopted without re-running the baseline.','Migrate-on-boot from `npm start` is still pending, until both hosted environments are baselined.'],['backend/scripts/migrate.js']);
+SC(1,0,'seed','seed.js','the one seeder, with profiles',['Consolidated in #67, with a reset guard so it cannot casually wipe a real database.'],['backend/scripts/seed.js']);
+SC(2,0,'seednyc','seed-nyc-events.js','200 events, all five boroughs',['Generates and embeds. Used per environment; a prod run added 200 embedded events.'],['backend/scripts/seed-nyc-events.js']);
+SC(0,1,'seede2e','seed-e2e-account.js','idempotent create-or-reset',['Creates the Playwright account with the exact bio one test asserts on. Run it on the devbox before a local e2e pass; CI runs it in-job.'],['backend/scripts/seed-e2e-account.js']);
+SC(1,1,'searchlogs','search-logs.js','read-only traces · --last --id --stats',['Replays a single search stage by stage, which is how you debug a bad result set without guessing.'],['backend/scripts/search-logs.js']);
+SC(2,1,'withenv','with-env.sh','the only door to Supabase',['`scripts/with-env.sh <staging|production> <command>` loads a named env file for exactly one command.','This is the mechanism that makes touching production a deliberate act — nothing reaches a hosted database unless the environment name was typed.'],['backend/scripts/with-env.sh','backend/README.md']);
+SC(0,2,'snapshot','snapshot-restore.sh','snapshot and scrub',['Pulls a copy and strips personal data, so a realistic dataset can be used somewhere that is not production.'],['backend/scripts/snapshot-restore.sh']);
+
+// ---- migrations ----
+const MG=(row,id,n,s,d,f)=>add({id,k:'path',x:2066,y:1175+row*95,w:668,h:80,n,s,d,f});
+MG(0,'mig1','0001_baseline.sql','uuid-ossp · postgis · all tables · spatial + time indexes',['The consolidated starting point. Older loose files moved to migrations/legacy/.'],['backend/migrations/0001_baseline.sql']);
+MG(1,'mig2','0002_seed_neighborhoods.sql','the location dictionary stage 2 matches against',[],['backend/migrations/0002_seed_neighborhoods.sql']);
+MG(2,'mig3','0003_hnsw_index.sql','pgvector HNSW — run only after the backfill',['An HNSW index over a mostly-empty embedding column is worthless, so this is deliberately last.','At the current corpus size a plain EXPLAIN still prefers a sequential scan; the index is verified with enable_seqscan=off. That is expected, not a fault.','House rule: never edit an applied migration. New schema goes in a new numbered file, additive only.'],['backend/migrations/0003_hnsw_index.sql','CLAUDE.md']);
+
+// ---- CI ----
+const CI=(i,row,id,n,s,d,f)=>add({id,k:'unit',x:2806+i*342,y:1175+row*95,w:326,h:80,n,s,d,f});
+CI(0,0,'ci','ci.yml','backend + web-e2e · every PR',['Two jobs. backend: PostGIS+pgvector container, migrate, test, then migrate again to prove idempotency.','web-e2e: builds the image, migrates, seeds 30 NYC events and the e2e account, starts the API on :3000, exports the web bundle against it, serves on :4173, runs Playwright. No repo secrets, no external hosts.'],['.github/workflows/ci.yml']);
+CI(1,0,'deployprod','deploy-prod.yml','manual · gated · auditable',['workflow_dispatch only, under the `production` GitHub Environment with a required reviewer — so every prod deploy is an explicit approval with an audit trail.','Posts to the Render deploy hook, then polls /health for up to ~11 minutes.','Blocked until RENDER_DEPLOY_HOOK is set on the production environment; until then it fails at the first step with a clear message.'],['.github/workflows/deploy-prod.yml']);
+CI(0,1,'deployweb','deploy-web.yml','main → Pages',['Exports the web bundle with the /scene base path, copies index.html to 404.html for the SPA fallback, uploads to Pages.'],['.github/workflows/deploy-web.yml']);
+CI(1,1,'claudewf','claude.yml + claude-code-review.yml','the Claude integrations',['Both currently fail on every PR at checkout cleanup, for a repo-level reason rather than anything in the diff — see the stray gitlink fact below.'],['.github/workflows/claude.yml','.github/workflows/claude-code-review.yml']);
+
+// ---- tests ----
+const TS=(row,id,n,s,d,f)=>add({id,k:'unit',x:3546,y:1175+row*95,w:608,h:80,n,s,d,f});
+TS(0,'betest','backend/src/__tests__','auth middleware · events authz · user deletion',['Integration harness added in #64, running against a real PostGIS+pgvector Postgres rather than mocks.'],['backend/src/__tests__/helpers.js']);
+TS(1,'srchtest','search/__tests__/pipeline.test.js','the pipeline, end to end',['Imports config.js and asserts on the constants — including that the re-rank weights sum to 1.0.'],['backend/src/search/__tests__/pipeline.test.js']);
+TS(2,'e2etests','e2e/tests · Playwright','three projects · in-job API since #65',['Before #65 this ran against production on every PR, with the rate-limit bypass, creating a real user per signup test. All 16 runs it ever had failed — so it gated nothing while still writing to prod.','Browser binaries are a separate `npx playwright install`.'],['e2e/README.md','.github/workflows/ci.yml']);
+
+// ---- facts ----
+const FT=(i,id,n,s,d,f)=>add({id,k:'fact',x:786+i*836,y:1590,w:820,h:110,n,s,d,f});
+FT(0,'envfiles','Three env files, one default','.env = devbox · .env.staging + .env.production only via with-env.sh',['All three are gitignored. .env is the local target and cannot reach Supabase.','If an older checkout still has .env pointing at staging: `mv .env .env.staging` then rebuild .env for the devbox.','This inversion is the whole point of the split — production is never the ambient default.'],['backend/README.md','backend/scripts/with-env.sh']);
+FT(1,'flags','Feature flags & drivers','SEARCH_ENABLED · STORAGE_DRIVER · DATABASE_SSL · EMBED_SWEEP_MS',['SEARCH_ENABLED=true is what mounts /api/v1/search at all; unset, the route 404s.','STORAGE_DRIVER defaults to supabase and DATABASE_SSL unset keeps TLS on — which is why the devbox work could ship without touching production behavior.','EMBED_SWEEP_MS defaults to 5 minutes; 0 disables the in-process sweep.'],['backend/src/app.js','backend/src/storage.js','backend/index.js']);
+FT(2,'jwtfacts','Auth & rate limits','HS256 · iss scene-api · aud scene-app · 10/15min · 30/min · 200/min',['JWT_ACCESS_SECRET || JWT_SECRET, in both the route and the middleware. Boot fails if neither is set.','E2E_RATE_LIMIT_BYPASS is dead code unless set: no request can bypass without it, and the comparison is timingSafeEqual. It can be removed from the prod service now that CI no longer touches production.'],['backend/src/app.js','backend/src/middleware/auth.js']);
+FT(3,'gitlink','Repo-level snag','a stray submodule gitlink is on main, with no .gitmodules',['`.claude/worktrees/bold-dirac` is committed as a gitlink (mode 160000) and there is no .gitmodules entry for it.','actions/checkout dies during cleanup with "fatal: No url found for submodule path", which is why claude.yml and claude-code-review.yml fail on every PR regardless of the diff.','Harmless to the app; it only breaks those two workflows.'],['.github/workflows/claude.yml']);
+
+// ---- edges: [id, from, to, kind, label, offsetA, offsetB] ----
+const E=[
+['a1','ios','render','http','HTTPS /api/v1'],
+['a2','web','render','http','HTTPS /api/v1'],
+['a3','bruno','render','http','manual probes'],
+['a4','ios','gmaps','http','Places / geocode'],
+['a5','ghpages','web','http','serves the bundle'],
+['a6','render','supaprod','data','DATABASE_URL · TLS'],
+['a7','render','voyage','gpu','query + event vectors'],
+['a8','devmac','devboxpg','data','.env local target'],
+['a9','ios','asc','ctl','EAS submit → TestFlight'],
+['a10','eas','ios','ctl','builds'],
+['z1','renderstg','supastg','plan','when it exists'],
+['z2','renderstg','easjson','plan','preview profile · task 5'],
+['z3','domain','renderstg','plan','stable URL'],
+
+['f1','appjs','mapscr','ctl','renders'],
+['f2','mapscr','evsheet','ctl','opens'],
+['f3','mapscr','searchsheet','ctl','opens'],
+['f4','searchsheet','apijs','http','GET /search'],
+['f5','apijs','render','http','BASE_URL'],
+['f6','apijs','tokenstore','ctl','access + refresh'],
+['f7','create','apijs','http','POST /events'],
+['f8','create','uploadpart','ctl','multipart part'],
+['f9','profile','usersheet','ctl','follow lists'],
+['f10','webfeed','apijs','http','GET /events'],
+['f11','webprofile','apijs','http','GET/PATCH /users/me'],
+['f12','urlsync','web','ctl','base-path routing'],
+['f13','appconfig','eas','ctl','build config'],
+['f14','easjson','eas','ctl','profiles + API URL'],
+['f15','onboard','apijs','http','register / login'],
+['f16','mapscr','apijs','http','GET /map/events'],
+['f17','evcard','evsheet','ctl','tap'],
+['f18','sheet','evsheet','ctl','gesture host'],
+['f19','colors','mapscr','ctl','Sodium Amber tokens · map style'],
+
+['b1','indexjs','appjs_be','ctl','mounts'],
+['b2','indexjs','dbjs','data','SELECT 1 before listen'],
+['b3','indexjs','embworker','gpu','sweep every 5 min'],
+['b4','appjs_be','rauth','http'],
+['b5','appjs_be','rusers','http'],
+['b6','appjs_be','revents','http'],
+['b7','appjs_be','rmap','http'],
+['b8','appjs_be','rsearch','http','only if SEARCH_ENABLED'],
+['b9','rauth','authmw','alert','issues the pair'],
+['b10','rusers','authmw','alert','verifies'],
+['b11','revents','authmw','alert','verifies'],
+['b12','revents','storagejs','data','event images'],
+['b13','rusers','storagejs','data','avatars'],
+['b14','storagejs','supaprod','data','supabase driver'],
+['b15','storagejs','devboxpg','data','s3 driver · MinIO'],
+['b16','rmap','dbjs','data','PostGIS envelope'],
+['b17','revents','dbjs','data'],
+['b18','rusers','dbjs','data'],
+['b19','rauth','dbjs','data'],
+['b20','rsearch','srchidx','ctl','runs the pipeline'],
+['b21','dbjs','supaprod','data','pg Pool · TLS'],
+['b22','dbjs','devboxpg','data','DATABASE_SSL=disable'],
+
+['p1','srchidx','s1','ctl'],
+['p2','s1','s2','ctl'],
+['p3','s2','s3','ctl'],
+['p4','s3','s4','ctl'],
+['p5','s4','s5','ctl'],
+['p6','s5','s6','ctl'],
+['p7','s6','s7','heal','weak? relax once'],
+['p8','s7','s3','heal','re-run 3–6'],
+['p9','s6','s8','ctl'],
+['p10','s2','llmadapter','gpu','escalate below 0.55'],
+['p11','s2','parseloc','ctl'],
+['p12','s2','parsetime','ctl'],
+['p13','s2','parseuser','ctl'],
+['p14','s4','embadapter','gpu','query vector'],
+['p15','embadapter','voyage','gpu','voyage embeddings'],
+['p16','llmadapter','voyage','gpu'],
+['p17','s8','dbjs','data','search_logs'],
+['p18','embworker','embadapter','gpu','backfill'],
+['p19','embworker','dbjs','data','events_needing_embedding'],
+['p20','bench','srchidx','probe','29 queries · hit@10'],
+['p21','srchcfg','s5','ctl','RRF_K · router weights'],
+['p22','srchcfg','s6','ctl','rerank weights'],
+['p23','promptfoo','llmadapter','probe','prompt eval'],
+['p24','s4','dbjs','data','lexical + HNSW'],
+
+['c1','migrate','mig1','ctl'],
+['c2','migrate','mig2','ctl'],
+['c3','migrate','mig3','ctl'],
+['c4','migrate','dbjs','data','applies in order'],
+['c5','withenv','supastg','ctl','staging'],
+['c6','withenv','supaprod','ctl','production'],
+['c7','seednyc','dbjs','data','200 embedded events'],
+['c8','seede2e','dbjs','data','the Playwright account'],
+['c9','seed','dbjs','data','profiles · reset guard'],
+['c10','searchlogs','dbjs','probe','read-only traces'],
+['c11','snapshot','supaprod','backup','snapshot + scrub'],
+
+['t1','ci','betest','probe'],
+['t2','ci','srchtest','probe'],
+['t3','ci','e2etests','probe'],
+['t4','ci','migrate','ctl','migrate, then prove it is a no-op'],
+['t5','ci','seednyc','ctl','30 events in-job'],
+['t6','ci','seede2e','ctl'],
+['t7','e2etests','appjs_be','probe','in-job API :3000'],
+['t8','deployprod','render','proxy','deploy hook · gated'],
+['t9','deployweb','ghpages','proxy','expo export → Pages'],
+['t10','ghact','ci','ctl','on PR + push to main'],
+['t11','ghact','claudewf','ctl'],
+['t12','betest','authmw','probe'],
+['t13','betest','revents','probe'],
+['t14','betest','rusers','probe'],
+['t15','srchtest','srchidx','probe'],
+['t16','ghact','deployweb','ctl','on main'],
+
+['n1','envfiles','withenv','ctl'],
+['n2','flags','appjs_be','ctl','SEARCH_ENABLED'],
+['n3','flags','storagejs','ctl','STORAGE_DRIVER'],
+['n4','flags','dbjs','ctl','DATABASE_SSL'],
+['n5','jwtfacts','authmw','alert'],
+['n6','gitlink','claudewf','ctl','breaks checkout cleanup'],
+['n7','envfiles','render','ctl','prod values live in Render, not a file'],
+];
+
+const KINDS=[
+ ['http','Request','a client or screen reaching an endpoint'],
+ ['proxy','Deploy hop','CI pushing a build somewhere real'],
+ ['data','Data','Postgres, PostGIS and object storage traffic'],
+ ['probe','Test','a suite or harness exercising code'],
+ ['alert','Auth','the token issue-and-verify path'],
+ ['backup','Backup','snapshot and scrub'],
+ ['ctl','Control','mounts, starts, configures, triggers'],
+ ['heal','Fallback','the stage-7 relax-and-retry loop'],
+ ['gpu','Embedding','vectors: Voyage, pgvector, the sweep'],
+ ['plan','Planned','documented, not built'],
+];
+
+// ---- processes ----
+const FL=[
+{id:'boot',t:'API boot',w:'fail fast, three times, before serving anything',n:['indexjs','appjs_be','dbjs','embworker','flags','jwtfacts','render'],e:['b1','b2','b3','n2','n5'],
+ s:[['index.js checks DATABASE_URL, JWT_ACCESS_SECRET and JWT_REFRESH_SECRET and exits 1 if any is missing. A missing secret otherwise surfaces much later as a 401 on every protected route.','indexjs'],['Requiring src/app.js throws if neither JWT_ACCESS_SECRET nor JWT_SECRET is set — the second guard, because both the route and the middleware resolve that same pair.','appjs_be'],['`SELECT 1` must succeed before app.listen. A bad DATABASE_URL kills the boot rather than serving 500s.','dbjs'],['Routers mount under /api/v1. /api/v1/search mounts only when SEARCH_ENABLED === true, so a deploy cannot expose half-built search.','flags'],['Then the embedding sweep starts — but only if SEARCH_ENABLED is true and the provider is not the stub. It drains immediately on boot to catch whatever accumulated while the server was down.','embworker']],
+ f:['backend/index.js','backend/src/app.js','backend/src/db.js']},
+
+{id:'auth',t:'Auth: register, login, refresh',w:'HS256 with issuer and audience pinned',n:['onboard','apijs','tokenstore','rauth','authmw','dbjs','jwtfacts','appjs_be'],e:['f15','f5','f6','b4','b9','b19','b10','n5'],
+ s:[['Onboarding posts to /auth/register or /auth/login through api.js. Both sit behind the 10-per-15-minute limiter, keyed per IP.','rauth'],['The pair comes back and goes into SecureStore on native, localStorage on web — the same import, resolved to a different module by Metro.','tokenstore'],['Every protected request carries Bearer <access>. The middleware verifies with algorithms:[HS256] and pinned issuer scene-api / audience scene-app; pinning the algorithm is what forecloses an alg:none swap.','authmw'],['Both sides resolve JWT_ACCESS_SECRET || JWT_SECRET. That fallback exists because the deployed environment only had JWT_SECRET, and without it every protected route 401d — shipped as a hotfix in #25 and #27.','jwtfacts'],['On expiry api.js refreshes against /auth/refresh (30/min) and retries once. App.js waits for the stored token before rendering, so the UI never flashes logged-out first.','apijs']],
+ f:['backend/src/routes/auth.js','backend/src/middleware/auth.js','frontend/src/api.js','frontend/src/tokenStore.js']},
+
+{id:'search',t:'A search, end to end',w:'eight stages, exactly one retry',n:['searchsheet','apijs','rsearch','srchidx','s1','s2','s3','s4','s5','s6','s7','s8','embadapter','llmadapter','parseloc','parsetime','parseuser','voyage','dbjs','srchcfg'],e:['f4','f5','b8','b20','p1','p2','p3','p4','p5','p6','p7','p8','p9','p10','p11','p12','p13','p14','p15','p17','p21','p22','p24'],
+ s:[['SearchSheet sends the query, the viewport and the client\'s UTC offset. The offset is not optional — without it "tonight" cannot be resolved.','searchsheet'],['Stage 1 sanitizes. A rejection still gets logged, fire-and-forget, because rejected queries are exactly the rows abuse review needs.','s1'],['Stage 2 runs location, time and username extraction concurrently. Only if confidence lands below 0.55 does it spend one LLM call; above that it never calls out. The location threshold is set higher than the username one because a false-positive place silently geo-scopes every result.','s2'],['Stage 3 builds one WHERE clause both retrievers share, including a 90-minute grace period — a party that started an hour ago is still a party you can walk into.','s3'],['Stage 4 runs lexical and semantic retrieval in parallel, 100 candidates each. An explicit @handle turns semantic off entirely. The query vector comes from Voyage.','s4'],['Stage 5 fuses with RRF (k=60), weighted by parse confidence: high confidence means the entities were stripped and what remains is vibe text, so lean semantic; low confidence usually means a literal name, so lean lexical.','s5'],['Stage 6 blends the fusion score with RSVP velocity, tag affinity against the viewer\'s interests, recency and a distance decay. The weights sum to 1.0 and the harness asserts it.','s6'],['Stage 7 fires only if fewer than 3 results came back and there is something to relax. Radius ×4 and a 30-day window, applied all at once, exactly once — and the retry is thrown away unless it returned strictly more. Never for an explicit handle.','s7'],['Stage 8 writes one row with the full trace and returns searchId, so a later tap can be attributed. This one is awaited; there is nothing to attribute to without the id.','s8']],
+ f:['backend/src/search/index.js','backend/src/search/config.js','frontend/src/components/SearchSheet.jsx']},
+
+{id:'embed',t:'How an event gets a vector',w:'no separate worker service',n:['create','revents','dbjs','embworker','embadapter','voyage','indexjs','flags','bench'],e:['f7','b17','b3','p18','p19','p15','p20'],
+ s:[['A new or edited event lands in Postgres and shows up in the events_needing_embedding view.','revents'],['The API process itself sweeps that view every 5 minutes (EMBED_SWEEP_MS). This is why there is no worker service to deploy — added in #60.','embworker'],['A sweep already in flight blocks the next one rather than stacking a second drain, and a failure just logs; the next tick retries.','embworker'],['The stub guard is re-asserted here, not only in the CLI: sweeping with the stub provider would fill the column with pseudo-vectors that look valid and return meaningless neighbors.','embadapter'],['drain() is idempotent, so a manual `embed-events.js --once` can run alongside it safely.','embworker'],['The bench harness is how you find out whether any of this is actually working: 29 queries, hit@10 and MRR, p50/p95.','bench']],
+ f:['backend/index.js','backend/src/search/worker/embed-events.js']},
+
+{id:'map',t:'The map, and why App Review failed on it',w:'the fallback fires only on exactly zero',n:['mapscr','apijs','rmap','dbjs','supaprod','ios','asc'],e:['f16','f5','b7','b16','b21','a1','a9'],
+ s:[['MapScreen asks GET /map/events for the current viewport; map.js filters to upcoming public events inside a PostGIS envelope.','rmap'],['When the viewport returns nothing, the client falls back to NYC. The fallback fires only on exactly zero results.','mapscr'],['That precision is what cost a review cycle. A junk event ("Litness", SF coordinates, dated 2028, host test@example.com) sat inside the reviewer\'s ~100 km probe from Cupertino, so the count was never zero and the fallback never fired — the reviewer saw an empty map and rejected under 2.1(a).','rmap'],['It was deleted and verified: the Cupertino probe now returns 0 events. But any new upcoming public event near Cupertino re-breaks it.','supaprod'],['The seeded demo parties that covered this spanned 2026-08-14 to 2026-09-08. They have all passed, so the map is thin again.','asc'],['The improvement worth shipping regardless: fire the fallback when the nearby count is small, not exactly zero — or fly the camera to wherever events actually are.','mapscr']],
+ f:['backend/src/routes/map.js','frontend/src/screens/MapScreen.jsx','backend/src/WHERE_WE_LEFT_OFF.md']},
+
+{id:'images',t:'An image, from camera roll to Postgres',w:'one driver switch, two backends',n:['create','uploadpart','apijs','revents','rusers','storagejs','supaprod','devboxpg','flags'],e:['f8','f7','f5','b12','b13','b14','b15','n3'],
+ s:[['Native builds the multipart part with expo-file-system `File`. The old React Native {uri} shape is rejected by SDK 54+ WinterCG fetch — that was the "Unsupported FormDataPart" crash. Web is a stub; upload is unsupported there.','uploadpart'],['The route hands the buffer to storage.js rather than calling Supabase REST inline, which is what #63 changed.','storagejs'],['STORAGE_DRIVER=supabase (the default, and production) writes through the Supabase Storage REST API with x-upsert.','supaprod'],['STORAGE_DRIVER=s3 writes to MinIO on the devbox — or any S3-compatible store. S3_PUBLIC_URL controls the host baked into the URL that gets stored in Postgres.','devboxpg'],['Whichever driver runs, the contract is the same: upload() resolves to the public URL stored in the row, remove() is best-effort cleanup. Verified on the devbox including that DELETE /users/me actually removes the avatar object.','storagejs'],['Worth remembering on the read path: any SELECT that forgets image_url blanks the images in the UI.','revents']],
+ f:['backend/src/storage.js','frontend/src/uploadPart.js']},
+
+{id:'delete',t:'Account deletion (App Store 5.1.1(v))',w:'the fix that unblocked resubmission',n:['profile','apijs','rusers','authmw','dbjs','storagejs','asc','betest'],e:['f11','f5','b5','b10','b18','b13','t14'],
+ s:[['Apple rejected build 7 under 5.1.1(v): an app with account creation must offer account deletion in-app.','asc'],['DELETE /users/me was added in #53, with a DeleteAccountSheet in ProfileScreen.','rusers'],['The delete cascades in Postgres and removes the stored avatar object — verified on the devbox: 204, then a 404 on the object.','storagejs'],['There is a regression test for it, which matters because this is the one endpoint whose absence blocks the store.','betest'],['Two reviewer demo accounts exist rather than one, specifically so a reviewer who deletes the first while testing this flow still has a way in.','asc']],
+ f:['backend/src/routes/users.js','frontend/src/screens/ProfileScreen.jsx']},
+
+{id:'ci',t:'What CI actually runs',w:'two jobs, no secrets, no external hosts',n:['ghact','ci','betest','srchtest','e2etests','migrate','seednyc','seede2e','appjs_be','mig1','mig3'],e:['t10','t1','t2','t3','t4','t5','t6','t7','c1','c3'],
+ s:[['ci.yml runs on every pull request and on push to main.','ghact'],['Job `backend`: start a PostGIS + pgvector Postgres, run migrate.js, run the tests — then run migrate.js a second time and assert it is a no-op. Idempotency is a tested property, not a hope.','migrate'],['Job `web-e2e`: same database image, migrate, seed 30 NYC events and the Playwright account, start the API on :3000, export the web bundle pointed at it, serve on :4173, run the three Playwright projects.','e2etests'],['Nothing leaves the runner. No repo secrets, no production host.','ci'],['This replaced e2e.yml, which ran the suite against production on every PR with the rate-limit bypass, creating a real user per signup test. All 16 runs it ever had failed — so it gated nothing while still writing to prod.','e2etests'],['Leftover: the E2E_EMAIL / E2E_PASSWORD / E2E_RATE_LIMIT_BYPASS secrets and the E2E_API_URL variable are unused now and can be deleted, along with the bypass env var on the production Render service.','ci']],
+ f:['.github/workflows/ci.yml','e2e/README.md']},
+
+{id:'deploy',t:'Getting to production',w:'the only door is a button someone has to press',n:['deployprod','render','ghact','supaprod','deployweb','ghpages','web'],e:['t8','t16','t9','a5','a6','n7'],
+ s:[['Render auto-deploy from main is off for the production service. Before that, every merge shipped straight to prod.','render'],['deploy-prod.yml is workflow_dispatch only, running under the `production` GitHub Environment with a required reviewer — so each deploy is an explicit approval with an audit trail.','deployprod'],['It posts to the Render deploy hook, then polls /health for up to ~11 minutes (free-tier build plus boot is typically 2–5).','deployprod'],['Blocked until RENDER_DEPLOY_HOOK is set as a secret on the production environment. Until then the workflow fails at step one with a clear message and nothing else changes.','deployprod'],['Production env values live in the Render dashboard, never in a committed file.','supaprod'],['The web app is separate: deploy-web.yml runs on main, exports with the /scene base path, copies index.html to 404.html for the SPA fallback, and publishes to Pages.','deployweb']],
+ f:['.github/workflows/deploy-prod.yml','.github/workflows/deploy-web.yml']},
+
+{id:'envs',t:'The three environments',w:'local is the default; production takes typing',n:['envfiles','withenv','devboxpg','supastg','supaprod','render','renderstg','easjson','migrate'],e:['n1','c5','c6','a8','b22','b21','a6','z1','z2'],
+ s:[['backend/.env is the local target and points at the devbox Postgres and MinIO. It cannot reach Supabase at all.','envfiles'],['The two Supabase projects are reached only through `scripts/with-env.sh <staging|production> <command>`, which loads one named file for exactly one command. Nothing touches a hosted database unless its name was typed.','withenv'],['staging = rpjnkjoyxeykqlppwfkp, an identical stack including HNSW. Its JWT secrets differ from production on purpose, so a leaked dev token cannot be replayed against prod.','supastg'],['production = kxtrlrtuanjcchwwfqvj, reached by Render env vars or an explicit with-env run.','supaprod'],['The database half of the split is done. The API half is not: there is exactly one Render service, so "staging" today means a database, not a deployment.','renderstg'],['That gap is visible in eas.json — the `preview` profile has no API URL of its own and falls back to production. It stays that way until the staging service exists.','easjson'],['Open gap: staging still uses the production bucket\'s AWS_* keys.','supastg']],
+ f:['backend/README.md','backend/scripts/with-env.sh','frontend/eas.json']},
+
+{id:'migrations',t:'Schema changes',w:'additive only, never edit an applied file',n:['migrate','mig1','mig2','mig3','withenv','dbjs','ci','supaprod','supastg'],e:['c1','c2','c3','c4','t4','c5','c6'],
+ s:[['Migrations were untracked until #62. Now they live in backend/migrations/ with a plain-SQL runner.','migrate'],['0001_baseline consolidates the original loose files (moved to migrations/legacy/): uuid-ossp, postgis, every table, spatial and time indexes.','mig1'],['0002 seeds the neighborhood dictionary that search stage 2 matches place names against.','mig2'],['0003 builds the pgvector HNSW index, and runs only after the embedding backfill — an HNSW index over a mostly-empty column is worthless.','mig3'],['`--baseline <n>` marks existing schema as applied without running it. That is how staging and production get adopted without re-running the baseline against a live database.','migrate'],['Still pending: migrate-on-boot from `npm start`, which waits on both hosted environments being baselined.','migrate'],['The rule, now in CLAUDE.md: never edit an applied migration. New schema goes in a new numbered file, additive only.','mig3']],
+ f:['backend/scripts/migrate.js','backend/migrations/0001_baseline.sql','CLAUDE.md']},
+
+{id:'seed',t:'Getting data into a database',w:'four scripts, different jobs',n:['seed','seednyc','seede2e','snapshot','dbjs','ci','supaprod','searchlogs'],e:['c9','c7','c8','c11','t5','t6','c10'],
+ s:[['seed.js is the general seeder, consolidated in #67 with profiles and a reset guard so it cannot casually wipe a real database.','seed'],['seed-nyc-events.js generates events across all five boroughs and embeds them. A production run added 200.','seednyc'],['seed-e2e-account.js is an idempotent create-or-reset of the Playwright account, including the exact bio one test asserts on. CI runs it in-job; run it on the devbox before a local e2e pass.','seede2e'],['snapshot-restore.sh pulls a copy and scrubs personal data, so a realistic dataset can be used somewhere that is not production.','snapshot'],['search-logs.js is the read-only counterpart: replay one search stage by stage instead of guessing why a result set looked wrong.','searchlogs'],['Standing cleanup: production still carries @scene-seed.app users pending post-approval deletion, plus e2e+*, stagingsmoke@test.dev and bench users left by the old workflow.','supaprod']],
+ f:['backend/scripts/seed.js','backend/scripts/seed-nyc-events.js','backend/scripts/snapshot-restore.sh']},
+
+{id:'shipios',t:'Shipping the iOS app',w:'build and submit are two different verbs',n:['easjson','appconfig','eas','ios','asc','gmaps','renderstg'],e:['f13','f14','a10','a9','a4','z2'],
+ s:[['eas.json picks the API: development → the devbox over Tailscale, production → Render. preview has none and therefore inherits production — the gap task 5 closes.','easjson'],['app.config.js is dynamic: Maps keys from env, ITSAppUsesNonExemptEncryption:false so TestFlight builds do not stall on Missing Compliance, and updates.url set only when EXPO_PUBLIC_UPDATE_URL exists (expo-updates crashes at launch with a runtimeVersion but no valid url).','appconfig'],['`eas build` alone does NOT upload. Build 8 compiled and was never submitted, which is why the App Store Connect build picker looked empty.','eas'],['`eas submit --platform ios --profile production --id <build-id> --non-interactive` is the step that actually reaches Apple.','asc'],['Then the build has to be added to the TestFlight group by hand before testers see it.','ios'],['Open hygiene: the original unrestricted Google Maps key still needs splitting per platform and rotating.','gmaps']],
+ f:['frontend/eas.json','frontend/app.config.js','backend/src/WHERE_WE_LEFT_OFF.md']},
+
+{id:'webv1',t:'The web build',w:'a subpath project site, which complicates everything',n:['deployweb','ghpages','web','urlsync','appconfig','webfeed','webprofile','tokenstore','uploadpart','e2etests'],e:['t9','a5','f12','f10','f11','t3'],
+ s:[['deploy-web.yml runs on main and exports the Expo web bundle.','deployweb'],['Pages project sites live at /<repo>/, so EXPO_PUBLIC_WEB_BASE_PATH sets experiments.baseUrl, which prefixes every asset URL. urlSync.web.js strips and re-adds the same prefix so routing and deep links still work.','urlsync'],['index.html is copied to 404.html — the SPA fallback, since Pages has no rewrite rules.','deployweb'],['Platform-split modules do the rest: tokenStore.web.js uses localStorage instead of SecureStore, uploadPart.web.js is a stub because uploads are unsupported on web.','tokenstore'],['Web v1 is deliberately narrow: a read-only feed and a profile whose bio you can edit. Native never imports these screens.','webfeed'],['Gotcha: `expo export` has to be re-run with -c whenever EXPO_PUBLIC_API_URL changes, or the old value stays baked into the bundle.','e2etests'],['The workflow reads vars.PROD_API_URL. It used to read E2E_API_URL — the same variable the test suite used — so repointing the tests would have silently repointed the public site.','deployweb']],
+ f:['.github/workflows/deploy-web.yml','frontend/src/urlSync.web.js','e2e/README.md']},
+];
+</script>
+<script>
+(function(){
+const NS='http://www.w3.org/2000/svg';
+const svg=document.getElementById('map'), stage=document.getElementById('stage');
+const el=(t,a,p)=>{const e=document.createElementNS(NS,t);for(const k in a)e.setAttribute(k,a[k]);if(p)p.appendChild(e);return e;};
+const hel=(t,a,p)=>{const e=document.createElement(t);for(const k in a){if(k==='text')e.textContent=a[k];else if(k==='html')e.innerHTML=a[k];else e.setAttribute(k,a[k]);}if(p)p.appendChild(e);return e;};
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+const NM={},GM={};N.forEach(n=>NM[n.id]=n);G.forEach(g=>GM[g.id]=g);
+const box=id=>NM[id]||GM[id];
+const label=id=>NM[id]?NM[id].n:GM[id]?GM[id].t+' (stack/region)':id;
+const EM={};E.forEach(e=>{EM[e[0]]={id:e[0],a:e[1],b:e[2],k:e[3],l:e[4],oa:e[5]||0,ob:e[6]||0};});
+const conn={};Object.values(EM).forEach(e=>{(conn[e.a]=conn[e.a]||[]).push(e.id);(conn[e.b]=conn[e.b]||[]).push(e.id);});
+const FM={};FL.forEach(f=>FM[f.id]=f);
+
+svg.setAttribute('viewBox',`0 0 ${stage.clientWidth} ${stage.clientHeight}`);
+const defs=el('defs',{},svg);
+KINDS.forEach(([k])=>{const m=el('marker',{id:'ah-'+k,markerWidth:9,markerHeight:9,refX:8,refY:4.5,orient:'auto',markerUnits:'userSpaceOnUse'},defs);el('path',{d:'M0,0.5 L8,4.5 L0,8.5 Z'},m);});
+const root=el('g',{id:'root'},svg);
+const Lg=el('g',{},root),Le=el('g',{},root),Ln=el('g',{},root),Ll=el('g',{},root);
+
+// ---- text fitting ----
+function fit(s,maxW,cw){s=String(s);const max=Math.floor(maxW/cw);return s.length>max?s.slice(0,Math.max(0,max-1)).trimEnd()+'…':s;}
+
+// ---- groups ----
+G.forEach(g=>{
+  const gg=el('g',{class:'grp '+g.c,'data-id':g.id},Lg);
+  el('rect',{x:g.x,y:g.y,width:g.w,height:g.h,rx:g.c==='box'?6:3},gg);
+  const big=g.c==='box',mid=g.c==='win'||g.c==='wsl',off=g.c==='off';
+  const fs=big?46:mid?30:off?24:18;
+  const ty=g.y+(big?50:mid?36:off?30:24), tx=g.x+(big?22:14);
+  const t=el('text',{x:tx,y:ty,class:'t'},gg);t.textContent=g.t;
+  t.addEventListener('click',ev=>{ev.stopPropagation();zoomToBox(g,50);});
+  if(g.s){const s=el('text',{x:tx+g.t.length*fs*0.62+16,y:ty-(big?3:2),class:'s'},gg);s.textContent=g.s;}
+});
+
+// ---- nodes ----
+const nodeEls={};
+N.forEach(n=>{
+  const g=el('g',{class:'node k-'+n.k,'data-id':n.id,tabindex:0,role:'button','aria-label':n.n},Ln);
+  el('rect',{class:'bg',x:n.x,y:n.y,width:n.w,height:n.h,rx:3},g);
+  let nameW=n.w-20;
+  if(n.p){const p=el('text',{x:n.x+n.w-8,y:n.y+15,class:'p','text-anchor':'end'},g);p.textContent=n.p;nameW-=n.p.length*6+10;}
+  const t=el('text',{x:n.x+10,y:n.y+21,class:'n'},g);t.textContent=fit(n.n,nameW,n.k==='fact'||n.k==='note'?7.2:6.6);
+  if(n.lines){n.lines.forEach((ln,i)=>{const s=el('text',{x:n.x+10,y:n.y+42+i*15,class:'s'},g);s.textContent=ln;});}
+  else if(n.s){const s=el('text',{x:n.x+10,y:n.y+n.h-15,class:'s'},g);s.textContent=fit(n.s,n.w-20,6.05);}
+  g.addEventListener('click',ev=>{ev.stopPropagation();if(moved)return;selectNode(n.id);});
+  g.addEventListener('keydown',ev=>{if(ev.key==='Enter'||ev.key===' '){ev.preventDefault();selectNode(n.id);}});
+  nodeEls[n.id]=g;
+});
+
+// ---- edges ----
+function anchor(A,B,off){
+  const ax=A.x+A.w/2,ay=A.y+A.h/2,bx=B.x+B.w/2,by=B.y+B.h/2,dx=bx-ax,dy=by-ay;
+  if(Math.abs(dx)*A.h>Math.abs(dy)*A.w){const s=dx>=0?1:-1;return{x:ax+s*A.w/2,y:ay+clamp(dy*0.18,-(A.h/2-10),A.h/2-10)+off,d:[s,0]};}
+  const s=dy>=0?1:-1;return{x:ax+clamp(dx*0.18,-(A.w/2-14),A.w/2-14)+off,y:ay+s*A.h/2,d:[0,s]};
+}
+const edgeEls={},labelEls={};
+Object.values(EM).forEach(e=>{
+  const A=box(e.a),B=box(e.b);if(!A||!B){console.warn('missing',e);return;}
+  const p1=anchor(A,B,e.oa),p2=anchor(B,A,e.ob);
+  const dist=Math.hypot(p2.x-p1.x,p2.y-p1.y),k=clamp(dist*0.35,30,260);
+  const c1={x:p1.x+p1.d[0]*k,y:p1.y+p1.d[1]*k},c2={x:p2.x+p2.d[0]*k,y:p2.y+p2.d[1]*k};
+  const d=`M${p1.x},${p1.y} C${c1.x},${c1.y} ${c2.x},${c2.y} ${p2.x},${p2.y}`;
+  const g=el('g',{'data-id':e.id},Le);
+  el('path',{d,class:'edge k-'+e.k,'marker-end':`url(#ah-${e.k})`},g);
+  const hit=el('path',{d,class:'hit'},g);
+  hit.addEventListener('click',ev=>{ev.stopPropagation();if(moved)return;selectEdge(e.id);});
+  edgeEls[e.id]=g;
+  const mx=(p1.x+3*c1.x+3*c2.x+p2.x)/8,my=(p1.y+3*c1.y+3*c2.y+p2.y)/8;
+  const t=el('text',{x:mx,y:my-4,class:'elabel k-'+e.k},Ll);t.textContent=e.l;labelEls[e.id]=t;
+});
+
+// ---- view state ----
+const st={k:1,tx:0,ty:0};
+const pct=document.getElementById('pct'),lod=document.getElementById('lod');
+function apply(){
+  root.setAttribute('transform',`translate(${st.tx} ${st.ty}) scale(${st.k})`);
+  svg.classList.toggle('z0',st.k<0.42);svg.classList.toggle('z1',st.k>=0.42&&st.k<0.85);svg.classList.toggle('z2',st.k>=0.85);
+  pct.textContent=Math.round(st.k*100)+'%';
+  lod.textContent=st.k<0.42?'overview · zoom in for names':st.k<0.85?'names + ports · zoom in for details':'full detail';
+  updateMini();
+}
+let anim=null;
+function go(k,tx,ty,animate=true){
+  if(anim)cancelAnimationFrame(anim);
+  if(!animate||reduce){st.k=k;st.tx=tx;st.ty=ty;apply();return;}
+  const s0={...st},t0=performance.now(),D=380;
+  const step=now=>{const u=clamp((now-t0)/D,0,1),e=1-Math.pow(1-u,3);
+    st.k=s0.k+(k-s0.k)*e;st.tx=s0.tx+(tx-s0.tx)*e;st.ty=s0.ty+(ty-s0.ty)*e;apply();
+    if(u<1)anim=requestAnimationFrame(step);else anim=null;};
+  anim=requestAnimationFrame(step);
+}
+function vw(){return stage.clientWidth;}function vh(){return stage.clientHeight;}
+function fitAll(animate){const k=Math.min(vw()/W,vh()/H)*0.97;go(k,(vw()-W*k)/2,(vh()-H*k)/2,animate);}
+function zoomToBox(b,pad=60,maxK=1.6){
+  const k=clamp(Math.min(vw()/(b.w+pad*2),vh()/(b.h+pad*2)),0.12,maxK);
+  go(k,vw()/2-(b.x+b.w/2)*k,vh()/2-(b.y+b.h/2)*k);
+}
+function bboxOf(ids){const bs=ids.map(box);const x=Math.min(...bs.map(b=>b.x)),y=Math.min(...bs.map(b=>b.y));return{x,y,w:Math.max(...bs.map(b=>b.x+b.w))-x,h:Math.max(...bs.map(b=>b.y+b.h))-y};}
+function zoomAt(cx,cy,f){
+  const k2=clamp(st.k*f,0.12,4),r=k2/st.k;
+  go(k2,cx-(cx-st.tx)*r,cy-(cy-st.ty)*r,false);
+}
+function localXY(ev){const r=svg.getBoundingClientRect();return{x:ev.clientX-r.left,y:ev.clientY-r.top};}
+
+// ---- pan / zoom input ----
+let moved=false,drag=null;const pts=new Map();let pinch=null;
+svg.addEventListener('wheel',ev=>{ev.preventDefault();const p=localXY(ev);const d=ev.deltaMode===1?ev.deltaY*24:ev.deltaY;zoomAt(p.x,p.y,Math.exp(-d*(ev.ctrlKey?0.01:0.0016)));},{passive:false});
+svg.addEventListener('pointerdown',ev=>{
+  pts.set(ev.pointerId,localXY(ev));
+  if(pts.size===1){drag={x:ev.clientX,y:ev.clientY,tx:st.tx,ty:st.ty};moved=false;svg.classList.add('dragging');}
+  else if(pts.size===2){const [a,b]=[...pts.values()];pinch={d:Math.hypot(a.x-b.x,a.y-b.y),k:st.k,m:{x:(a.x+b.x)/2,y:(a.y+b.y)/2},tx:st.tx,ty:st.ty};drag=null;}
+});
+window.addEventListener('pointermove',ev=>{
+  if(!pts.has(ev.pointerId))return;pts.set(ev.pointerId,localXY(ev));
+  if(pinch&&pts.size===2){const [a,b]=[...pts.values()];const d=Math.hypot(a.x-b.x,a.y-b.y),m={x:(a.x+b.x)/2,y:(a.y+b.y)/2};
+    const k2=clamp(pinch.k*d/pinch.d,0.12,4),r=k2/pinch.k;
+    st.k=k2;st.tx=m.x-(pinch.m.x-pinch.tx)*r;st.ty=m.y-(pinch.m.y-pinch.ty)*r;apply();moved=true;return;}
+  if(drag){const dx=ev.clientX-drag.x,dy=ev.clientY-drag.y;if(Math.abs(dx)+Math.abs(dy)>3)moved=true;st.tx=drag.tx+dx;st.ty=drag.ty+dy;apply();}
+});
+const up=ev=>{pts.delete(ev.pointerId);if(pts.size<2)pinch=null;if(pts.size===0){drag=null;svg.classList.remove('dragging');setTimeout(()=>{moved=false;},0);}};
+window.addEventListener('pointerup',up);window.addEventListener('pointercancel',up);
+svg.addEventListener('click',()=>{if(!moved)clearSel();});
+document.getElementById('zin').onclick=()=>zoomAt(vw()/2,vh()/2,1.35);
+document.getElementById('zout').onclick=()=>zoomAt(vw()/2,vh()/2,1/1.35);
+document.getElementById('zfit').onclick=()=>fitAll(true);
+window.addEventListener('keydown',ev=>{if(ev.target.tagName==='INPUT')return;
+  if(ev.key==='+'||ev.key==='=')zoomAt(vw()/2,vh()/2,1.35);else if(ev.key==='-')zoomAt(vw()/2,vh()/2,1/1.35);
+  else if(ev.key==='0')fitAll(true);else if(ev.key==='Escape')clearSel();});
+new ResizeObserver(()=>{svg.setAttribute('viewBox',`0 0 ${vw()} ${vh()}`);apply();}).observe(stage);
+
+// ---- minimap ----
+const mini=document.getElementById('mini');mini.setAttribute('viewBox',`0 0 ${W} ${H}`);
+G.forEach(g=>{if(g.c==='sub'&&g.id!=='g_sysd')return;el('rect',{class:'g '+g.c,x:g.x,y:g.y,width:g.w,height:g.h},mini);});
+const vp=el('rect',{id:'vp',x:0,y:0,width:W,height:H},mini);
+function updateMini(){vp.setAttribute('x',-st.tx/st.k);vp.setAttribute('y',-st.ty/st.k);vp.setAttribute('width',vw()/st.k);vp.setAttribute('height',vh()/st.k);}
+mini.addEventListener('click',ev=>{const r=mini.getBoundingClientRect();const x=(ev.clientX-r.left)/r.width*W,y=(ev.clientY-r.top)/r.height*H;go(st.k,vw()/2-x*st.k,vh()/2-y*st.k);});
+
+// ---- regions ----
+const REG=[['Everything',null],['Clients',['g_cli']],['Off-repo',['g_ext']],['Frontend',['g_fe']],['Backend',['g_be']],['Search',['g_srch']],['Scripts',['g_scr','g_mig']],['CI & tests',['g_ci','g_tst']],['Environments',['g_facts']]];
+const regNav=document.getElementById('regions');
+REG.forEach(([t,ids])=>{const b=hel('button',{class:'chip',text:t},regNav);b.onclick=()=>ids?zoomToBox(bboxOf(ids),40):fitAll(true);});
+
+// ---- sidebar ----
+const detail=document.getElementById('detail'),flowsEl=document.getElementById('flows'),legend=document.getElementById('legend'),results=document.getElementById('results'),q=document.getElementById('q');
+const KC={http:'var(--ink-3)',proxy:'var(--accent)',data:'var(--data)',probe:'var(--probe)',alert:'var(--alert)',backup:'var(--backup)',ctl:'var(--ink-2)',heal:'var(--accent)',gpu:'var(--gpu)',plan:'var(--ink-3)'};
+const KD={http:'',proxy:'',data:'',probe:'2 4',alert:'7 4',backup:'9 3 2 3',ctl:'4 3',heal:'4 3',gpu:'1 3',plan:'3 6'};
+const KN=Object.fromEntries(KINDS.map(k=>[k[0],k[1]]));
+KINDS.forEach(([k,name,desc])=>{
+  const lab=hel('label',{},legend);const cb=hel('input',{type:'checkbox',checked:''},lab);cb.checked=true;
+  lab.insertAdjacentHTML('beforeend',`<svg viewBox="0 0 44 10"><line x1="1" y1="5" x2="43" y2="5" style="stroke:${KC[k]};stroke-dasharray:${KD[k]}"/></svg><span class="n"><b>${name}</b> · ${esc(desc)}</span>`);
+  cb.addEventListener('change',()=>svg.classList.toggle('hide-'+k,!cb.checked));
+});
+FL.forEach(f=>{const b=hel('button',{'data-id':f.id},flowsEl);b.innerHTML=`<span>${esc(f.t)}</span><small>${esc(f.w)}</small>`;b.onclick=()=>selectFlow(f.id);});
+const ctrs=N.filter(n=>n.k==='ctr').length;
+document.getElementById('counts').textContent=`${N.length} entities · ${ctrs} containers · ${E.length} edges · ${FL.length} processes`;
+const files=arr=>arr&&arr.length?`<div class="files">${arr.map(f=>`<code>${esc(f)}</code>`).join('')}</div>`:'';
+function overview(){
+  detail.innerHTML=`<div class="hd"><h3>The whole box on one sheet</h3></div>
+  <p>Every entity the home-server repo configures — ${ctrs} containers in ${G.filter(g=>g.c==='stack').length} compose stacks, the Windows-side services, systemd units, filesystems and the off-box watchers — and the ${FL.length} processes that run through them.</p>
+  <p>Left: your devices and the internet. Right: the devbox, Windows above WSL2. Edges are colored by what moves along them; toggle layers below.</p>
+  <ul><li>Click a <b>process</b> to light up its path and read the steps.</li><li>Click any <b>entity</b> for what it does, its ports and the repo files behind it.</li><li>Click a <b>stack or region title</b> on the map to frame it.</li></ul>
+  <p>Sources: README.md, connecting.md, MEDIA.md, docs/, every compose.yaml, unit and script in the repo.</p>`;
+}
+function renderNode(id){
+  const n=NM[id];const tags=[{ctr:'container',win:'windows',unit:'systemd',path:'filesystem',ext:'off-box',plan:'planned',hw:'hardware',scr:'script',note:'note',dev:'device',fact:'network fact'}[n.k]];
+  if(n.st)tags.push('stack '+GM[n.st].t);
+  const cs=(conn[id]||[]).map(eid=>{const e=EM[eid];const out=e.a===id;const other=out?e.b:e.a;
+    return `<button data-e="${eid}"><i style="background:${KC[e.k]}"></i><span style="font-family:var(--sans);font-size:12.5px;color:var(--ink-2)">${out?'→':'←'} <b>${esc(label(other))}</b> <span>${esc(e.l)}</span></span></button>`;}).join('');
+  detail.innerHTML=`<div class="hd"><h3>${esc(n.n)}</h3><button class="x" aria-label="Clear selection">×</button></div>
+  <div>${tags.map(t=>`<span class="tag">${esc(t)}</span>`).join('')}${n.p?`<span class="tag acc">${esc(n.p)}</span>`:''}</div>
+  ${n.s&&!n.lines?`<p style="font-family:var(--mono);font-size:11.5px">${esc(n.s)}</p>`:''}
+  ${n.d?`<ul>${n.d.map(x=>`<li>${esc(x)}</li>`).join('')}</ul>`:''}
+  ${files(n.f)}
+  ${cs?`<h2 style="margin-top:14px">Connections</h2><div class="conns">${cs}</div>`:''}`;
+  detail.querySelectorAll('[data-e]').forEach(b=>b.onclick=()=>selectEdge(b.dataset.e));
+}
+function renderEdge(id){
+  const e=EM[id];
+  detail.innerHTML=`<div class="hd"><h3>${esc(label(e.a))} → ${esc(label(e.b))}</h3><button class="x" aria-label="Clear selection">×</button></div>
+  <div><span class="tag" style="color:${KC[e.k]};border-color:${KC[e.k]}">${esc(KN[e.k])}</span></div>
+  <p style="font-family:var(--mono);font-size:12px;color:var(--ink)">${esc(e.l)}</p>
+  <div class="conns"><button data-n="${e.a}"><i style="background:var(--line)"></i><span><b>${esc(label(e.a))}</b></span></button><button data-n="${e.b}"><i style="background:var(--line)"></i><span><b>${esc(label(e.b))}</b></span></button></div>`;
+  detail.querySelectorAll('[data-n]').forEach(b=>b.onclick=()=>{if(NM[b.dataset.n])selectNode(b.dataset.n);else zoomToBox(GM[b.dataset.n],50);});
+}
+function renderFlow(id){
+  const f=FM[id];
+  detail.innerHTML=`<div class="hd"><h3>${esc(f.t)}</h3><button class="x" aria-label="Clear selection">×</button></div>
+  <div><span class="tag acc">process</span><span class="tag">${esc(f.w)}</span></div>
+  <ol>${f.s.map(([t,n])=>`<li data-n="${n}">${esc(t)}<small>${esc(label(n))}</small></li>`).join('')}</ol>
+  ${files(f.f)}<p class="hint" style="margin-top:8px">Steps are in the order they happen. Click a step to go to where it runs.</p>`;
+  detail.querySelectorAll('[data-n]').forEach(li=>li.onclick=()=>{const b=box(li.dataset.n);if(b)zoomToBox(b,220,1.4);});
+}
+detail.addEventListener('click',ev=>{if(ev.target.classList.contains('x'))clearSel();});
+
+// ---- selection / highlighting ----
+let sel=null;
+function clearMarks(){document.querySelectorAll('#map .sel,#map .lit,#map .dim').forEach(x=>x.classList.remove('sel','lit','dim'));flowsEl.querySelectorAll('.on').forEach(b=>b.classList.remove('on'));}
+function dimAll(){Object.values(nodeEls).forEach(g=>g.classList.add('dim'));Object.values(edgeEls).forEach(g=>g.classList.add('dim'));Object.values(labelEls).forEach(t=>t.classList.add('dim'));}
+function lit(nid){const g=nodeEls[nid];if(g){g.classList.remove('dim');g.classList.add('lit');}}
+function litE(eid){edgeEls[eid].classList.remove('dim');edgeEls[eid].firstChild.classList.add('lit');labelEls[eid].classList.remove('dim');labelEls[eid].classList.add('lit');}
+function clearSel(){sel=null;clearMarks();overview();}
+function selectNode(id){sel={t:'node',id};clearMarks();dimAll();lit(id);nodeEls[id].classList.remove('lit');nodeEls[id].classList.add('sel');
+  (conn[id]||[]).forEach(eid=>{const e=EM[eid];litE(eid);lit(e.a===id?e.b:e.a);});renderNode(id);openSide();}
+function selectEdge(id){sel={t:'edge',id};clearMarks();dimAll();const e=EM[id];litE(id);edgeEls[id].firstChild.classList.add('sel');lit(e.a);lit(e.b);renderEdge(id);
+  const bs=[e.a,e.b].map(box);zoomToBox(bboxOf([e.a,e.b]),160,1.3);openSide();}
+function selectFlow(id){sel={t:'flow',id};clearMarks();dimAll();const f=FM[id];f.n.forEach(lit);f.e.forEach(litE);
+  flowsEl.querySelector(`[data-id="${id}"]`).classList.add('on');renderFlow(id);zoomToBox(bboxOf([...f.n,...f.e.flatMap(eid=>[EM[eid].a,EM[eid].b])]),90,1.2);openSide();}
+
+// ---- search ----
+q.addEventListener('input',()=>{
+  const s=q.value.trim().toLowerCase();results.innerHTML='';if(s.length<2)return;
+  const hits=N.filter(n=>[n.n,n.s||'',n.p||'',...(n.d||[]),...(n.f||[])].join(' ').toLowerCase().includes(s)).slice(0,14);
+  const fh=FL.filter(f=>(f.t+' '+f.w+' '+f.s.map(x=>x[0]).join(' ')).toLowerCase().includes(s)).slice(0,5);
+  fh.forEach(f=>{const b=hel('button',{},results);b.innerHTML=`<span>${esc(f.t)}</span><span class="k">process</span>`;b.onclick=()=>{selectFlow(f.id);results.innerHTML='';};});
+  hits.forEach(n=>{const b=hel('button',{},results);b.innerHTML=`<span>${esc(n.n)}</span><span class="k">${esc(n.p||n.k)}</span>`;b.onclick=()=>{selectNode(n.id);zoomToBox(n,260,1.5);results.innerHTML='';};});
+  if(!hits.length&&!fh.length){hel('button',{text:'No match',disabled:''},results);}
+});
+
+// ---- narrow-screen panel ----
+const side=document.getElementById('side');
+document.getElementById('panelToggle').onclick=()=>side.classList.toggle('open');
+function openSide(){if(matchMedia('(max-width:820px)').matches)side.classList.add('open');}
+stage.addEventListener('pointerdown',()=>{if(matchMedia('(max-width:820px)').matches)side.classList.remove('open');});
+
+overview();fitAll(false);
+})();
+</script>
+
+</body>
+</html>

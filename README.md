@@ -2,6 +2,13 @@
 
 Location-based event discovery platform connecting micro-venue hosts and independent artists with local audiences. Map-driven, RSVP-enforced, social-graph-aware.
 
+The fastest way to understand how this repo fits together is the **Scene Atlas**,
+a zoomable map of every entity, route, pipeline stage, script, workflow and
+environment fact in it — source: [docs/scene-atlas.html](docs/scene-atlas.html).
+Open it in a browser. It is kept in step with the code: any change that adds or
+removes a route, a search stage, a script, a workflow or an environment updates
+the atlas in the same PR.
+
 ## What it does
 
 - **Map-first discovery** — Browse live event pins on an interactive dark-mode map centered on your GPS location. Pins update as you pan and zoom.
