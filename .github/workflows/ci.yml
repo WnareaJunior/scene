@@ -1,0 +1,55 @@
+# Backend CI: migrations + integration tests against a throwaway Postgres with
+# PostGIS and pgvector. Nothing here touches staging or production — the
+# database lives and dies inside the job.
+#
+# The Postgres image is built from backend/test/Dockerfile (the same
+# recipe as the devbox's dev-postgres) because no upstream image ships both
+# extension families.
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      DATABASE_URL: postgresql://scene:scene@localhost:5432/scene_test
+      DATABASE_SSL: disable
+      JWT_ACCESS_SECRET: ci-access-secret
+      JWT_REFRESH_SECRET: ci-refresh-secret
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Start Postgres (PostGIS + pgvector)
+        run: |
+          docker build -t scene-test-postgres backend/test
+          docker run -d --name pg \
+            -e POSTGRES_USER=scene -e POSTGRES_PASSWORD=scene -e POSTGRES_DB=scene_test \
+            -p 5432:5432 scene-test-postgres
+          for i in $(seq 1 30); do
+            docker exec pg pg_isready -U scene -d scene_test && break
+            sleep 1
+          done
+          docker exec pg pg_isready -U scene -d scene_test
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: backend
+
+      - name: Migrate + test
+        run: npm test
+        working-directory: backend
+
+      - name: Migrations are idempotent (second run is a no-op)
+        run: node scripts/migrate.js | tee /dev/stderr | grep -q 'up to date'
+        working-directory: backend

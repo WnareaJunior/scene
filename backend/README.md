@@ -149,6 +149,30 @@ npm start       # production
 
 ---
 
+## Tests
+
+Integration tests run against a real Postgres with the tracked migrations
+applied, driving the Express app through supertest. `npm test` migrates first,
+then runs everything under `src/__tests__/` and `src/search/__tests__/`.
+
+```bash
+# devbox: a throwaway database on dev-postgres (create once: CREATE DATABASE scene_test)
+DATABASE_URL=postgresql://dev:<password>@localhost:5433/scene_test DATABASE_SSL=disable npm test
+
+# no database needed: middleware + pure search stages only
+npm run test:unit
+```
+
+The harness (`src/__tests__/helpers.js`) refuses any database whose name does
+not end in `_test`, because it truncates every table between tests. CI
+(`.github/workflows/ci.yml`) builds `backend/test/Dockerfile` (PostGIS +
+pgvector), runs the same `npm test`, then checks a second migrate run is a
+no-op. Tests create users straight in the database and sign their own tokens,
+so the auth rate limiter is never in the way; only the tests about `/auth`
+go through it.
+
+---
+
 ## API reference
 
 Base URL: `http://localhost:3000/api/v1`

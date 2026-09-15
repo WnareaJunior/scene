@@ -12,6 +12,9 @@ const pool = new Pool({
 
 module.exports = {
   query: (text, params) => pool.query(text, params),
+  // Used by the test harness so a test process can exit without waiting for
+  // idle sockets to time out. The server never calls it.
+  end: () => pool.end(),
 };
 
 pool.on('error', (err) => {
