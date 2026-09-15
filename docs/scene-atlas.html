@@ -290,7 +290,7 @@ FE(6,1,'webfeed','web/WebFeed.jsx','web v1 feed · read-only',['Lists upcoming p
 FE(7,1,'webprofile','web/WebProfile.jsx','web v1 profile · bio edit',[],['frontend/src/web/WebProfile.jsx']);
 FE(0,2,'appconfig','app.config.js','dynamic Expo config',['Reads the Maps keys from env and warns if absent. Sets updates.url only when EXPO_PUBLIC_UPDATE_URL exists — expo-updates crashes at launch if runtimeVersion is present without a valid updates.url.','Android permissions deliberately exclude ACCESS_BACKGROUND_LOCATION: Play Store approval would need a justification Scene does not have.'],['frontend/app.config.js']);
 FE(1,2,'easjson','eas.json','three build profiles',['development → devbox over Tailscale; production → Render; preview → the staging service since #72. The value is the bare origin, because api.js appends /api/v1 itself.'],['frontend/eas.json']);
-FE(2,2,'colors','constants/','colors · mapStyles · config',['Sodium Amber #ffa028 is the accent; the old purple #a855f7 is banned by the design system ("No-Purple Rule").'],['frontend/src/constants/colors.js','DESIGN.md']);
+FE(2,2,'colors','constants/','colors · mapStyles · config',['Electric Cyan #22d3ee is the accent. Two earlier accents are retired and must not reappear: Sodium Amber #ffa028 and the older AI purple #a855f7 (DESIGN.md, The Retired-Accent Rule).','This file is the authoritative palette — DESIGN.md documents it, not the other way round. All four design docs described a retired accent until they were reconciled against it.'],['frontend/src/constants/colors.js','DESIGN.md']);
 
 // ---- backend ----
 const BE=(i,id,n,s,p,d,f)=>add({id,k:'ctr',x:786+i*336,y:560,w:322,h:100,n,s,p,d,f});
@@ -396,7 +396,7 @@ const E=[
 ['f16','mapscr','apijs','http','GET /map/events'],
 ['f17','evcard','evsheet','ctl','tap'],
 ['f18','sheet','evsheet','ctl','gesture host'],
-['f19','colors','mapscr','ctl','Sodium Amber tokens · map style'],
+['f19','colors','mapscr','ctl','accent tokens · map style'],
 
 ['b1','indexjs','appjs_be','ctl','mounts'],
 ['b2','indexjs','dbjs','data','SELECT 1 before listen'],
