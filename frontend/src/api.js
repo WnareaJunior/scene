@@ -85,7 +85,11 @@ async function request(method, path, body, retry = true) {
   if (res.status === 204) return null;
   if (!res.ok) {
     const errorBody = await res.json().catch(() => ({}));
-    throw new Error(errorBody.error || 'Request failed');
+    // Carry the status so callers can tell "refused" from "broken" — a 403 on
+    // the attendee list is a host's setting, not a failure worth retrying.
+    const err = new Error(errorBody.error || 'Request failed');
+    err.status = res.status;
+    throw err;
   }
   return res.json();
 }
