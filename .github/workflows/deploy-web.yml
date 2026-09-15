@@ -34,7 +34,10 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     env:
-      EXPO_PUBLIC_API_URL: ${{ vars.E2E_API_URL || 'https://scene-19ss.onrender.com' }}
+      # The production API. Its own variable on purpose: the e2e suite used to
+      # share E2E_API_URL with this build, so repointing tests would have
+      # silently repointed the public web app too.
+      EXPO_PUBLIC_API_URL: ${{ vars.PROD_API_URL || 'https://scene-19ss.onrender.com' }}
       EXPO_PUBLIC_WEB_BASE_PATH: /scene
     steps:
       - uses: actions/checkout@v4

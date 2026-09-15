@@ -1,10 +1,10 @@
-# Backend CI: migrations + integration tests against a throwaway Postgres with
-# PostGIS and pgvector. Nothing here touches staging or production — the
-# database lives and dies inside the job.
+# CI: backend integration tests and the web e2e suite, both against a
+# throwaway Postgres (PostGIS + pgvector) and an API started inside the job.
+# Nothing here touches staging or production — no secrets, no external hosts.
 #
-# The Postgres image is built from backend/test/Dockerfile (the same
-# recipe as the devbox's dev-postgres) because no upstream image ships both
-# extension families.
+# The Postgres image is built from backend/test/Dockerfile (the same recipe as
+# the devbox's dev-postgres) because no upstream image ships both extension
+# families.
 name: ci
 
 on:
@@ -12,15 +12,16 @@ on:
   push:
     branches: [main]
 
+env:
+  DATABASE_URL: postgresql://scene:scene@localhost:5432/scene_test
+  DATABASE_SSL: disable
+  JWT_ACCESS_SECRET: ci-access-secret
+  JWT_REFRESH_SECRET: ci-refresh-secret
+
 jobs:
   backend:
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    env:
-      DATABASE_URL: postgresql://scene:scene@localhost:5432/scene_test
-      DATABASE_SSL: disable
-      JWT_ACCESS_SECRET: ci-access-secret
-      JWT_REFRESH_SECRET: ci-refresh-secret
     steps:
       - uses: actions/checkout@v4
 
@@ -53,3 +54,102 @@ jobs:
       - name: Migrations are idempotent (second run is a no-op)
         run: node scripts/migrate.js | tee /dev/stderr | grep -q 'up to date'
         working-directory: backend
+
+  # Web v1 e2e: builds the Expo web bundle, serves it on :4173, runs Playwright
+  # against an API started in this job on :3000 with seeded data. Replaces the
+  # old e2e.yml, which ran the same suite against production.
+  web-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      # API side
+      PORT: 3000
+      NODE_ENV: test
+      ALLOWED_ORIGINS: http://localhost:4173
+      E2E_RATE_LIMIT_BYPASS: ci-e2e-key
+      # Suite side (helpers.ts / playwright.config.ts)
+      E2E_EMAIL: scene.e2e@e2e.test
+      E2E_PASSWORD: ci-e2e-Pass-12345
+      E2E_USERNAME: scene_e2e
+      E2E_KEY: ci-e2e-key
+      E2E_WEB_URL: http://localhost:4173
+      # Baked into the web bundle at export time
+      EXPO_PUBLIC_API_URL: http://localhost:3000
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            backend/package-lock.json
+            frontend/package-lock.json
+            e2e/package-lock.json
+
+      - name: Start Postgres (PostGIS + pgvector)
+        run: |
+          docker build -t scene-test-postgres backend/test
+          docker run -d --name pg \
+            -e POSTGRES_USER=scene -e POSTGRES_PASSWORD=scene -e POSTGRES_DB=scene_test \
+            -p 5432:5432 scene-test-postgres
+          for i in $(seq 1 30); do
+            docker exec pg pg_isready -U scene -d scene_test && break
+            sleep 1
+          done
+          docker exec pg pg_isready -U scene -d scene_test
+
+      - name: Install backend dependencies
+        run: npm ci
+        working-directory: backend
+
+      - name: Migrate + seed (30 NYC events, the e2e account)
+        run: |
+          node scripts/migrate.js
+          node scripts/seed-nyc-events.js --count 30 --seed 1
+          node scripts/seed-e2e-account.js
+        working-directory: backend
+
+      - name: Start API
+        run: |
+          node index.js > "$RUNNER_TEMP/api.log" 2>&1 &
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:3000/health && break
+            sleep 1
+          done
+          curl -sf http://localhost:3000/health
+        working-directory: backend
+
+      - name: Install frontend dependencies
+        run: npm ci
+        working-directory: frontend
+
+      - name: Export web build
+        run: npx expo export --platform web
+        working-directory: frontend
+
+      - name: Install e2e dependencies
+        run: npm ci
+        working-directory: e2e
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps webkit chromium
+        working-directory: e2e
+
+      - name: Run Playwright suite
+        run: npx playwright test
+        working-directory: e2e
+
+      - name: API log
+        if: failure()
+        run: cat "$RUNNER_TEMP/api.log"
+
+      - name: Upload report and traces
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: |
+            e2e/playwright-report
+            e2e/test-results
+          retention-days: 7
