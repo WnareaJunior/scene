@@ -1,6 +1,6 @@
 # Scene — Backend
 
-Node.js + Express REST API. Serves `http://localhost:3000/api/v1` locally and `https://scene-19ss.onrender.com/api/v1` in production.
+Node.js + Express REST API. Serves `http://localhost:3000/api/v1` locally, `https://scene-staging-pr6j.onrender.com/api/v1` on staging and `https://scene-19ss.onrender.com/api/v1` in production.
 
 ## Requirements
 
@@ -217,7 +217,7 @@ go through it.
 
 ## Deploying
 
-- **Staging** (Render `scene-staging`, once it exists) auto-deploys from `main`.
+- **Staging** (Render `scene-staging`, `https://scene-staging-pr6j.onrender.com`, My project / Staging) auto-deploys from `main`.
 - **Production** deploys only through the `deploy-prod` GitHub Actions workflow
   (`Actions → deploy-prod → Run workflow`). It runs under the `production`
   environment, which needs a reviewer's approval, then calls the Render deploy
