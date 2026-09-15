@@ -270,11 +270,13 @@ CREATE INDEX IF NOT EXISTS neighborhoods_name_trgm_idx
   ON neighborhoods USING GIN (name gin_trgm_ops);
 
 -- ── Hard filters (stage 3) ─────────────────────────────────────────────────
--- Partial index matching the visibility predicate every retriever applies, so
--- the planner can use it directly instead of filtering after the fact.
+-- Partial index on the part of the visibility predicate that is constant.
+-- is_private came out in migration 0005: a private event is now visible to
+-- anyone following the host, and a partial index cannot express "depends who
+-- is asking". status = 'active' still holds for every caller.
 CREATE INDEX IF NOT EXISTS events_active_start_time_idx
   ON events (start_time)
-  WHERE status = 'active' AND is_private = false;
+  WHERE status = 'active';
 
 CREATE INDEX IF NOT EXISTS events_location_gist_idx
   ON events USING GIST (location);
