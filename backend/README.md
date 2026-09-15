@@ -215,6 +215,24 @@ go through it.
 
 ---
 
+## Deploying
+
+- **Staging** (Render `scene-staging`, once it exists) auto-deploys from `main`.
+- **Production** deploys only through the `deploy-prod` GitHub Actions workflow
+  (`Actions → deploy-prod → Run workflow`). It runs under the `production`
+  environment, which needs a reviewer's approval, then calls the Render deploy
+  hook and waits for `/health`. Render's own auto-deploy for the production
+  service is switched off so nothing reaches prod by accident.
+- **Keep-warm**: Render's free tier sleeps after ~15 idle minutes. Uptime Kuma
+  on the devbox pings `/health` every 5 minutes (monitor "Scene API (prod)")
+  and alerts through ntfy; that replaced the GitHub cron, which could not hold
+  a 10-minute schedule.
+- **Migrations on deploy**: not automatic yet. After staging and production
+  are baselined (`with-env.sh <env> node scripts/migrate.js --baseline 0003`),
+  `npm start` becomes `node scripts/migrate.js && node index.js`.
+
+---
+
 ## API reference
 
 Base URL: `http://localhost:3000/api/v1`

@@ -1,0 +1,64 @@
+# Production deploy — manual, gated, auditable.
+#
+# Render's auto-deploy on push to main is switched OFF for the production
+# service; this workflow is the only path to prod. It runs under the
+# `production` GitHub Environment, which requires a reviewer to approve each
+# run, then calls the Render deploy hook and waits for /health to answer.
+#
+# One-time setup (Render dashboard + repo settings):
+#   1. Production service → Settings → Auto-Deploy: No.
+#   2. Production service → Settings → Deploy Hook → copy the URL.
+#   3. Repo → Settings → Environments → production → secret RENDER_DEPLOY_HOOK
+#      = that URL; required reviewers = Wilson.
+#
+# Staging stays on auto-deploy from main, so every merge is rehearsed there
+# before anyone presses this button.
+name: deploy-prod
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Git ref to deploy (Render builds this from the repo)
+        required: true
+        default: main
+
+concurrency:
+  group: deploy-prod
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment:
+      name: production
+      url: https://scene-19ss.onrender.com/health
+    env:
+      HEALTH_URL: https://scene-19ss.onrender.com/health
+    steps:
+      - name: Record what is being deployed
+        run: |
+          echo "ref: ${{ inputs.ref }}"
+          echo "by:  ${{ github.actor }}"
+
+      - name: Trigger Render deploy
+        run: |
+          if [ -z "${{ secrets.RENDER_DEPLOY_HOOK }}" ]; then
+            echo "RENDER_DEPLOY_HOOK is not set on the production environment"; exit 1
+          fi
+          curl -sf -X POST "${{ secrets.RENDER_DEPLOY_HOOK }}&ref=${{ inputs.ref }}" -o /dev/null
+          echo "deploy hook accepted"
+
+      - name: Wait for the new instance to answer
+        run: |
+          # Render swaps instances once the new one passes its own health check;
+          # a free-tier build plus boot is typically 2–5 minutes.
+          sleep 90
+          for i in $(seq 1 30); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 30 "$HEALTH_URL" || true)
+            echo "health: $code"
+            [ "$code" = "200" ] && exit 0
+            sleep 20
+          done
+          echo "health never returned 200 — check the Render dashboard"; exit 1
