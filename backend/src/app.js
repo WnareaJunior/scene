@@ -9,6 +9,7 @@ const userRoutes = require('./routes/users');
 const eventRoutes = require('./routes/events');
 const mapRoutes = require('./routes/map');
 const searchRoutes = require('./routes/search');
+const { createReadyHandler } = require('./readiness');
 
 // Fail fast at boot if no JWT secret is configured. The auth route and middleware
 // both resolve `JWT_ACCESS_SECRET || JWT_SECRET`; without one, tokens are signed
@@ -85,7 +86,13 @@ app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
 app.use(cors(corsOptions));
 app.use(express.json({ limit: '50kb' }));
 
+// Cheap liveness: Render's health check and the Uptime Kuma keep-warm monitor
+// hit this constantly, so it must never touch the database.
 app.get('/health', (req, res) => res.json({ status: 'ok' }));
+// Deep readiness for deploy gates: a DB query plus the migration ledger checked
+// against the files on disk. 200 ready / 503 not. See readiness.js.
+const readyLimiter = rateLimit({ windowMs: 60 * 1000, max: 60, handler: rateLimitResponse });
+app.get('/health/ready', readyLimiter, createReadyHandler());
 
 app.post('/api/v1/auth/login', authLimiter);
 app.post('/api/v1/auth/register', authLimiter);
