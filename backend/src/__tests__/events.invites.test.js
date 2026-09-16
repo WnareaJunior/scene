@@ -24,7 +24,10 @@ test('minting returns a stable /e/ link on the API origin', async () => {
   assert.match(first.body.url, /^https?:\/\/[^/]+\/e\/[A-Za-z0-9_-]{22}$/);
 
   const again = await mint(event, host);
-  assert.equal(again.body.url, first.body.url, 'one party, one link');
+  // Compare tokens: supertest binds a fresh ephemeral port per request, so the
+  // request-derived origin differs between the two calls.
+  assert.equal(again.body.token, first.body.token, 'one party, one link');
+  assert.equal(tokenOf(again), first.body.token);
 });
 
 test('SHARE_BASE_URL moves links to the custom domain', async () => {
