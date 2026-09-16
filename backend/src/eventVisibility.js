@@ -15,8 +15,8 @@
 // Deliberately NOT here: access by invite link. That is possession of a token
 // rather than a fact about the viewer, so it belongs on the single-event fetch
 // and not in a list predicate — a link should reach one party, not unlock a
-// stranger's private events across the whole map. It ships with the share-link
-// work.
+// stranger's private events across the whole map. It lives in inviteLinks.js
+// and is honoured only by GET /events/invite/:token and POST /events/:id/rsvp.
 
 const db = require('./db');
 

@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { View, TouchableOpacity, Text, StyleSheet, Alert, Share } from 'react-native';
+import { View, TouchableOpacity, Text, StyleSheet, Alert } from 'react-native';
 import MapView, { Marker } from 'react-native-maps';
 import * as Location from 'expo-location';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -9,6 +9,7 @@ import { darkMapStyle } from '../constants/mapStyles';
 import { COLORS } from '../constants/colors';
 import EventDetailSheet from '../components/EventDetailSheet';
 import UserProfileSheet from '../components/UserProfileSheet';
+import { sharePartyLink } from '../inviteLink';
 
 const initialRegion = {
   latitude: 40.7128, longitude: -74.006,
@@ -82,7 +83,9 @@ const DEBOUNCE_MS = 400;
 // Minimum map-center movement (km) required to trigger a new pin fetch.
 const MIN_MOVE_KM = 0.5;
 
-export default function MapScreen({ onRegionChangeComplete, currentUserId, focusEvent }) {
+export default function MapScreen({
+  onRegionChangeComplete, currentUserId, focusEvent, inviteToken, onInviteHandled,
+}) {
   const [pins, setPins] = useState([]);
   const [fetchError, setFetchError] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState(null);
@@ -171,16 +174,39 @@ export default function MapScreen({ onRegionChangeComplete, currentUserId, focus
     return () => clearTimeout(toastTimerRef.current);
   }, [focusEvent]);
 
-  const shareEvent = useCallback((ev) => {
-    const date = ev.start_time
-      ? new Date(ev.start_time).toLocaleDateString(undefined, {
-          weekday: 'short', hour: '2-digit', minute: '2-digit',
-        })
-      : '';
-    Share.share({
-      message: `${ev.title} — ${date}${ev.address ? ` · ${ev.address}` : ''} (on scene)`,
-    }).catch(() => {});
-  }, []);
+  // Someone tapped an invite link: fly to the party and open its sheet. The
+  // token rides on the event so an RSVP from the sheet can present it — for a
+  // private party it is the only thing that lets a non-follower in.
+  useEffect(() => {
+    if (!inviteToken) return undefined;
+    let cancelled = false;
+    (async () => {
+      try {
+        const ev = await events.byInvite(inviteToken);
+        if (cancelled) return;
+        setViewingUserId(null);
+        setPins((ps) => ps.some((p) => p.id === ev.id) ? ps : [...ps, ev]);
+        mapRef.current?.animateToRegion({
+          latitude: ev.latitude,
+          longitude: ev.longitude,
+          latitudeDelta: 0.01,
+          longitudeDelta: 0.01,
+        }, 600);
+        setSelectedEvent({ ...ev, inviteToken });
+      } catch (err) {
+        if (cancelled) return;
+        Alert.alert(
+          "that link didn't open",
+          err?.status === 404
+            ? "the party behind it is gone, or the link's been changed."
+            : 'check your connection and tap the link again.',
+        );
+      } finally {
+        if (!cancelled) onInviteHandled?.();
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [inviteToken, onInviteHandled]);
 
   const handleRegionChange = useCallback((region) => {
     // Always notify the parent of the latest viewport (used by SearchSheet).
@@ -234,7 +260,7 @@ export default function MapScreen({ onRegionChangeComplete, currentUserId, focus
     try {
       if (newStatus === null) await events.cancelRsvp(eventId);
       else if (prevStatus !== null) await events.updateRsvp(eventId, newStatus);
-      else await events.rsvp(eventId, newStatus);
+      else await events.rsvp(eventId, newStatus, current.inviteToken);
     } catch {
       setSelectedEvent(current);
       Alert.alert("rsvp didn't save", 'check your connection and tap it again.');
@@ -315,7 +341,7 @@ export default function MapScreen({ onRegionChangeComplete, currentUserId, focus
       {postedToast && (
         <TouchableOpacity
           style={[styles.postedToast, { top: safeTop + 8 }]}
-          onPress={() => { shareEvent(postedToast); setPostedToast(null); }}
+          onPress={() => { sharePartyLink(postedToast); setPostedToast(null); }}
           activeOpacity={0.85}
           accessibilityRole="button"
           accessibilityLabel="party posted, tap to share it"

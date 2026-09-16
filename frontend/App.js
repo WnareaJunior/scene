@@ -1,6 +1,6 @@
 import 'react-native-gesture-handler';
-import React, { useState, useEffect } from 'react';
-import { View, ActivityIndicator, StyleSheet, Text, TouchableOpacity } from 'react-native';
+import React, { useState, useEffect, useCallback } from 'react';
+import { View, ActivityIndicator, StyleSheet, Text, TouchableOpacity, Linking } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
@@ -12,6 +12,7 @@ import OnboardingScreen from './src/screens/OnboardingScreen';
 import { COLORS } from './src/constants/colors';
 import { users, auth, saveTokens, getStoredToken, clearTokens } from './src/api';
 import { isWeb, getPath, replacePath, onPathChange } from './src/urlSync';
+import { parseInviteToken } from './src/inviteLink';
 
 const ONBOARDING_KEY = 'scene.onboarding.v1.seen';
 const AUTH_PATHS = ['/login', '/signup'];
@@ -45,9 +46,27 @@ export default function App() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [onboarded, setOnboarded] = useState(true);
+  // An invite link the app was opened with (or received while running). Held
+  // here, above the auth gate, so someone who taps a link, then signs up,
+  // still lands on the party afterwards.
+  const [inviteToken, setInviteToken] = useState(null);
+  const clearInvite = useCallback(() => setInviteToken(null), []);
 
   useEffect(() => {
     bootstrap();
+  }, []);
+
+  // Native only: web has its own path router, and the invite page lives on the
+  // API host, not the web app's.
+  useEffect(() => {
+    if (isWeb) return undefined;
+    const take = (url) => {
+      const token = parseInviteToken(url);
+      if (token) setInviteToken(token);
+    };
+    Linking.getInitialURL().then(take).catch(() => {});
+    const sub = Linking.addEventListener('url', ({ url }) => take(url));
+    return () => sub.remove();
   }, []);
 
   // Web auth guard: unauthenticated hits on app routes land on /login;
@@ -126,7 +145,12 @@ export default function App() {
           {!onboarded ? (
             <OnboardingScreen onDone={handleOnboardingDone} />
           ) : user ? (
-            <Scene user={user} onSignOut={handleSignOut} />
+            <Scene
+              user={user}
+              onSignOut={handleSignOut}
+              inviteToken={inviteToken}
+              onInviteHandled={clearInvite}
+            />
           ) : (
             <AuthScreen onAuth={handleAuth} />
           )}

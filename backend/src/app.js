@@ -9,6 +9,8 @@ const userRoutes = require('./routes/users');
 const eventRoutes = require('./routes/events');
 const mapRoutes = require('./routes/map');
 const searchRoutes = require('./routes/search');
+const inviteRoutes = require('./routes/invites');
+const { checkShareBaseUrl } = require('./inviteLinks');
 
 // Fail fast at boot if no JWT secret is configured. The auth route and middleware
 // both resolve `JWT_ACCESS_SECRET || JWT_SECRET`; without one, tokens are signed
@@ -16,6 +18,9 @@ const searchRoutes = require('./routes/search');
 if (!process.env.JWT_ACCESS_SECRET && !process.env.JWT_SECRET) {
   throw new Error('Missing JWT secret: set JWT_ACCESS_SECRET (preferred) or JWT_SECRET');
 }
+
+// A malformed SHARE_BASE_URL would send out links that never open the app.
+checkShareBaseUrl();
 
 const allowedOrigins = (process.env.ALLOWED_ORIGINS || '')
   .split(',')
@@ -86,6 +91,10 @@ app.use(cors(corsOptions));
 app.use(express.json({ limit: '50kb' }));
 
 app.get('/health', (req, res) => res.json({ status: 'ok' }));
+
+// Public invite links (/e/:token) and the /.well-known files that let iOS and
+// Android open them in the app. Outside /api/v1: no auth, not JSON, cacheable.
+app.use(inviteRoutes);
 
 app.post('/api/v1/auth/login', authLimiter);
 app.post('/api/v1/auth/register', authLimiter);
