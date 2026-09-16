@@ -140,9 +140,27 @@ runner checks checksums and will stop. Put `-- migrate:no-transaction` on the
 first line for statements that cannot run in a transaction
 (`CREATE INDEX CONCURRENTLY`).
 
-**Deploy:** `npm start` does not run migrations yet. Until every environment is
-baselined, apply migrations by hand with that environment's `DATABASE_URL`;
-after that, `start` becomes `node scripts/migrate.js && node index.js`.
+**Deploy:** `npm start` is `node scripts/migrate.js --if-enabled && node index.js`.
+Pending migrations run at boot only where the `MIGRATE_ON_BOOT=true` env var is
+set; everywhere else the runner exits 0 without connecting, and migrations are
+applied by hand with `scripts/with-env.sh <env> node scripts/migrate.js`. A
+failed migration exits 1, so the API never starts on a half-migrated schema;
+Render cancels that deploy and keeps the previous instance serving. (Render's
+pre-deploy command would be the natural home for this, but it is paid-plan
+only.)
+
+Turning it on for an environment, in this order:
+
+1. The Render service's start command is `npm start` (not `node index.js`).
+2. The database is baselined and caught up:
+   `scripts/with-env.sh <env> node scripts/migrate.js --status` shows nothing pending.
+3. Set `MIGRATE_ON_BOOT=true` on that Render service.
+
+With the switch on and the database *not* baselined, every boot fails with the
+"already has the Scene schema" refusal, so step 2 is not optional. Because the
+old instance keeps serving while the new one migrates, every migration must be
+safe for the previous release to run against — which the additive-only rule
+below already guarantees.
 
 Local Postgres without TLS (the devbox `dev-postgres`): set
 `DATABASE_SSL=disable` alongside `DATABASE_URL`.
@@ -227,9 +245,9 @@ go through it.
   on the devbox pings `/health` every 5 minutes (monitor "Scene API (prod)")
   and alerts through ntfy; that replaced the GitHub cron, which could not hold
   a 10-minute schedule.
-- **Migrations on deploy**: not automatic yet. After staging and production
-  are baselined (`with-env.sh <env> node scripts/migrate.js --baseline 0003`),
-  `npm start` becomes `node scripts/migrate.js && node index.js`.
+- **Migrations on deploy**: `npm start` applies pending migrations when the
+  service has `MIGRATE_ON_BOOT=true`, and a failed migration fails the deploy.
+  Off until each environment is baselined; see "Database" above for the order.
 
 ---
 

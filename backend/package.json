@@ -4,7 +4,7 @@
   "description": "OpenCrib backend API",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js",
+    "start": "node scripts/migrate.js --if-enabled && node index.js",
     "dev": "nodemon index.js",
     "migrate": "node scripts/migrate.js",
     "migrate:status": "node scripts/migrate.js --status",
