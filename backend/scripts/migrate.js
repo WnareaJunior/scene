@@ -8,6 +8,9 @@
 //   node scripts/migrate.js --baseline 0003 mark 0001..0003 applied WITHOUT running
 //                                           them (for databases that already have
 //                                           the schema: staging, prod, the devbox)
+//   node scripts/migrate.js --if-enabled    what `npm start` runs: apply pending
+//                                           migrations only when MIGRATE_ON_BOOT=true,
+//                                           otherwise exit 0 without connecting
 //
 // Env: DATABASE_URL (required), DATABASE_SSL=disable for a TLS-less local
 // Postgres (same switch as src/db.js on the devbox branch).
@@ -27,8 +30,8 @@
 require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
-const crypto = require('crypto');
 const { Client } = require('pg');
+const { migrationChecksum, checksumMatches } = require('../src/migrationChecksum');
 
 const DIR = path.join(__dirname, '..', 'migrations');
 const LOCK_KEY = 7214001; // arbitrary, unique to this runner
@@ -50,7 +53,7 @@ function listFiles() {
         version: file.slice(0, 4),
         name: file,
         sql,
-        checksum: crypto.createHash('sha256').update(sql).digest('hex'),
+        checksum: migrationChecksum(sql), // line-ending insensitive
         noTransaction: /^--\s*migrate:no-transaction\b/m.test(head),
       };
     });
@@ -68,6 +71,15 @@ function connect() {
 }
 
 async function main() {
+  // Migrate-on-boot is switched on per environment (a Render env var), and only
+  // after that database is baselined: an unbaselined database with the switch
+  // on fails every boot, which Render reports as a failed deploy while the old
+  // instance keeps serving.
+  if (flag('--if-enabled') && process.env.MIGRATE_ON_BOOT !== 'true') {
+    console.log('migrate: skipped (MIGRATE_ON_BOOT is not true)');
+    return;
+  }
+
   const files = listFiles();
   const versions = new Set(files.map((f) => f.version));
   if (versions.size !== files.length) {
@@ -94,7 +106,7 @@ async function main() {
     // Drift check: an applied migration must not have been edited.
     for (const f of files) {
       const a = applied.get(f.version);
-      if (a && a.checksum !== f.checksum) {
+      if (a && !checksumMatches(a.checksum, f.sql)) {
         console.error(`migrate: ${f.name} was edited after it was applied (checksum mismatch). Add a new migration instead.`);
         process.exit(1);
       }
