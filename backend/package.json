@@ -4,12 +4,12 @@
   "description": "OpenCrib backend API",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js",
+    "start": "node scripts/migrate.js --if-enabled && node index.js",
     "dev": "nodemon index.js",
     "migrate": "node scripts/migrate.js",
     "migrate:status": "node scripts/migrate.js --status",
     "test": "node scripts/migrate.js && node --test --test-concurrency=1 src/__tests__/*.test.js src/search/__tests__/*.test.js",
-    "test:unit": "node --test src/__tests__/auth.middleware.test.js src/search/__tests__/*.test.js",
+    "test:unit": "node --test src/__tests__/auth.middleware.test.js src/__tests__/migrationChecksum.test.js src/search/__tests__/*.test.js",
     "seed": "node scripts/seed.js --profile smoke",
     "seed:reset": "node scripts/seed.js --profile smoke --reset"
   },

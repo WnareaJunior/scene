@@ -55,6 +55,19 @@ jobs:
         run: node scripts/migrate.js | tee /dev/stderr | grep -q 'up to date'
         working-directory: backend
 
+      # snapshot-restore.sh's scrub step, on the throwaway test database: it
+      # must apply cleanly to the current schema and leave nothing real behind.
+      - name: scrub.sql scrubs emails and passwords
+        run: |
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -qc \
+            "INSERT INTO users (email, username, password_hash) VALUES ('real.person@example.org', 'scrub_check', 'x')"
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f scripts/scrub.sql
+          left=$(psql "$DATABASE_URL" -Atc "select count(*) from users where email not like '%@scrub.test'")
+          [ "$left" = "0" ] || { echo "$left users kept a real email"; exit 1; }
+          hash=$(psql "$DATABASE_URL" -Atc "select password_hash from users where username = 'scrub_check'")
+          HASH="$hash" node -e 'process.exit(require("bcryptjs").compareSync("password123", process.env.HASH) ? 0 : 1)'
+        working-directory: backend
+
   # Web v1 e2e: builds the Expo web bundle, serves it on :4173, runs Playwright
   # against an API started in this job on :3000 with seeded data. Replaces the
   # old e2e.yml, which ran the same suite against production.

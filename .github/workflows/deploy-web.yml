@@ -1,5 +1,10 @@
 # Deploys the web build to GitHub Pages: https://wnareajunior.github.io/scene/
 #
+# The web app talks to the PRODUCTION API, so it ships with production, not
+# with every merge: deploy-prod.yml calls this workflow with the commit it just
+# made live. A manual run with no ref republishes whatever commit production is
+# serving right now (read from /health/ready), which keeps the two in step.
+#
 # Prerequisites (one-time, already done if the site works):
 #   - Repo Pages enabled with build_type "workflow"
 #   - Render ALLOWED_ORIGINS includes https://wnareajunior.github.io
@@ -10,26 +15,31 @@
 name: deploy-web
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'frontend/**'
-      - '.github/workflows/deploy-web.yml'
+  workflow_call:
+    inputs:
+      ref:
+        description: Commit to build (the one production now serves)
+        required: true
+        type: string
   workflow_dispatch:
+    inputs:
+      ref:
+        description: Commit to build — leave empty to use the commit production is serving
+        required: false
+        default: ''
 
 permissions:
   contents: read
   pages: write
   id-token: write
 
-concurrency:
-  group: pages
-  cancel-in-progress: true
-
 jobs:
   deploy:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    concurrency:
+      group: pages
+      cancel-in-progress: true
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
@@ -40,7 +50,22 @@ jobs:
       EXPO_PUBLIC_API_URL: ${{ vars.PROD_API_URL || 'https://scene-19ss.onrender.com' }}
       EXPO_PUBLIC_WEB_BASE_PATH: /scene
     steps:
+      - name: Resolve the commit to build
+        id: ref
+        env:
+          REQUESTED: ${{ inputs.ref }}
+        run: |
+          ref="$REQUESTED"
+          if [ -z "$ref" ]; then
+            ref=$(curl -s --max-time 60 "$EXPO_PUBLIC_API_URL/health/ready" | jq -r '.commit // empty' || true)
+            [ -n "$ref" ] || { echo "could not read the production commit from /health/ready; pass a ref"; exit 1; }
+            echo "production is serving $ref"
+          fi
+          echo "ref=$ref" >> "$GITHUB_OUTPUT"
+
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.ref.outputs.ref }}
 
       - uses: actions/setup-node@v4
         with:
