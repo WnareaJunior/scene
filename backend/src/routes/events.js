@@ -5,6 +5,7 @@ const multer = require('multer');
 const { v4: uuidv4 } = require('uuid');
 
 const storage = require('../storage');
+const { eventVisibilitySql, canSeeEvent } = require('../eventVisibility');
 
 const ALLOWED_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 const MIME_TO_EXT = { 'image/jpeg': '.jpg', 'image/png': '.png', 'image/webp': '.webp' };
@@ -133,6 +134,11 @@ router.get('/random', requireAuth, async (req, res, next) => {
       hashtagFilter = `AND hashtags && $${params.length}`;
     }
 
+    // Pushed last on purpose: geoFilter above hardcodes $1..$3, so the viewer
+    // has to take whatever index is left rather than shifting those.
+    params.push(req.user.sub);
+    const visibility = eventVisibilitySql(`$${params.length}`);
+
     const { rows } = await db.query(
       `SELECT e.id, e.title, e.description, e.latitude, e.longitude, e.address,
               e.start_time, e.end_time, e.capacity, e.hashtags, e.image_url,
@@ -142,7 +148,7 @@ router.get('/random', requireAuth, async (req, res, next) => {
        JOIN users u ON u.id = e.host_id
        LEFT JOIN rsvps r ON r.event_id = e.id
        WHERE e.status = 'active'
-         AND e.is_private = false
+         AND ${visibility}
          AND e.start_time >= now()
          ${geoFilter} ${hashtagFilter}
        GROUP BY e.id, u.username
@@ -178,7 +184,7 @@ router.get('/', requireAuth, async (req, res, next) => {
     const params = [req.user.sub];
     const conditions = [
       `e.status = 'active'`,
-      `e.is_private = false`,
+      eventVisibilitySql('$1'),
       `e.host_id != $1`,
       // Blocking hides the blocked host's parties from the blocker everywhere.
       `NOT EXISTS (SELECT 1 FROM blocks WHERE blocker_id = $1 AND blocked_id = e.host_id)`,
@@ -297,12 +303,8 @@ router.get('/:eventId', requireAuth, async (req, res, next) => {
     if (!rows.length) return res.status(404).json({ error: 'Event not found' });
 
     const event = rows[0];
-    if (event.is_private && event.host_id !== req.user.sub) {
-      const { rows: rsvpRows } = await db.query(
-        `SELECT 1 FROM rsvps WHERE event_id = $1 AND user_id = $2 AND status = 'going'`,
-        [event.id, req.user.sub]
-      );
-      if (!rsvpRows.length) return res.status(404).json({ error: 'Event not found' });
+    if (!(await canSeeEvent(event, req.user.sub))) {
+      return res.status(404).json({ error: 'Event not found' });
     }
 
     res.json(event);
@@ -548,14 +550,7 @@ async function visibleEvent(eventId, userId) {
     [eventId]
   );
   if (!rows.length) return null;
-  const event = rows[0];
-  if (!event.is_private || event.host_id === userId) return event;
-
-  const { rows: rsvpRows } = await db.query(
-    `SELECT 1 FROM rsvps WHERE event_id = $1 AND user_id = $2 AND status = 'going'`,
-    [eventId, userId]
-  );
-  return rsvpRows.length ? event : null;
+  return (await canSeeEvent(rows[0], userId)) ? rows[0] : null;
 }
 
 // GET /events/:eventId/comments — oldest first; a thread reads forward.

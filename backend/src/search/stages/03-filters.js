@@ -10,6 +10,7 @@
 // bug the existing GET /events route has a comment apologizing for.
 
 const { GRACE_PERIOD_MINUTES, MAX_RADIUS_M } = require('../config');
+const { eventVisibilitySql } = require('../../eventVisibility');
 
 /**
  * Incremental parameterized-SQL builder. Never interpolates values.
@@ -76,7 +77,7 @@ function buildEventFilters(opts) {
   // Mirrors GET /events exactly. Search must not become a side channel that
   // surfaces private parties or blocked hosts the discover feed hides.
   builder.addRaw(`e.status = 'active'`);
-  builder.addRaw(`e.is_private = false`);
+  builder.addRaw(eventVisibilitySql(viewer));
   builder.addRaw(`e.host_id != ${viewer}`);
   builder.addRaw(
     `NOT EXISTS (SELECT 1 FROM blocks WHERE blocker_id = ${viewer} AND blocked_id = e.host_id)`

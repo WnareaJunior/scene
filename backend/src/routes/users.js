@@ -5,6 +5,7 @@ const requireAuth = require('../middleware/auth');
 const multer = require('multer');
 
 const storage = require('../storage');
+const { eventVisibilitySql } = require('../eventVisibility');
 
 const ALLOWED_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 const MIME_TO_EXT = { 'image/jpeg': '.jpg', 'image/png': '.png', 'image/webp': '.webp' };
@@ -226,14 +227,16 @@ router.get('/:userId/hosted-events', requireAuth, async (req, res, next) => {
     if (status === 'upcoming') filter = `AND start_time >= now()`;
     else if (status === 'past') filter = `AND start_time < now()`;
 
-    // Only the host may see their own private events here; for everyone else this
-    // is a public profile view, so private events are excluded.
+    // Private events on a profile follow the same rule as everywhere else
+    // (src/eventVisibility.js): the host sees their own, followers see them,
+    // and anyone already RSVP'd keeps access. A stranger sees only the public
+    // ones, so this stays a public profile view for people outside the circle.
     const { rows } = await db.query(
       `SELECT id, title, description, latitude, longitude, address, start_time, end_time,
               capacity, hashtags, is_private, show_attendees, status, created_at, image_url
        FROM events
        WHERE host_id = $1 AND status != 'cancelled'
-         AND (is_private = false OR host_id = $2) ${filter}
+         AND ${eventVisibilitySql('$2', 'events')} ${filter}
        ORDER BY start_time DESC`,
       [req.params.userId, req.user.sub]
     );

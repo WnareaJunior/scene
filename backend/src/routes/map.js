@@ -1,6 +1,7 @@
 const router = require('express').Router();
 const db = require('../db');
 const requireAuth = require('../middleware/auth');
+const { eventVisibilitySql } = require('../eventVisibility');
 
 // GET /map/events
 router.get('/events', requireAuth, async (req, res, next) => {
@@ -31,7 +32,7 @@ router.get('/events', requireAuth, async (req, res, next) => {
        FROM events e
        LEFT JOIN rsvps r ON r.event_id = e.id
        WHERE e.status = 'active'
-         AND e.is_private = false
+         AND ${eventVisibilitySql('$5')}
          -- keep live parties on the map: a party without an end time counts as
          -- live for 4 hours after it starts (matches the client's getState)
          AND COALESCE(e.end_time, e.start_time + interval '4 hours') > now()
