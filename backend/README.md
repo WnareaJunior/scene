@@ -260,6 +260,12 @@ go through it.
 
 ## Deploying
 
+The two Render services' settings (build/start commands, health check path,
+auto-deploy, non-secret env vars) are written down in `render.yaml` at the repo
+root. Render does not read it automatically — the services predate it — so
+change a setting there **and** in the dashboard until they are linked to that
+Blueprint.
+
 - **Staging** (Render `scene-staging`, `https://scene-staging-pr6j.onrender.com`, My project / Staging) auto-deploys from `main`.
 - **Gate into main**: branch protection requires the `backend` and `web-e2e`
   CI checks on an up-to-date branch before a PR can merge.
