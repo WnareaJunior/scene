@@ -3,7 +3,15 @@
 # Render's auto-deploy on push to main is switched OFF for the production
 # service; this workflow is the only path to prod. It runs under the
 # `production` GitHub Environment, which requires a reviewer to approve each
-# run, then calls the Render deploy hook and waits for /health to answer.
+# run, then:
+#   1. resolves the requested ref to a commit SHA and refuses anything that is
+#      not on main (main only moves through PRs with green CI);
+#   2. calls the Render deploy hook with that SHA (the hook's `ref` parameter
+#      must be a SHA, not a branch name);
+#   3. waits until /health/ready reports that exact commit AND a database whose
+#      migration ledger matches the files — not just "some instance answered";
+#   4. publishes the web app from the same commit (deploy-web.yml), so the
+#      Pages build never runs ahead of the API it talks to.
 #
 # One-time setup (Render dashboard + repo settings):
 #   1. Production service → Settings → Auto-Deploy: No.
@@ -11,15 +19,15 @@
 #   3. Repo → Settings → Environments → production → secret RENDER_DEPLOY_HOOK
 #      = that URL; required reviewers = Wilson.
 #
-# Staging stays on auto-deploy from main, so every merge is rehearsed there
-# before anyone presses this button.
+# Staging stays on auto-deploy from main, and staging-smoke.yml checks every
+# merge there before anyone presses this button.
 name: deploy-prod
 
 on:
   workflow_dispatch:
     inputs:
       ref:
-        description: Git ref to deploy (Render builds this from the repo)
+        description: Commit SHA or branch to deploy (must be on main)
         required: true
         default: main
 
@@ -27,38 +35,86 @@ concurrency:
   group: deploy-prod
   cancel-in-progress: false
 
+permissions:
+  contents: read
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     environment:
       name: production
-      url: https://scene-19ss.onrender.com/health
+      url: https://scene-19ss.onrender.com/health/ready
     env:
-      HEALTH_URL: https://scene-19ss.onrender.com/health
+      READY_URL: https://scene-19ss.onrender.com/health/ready
+    outputs:
+      sha: ${{ steps.resolve.outputs.sha }}
     steps:
-      - name: Record what is being deployed
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+          fetch-depth: 0
+
+      - name: Resolve the commit and check it is on main
+        id: resolve
+        env:
+          REQUESTED: ${{ inputs.ref }}
         run: |
-          echo "ref: ${{ inputs.ref }}"
-          echo "by:  ${{ github.actor }}"
+          sha=$(git rev-parse HEAD)
+          if ! git merge-base --is-ancestor "$sha" origin/main; then
+            echo "$sha is not on main — only merged, CI-checked commits go to production"; exit 1
+          fi
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "ref: $REQUESTED → $sha"
+          echo "by:  $GITHUB_ACTOR"
+          git log -1 --format='     %s' "$sha"
 
       - name: Trigger Render deploy
+        env:
+          HOOK: ${{ secrets.RENDER_DEPLOY_HOOK }}
+          SHA: ${{ steps.resolve.outputs.sha }}
         run: |
-          if [ -z "${{ secrets.RENDER_DEPLOY_HOOK }}" ]; then
+          if [ -z "$HOOK" ]; then
             echo "RENDER_DEPLOY_HOOK is not set on the production environment"; exit 1
           fi
-          curl -sf -X POST "${{ secrets.RENDER_DEPLOY_HOOK }}&ref=${{ inputs.ref }}" -o /dev/null
-          echo "deploy hook accepted"
+          case "$HOOK" in *\?*) sep='&' ;; *) sep='?' ;; esac
+          curl -sf -X POST "${HOOK}${sep}ref=${SHA}" -o /dev/null
+          echo "deploy hook accepted for $SHA"
 
-      - name: Wait for the new instance to answer
+      - name: Wait for that commit to be live and ready
+        env:
+          SHA: ${{ steps.resolve.outputs.sha }}
         run: |
-          # Render swaps instances once the new one passes its own health check;
-          # a free-tier build plus boot is typically 2–5 minutes.
-          sleep 90
-          for i in $(seq 1 30); do
-            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 30 "$HEALTH_URL" || true)
-            echo "health: $code"
-            [ "$code" = "200" ] && exit 0
+          # Free-tier build plus boot is typically 2–5 minutes. Render only
+          # swaps instances once the new one is healthy, so until then the old
+          # commit keeps answering — which is why this matches on the SHA.
+          sleep 60
+          body=''
+          for i in $(seq 1 45); do
+            body=$(curl -s --max-time 30 "$READY_URL" || true)
+            commit=$(printf '%s' "$body" | jq -r '.commit // empty' 2>/dev/null || true)
+            status=$(printf '%s' "$body" | jq -r '.status // empty' 2>/dev/null || true)
+            echo "[$i] commit=${commit:-?} status=${status:-?}"
+            if [ "$commit" = "$SHA" ] && [ "$status" = "ready" ]; then
+              echo "production is serving $SHA and its schema is up to date"; exit 0
+            fi
+            if [ "$commit" = "$SHA" ]; then
+              echo "$SHA is live but not ready (pending migrations? apply them by hand, or"
+              echo "set MIGRATE_ON_BOOT=true once production is baselined):"
+              printf '%s\n' "$body"
+            fi
             sleep 20
           done
-          echo "health never returned 200 — check the Render dashboard"; exit 1
+          echo "production never reported $SHA as ready — check the Render dashboard"
+          printf '%s\n' "$body"
+          exit 1
+
+  web:
+    needs: deploy
+    uses: ./.github/workflows/deploy-web.yml
+    with:
+      ref: ${{ needs.deploy.outputs.sha }}
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
