@@ -12,8 +12,19 @@ test('C1: own profile shows the seeded username and bio', async ({ page }) => {
   await expect(page.getByTestId('profile-bio')).not.toHaveText('');
 });
 
+// The profile screen renders the cached login user, then refreshes from
+// GET /users/me. Wait for that refresh so `original` is the server's bio, not
+// a stale cached one (against a remote API it can take seconds).
+const meLoaded = (page: import('@playwright/test').Page) =>
+  page.waitForResponse(
+    (r) => r.request().method() === 'GET' && new URL(r.url()).pathname.endsWith('/users/me'),
+    { timeout: 60_000 },
+  );
+
 test('C2: edited bio persists across a reload, then is restored', async ({ page }) => {
+  const loaded = meLoaded(page);
   await page.goto('/profile');
+  await loaded;
   const input = page.getByTestId('profile-bio-input');
   await expect(input).toBeVisible({ timeout: 60_000 });
   const original = await input.inputValue();
@@ -28,7 +39,9 @@ test('C2: edited bio persists across a reload, then is restored', async ({ page 
   await page.getByTestId('profile-save').click();
   await expect(page.getByTestId('profile-saved')).toBeVisible();
 
+  const reloaded = meLoaded(page);
   await page.reload();
+  await reloaded;
   await expect(page.getByTestId('profile-bio')).toHaveText(stamped, { timeout: 60_000 });
 
   // Restore so the test is re-runnable and other tests see a stable account.
