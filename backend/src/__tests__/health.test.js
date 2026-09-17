@@ -82,3 +82,16 @@ test('an applied migration edited on disk (checksum drift) makes the instance no
   assert.equal(result.status, 'not_ready');
   assert.deepEqual(result.migrations.drifted, [first]);
 });
+
+test('CRLF copies of the applied migrations (a Windows checkout) are not drift', async () => {
+  const dir = migrationsCopy((d) => {
+    for (const f of realFiles) {
+      const p = path.join(d, f);
+      fs.writeFileSync(p, fs.readFileSync(p, 'utf8').replace(/\r?\n/g, '\r\n'));
+    }
+  });
+
+  const result = await checkReadiness({ dir });
+  assert.deepEqual(result.migrations.drifted, []);
+  assert.equal(result.status, 'ready');
+});

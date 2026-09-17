@@ -136,7 +136,8 @@ pg_dump "$DATABASE_URL" --schema-only --no-owner --no-privileges \
 **Adding a migration:** create `backend/migrations/NNNN_short_name.sql` with the
 next number. Additive changes only in a normal PR (new table, new nullable
 column, new index). Never edit a file that has been applied anywhere; the
-runner checks checksums and will stop. Put `-- migrate:no-transaction` on the
+runner checks checksums and will stop. Checksums ignore line endings, so a
+Windows checkout (CRLF) and the server (LF) agree. Put `-- migrate:no-transaction` on the
 first line for statements that cannot run in a transaction
 (`CREATE INDEX CONCURRENTLY`).
 
