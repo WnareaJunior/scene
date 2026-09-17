@@ -1,0 +1,86 @@
+# Rehearse migrations: run a branch's pending migrations against a scrubbed
+# copy of the staging database, on a throwaway Postgres inside the runner.
+# Manual on purpose: it reads the staging database, so it runs under the
+# `staging` environment and only when someone asks.
+#
+#   Actions → rehearse-migrations → Run workflow → ref = the branch with the new
+#   migration files
+#
+# Nothing leaves the runner: the dump and the scrubbed copy are deleted with
+# it, and no artifact is uploaded. Needs the `staging` environment secret
+# STAGING_DATABASE_URL (the same one staging-smoke uses).
+name: rehearse-migrations
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Branch or SHA whose migrations to rehearse
+        required: true
+        default: main
+
+permissions:
+  contents: read
+
+jobs:
+  rehearse:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: staging
+    env:
+      PROD_DB_MARKER: ${{ vars.PROD_DB_MARKER || 'kxtrlrtuanjcchwwfqvj' }}
+      TARGET_URL: postgresql://scene:scene@localhost:5432/scene_rehearsal
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Write the staging env file (runner only)
+        env:
+          STAGING_DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
+        run: |
+          [ -n "$STAGING_DATABASE_URL" ] || { echo "STAGING_DATABASE_URL is not set on the staging environment"; exit 1; }
+          case "$STAGING_DATABASE_URL" in
+            *"$PROD_DB_MARKER"*) echo "STAGING_DATABASE_URL points at the production Supabase project"; exit 1 ;;
+          esac
+          umask 077
+          printf 'DATABASE_URL=%q\n' "$STAGING_DATABASE_URL" > backend/.env.staging
+
+      - name: Start Postgres (PostGIS + pgvector, 17)
+        run: |
+          docker build -t scene-test-postgres backend/test
+          docker run -d --name pg \
+            -e POSTGRES_USER=scene -e POSTGRES_PASSWORD=scene -e POSTGRES_DB=scene_rehearsal \
+            -p 5432:5432 scene-test-postgres
+          for i in $(seq 1 30); do
+            docker exec pg pg_isready -U scene -d scene_rehearsal && break
+            sleep 1
+          done
+          docker exec pg pg_isready -U scene -d scene_rehearsal
+
+      - name: Install Postgres 17 client tools
+        run: |
+          # pg_dump must be at least the server's major version.
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-common
+          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
+          sudo apt-get install -y -qq postgresql-client-17
+          echo "/usr/lib/postgresql/17/bin" >> "$GITHUB_PATH"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install backend dependencies
+        run: npm ci
+        working-directory: backend
+
+      - name: Rehearse
+        run: scripts/rehearse-migrations.sh staging "$TARGET_URL"
+        working-directory: backend
+
+      - name: Remove the env file
+        if: always()
+        run: rm -f backend/.env.staging
