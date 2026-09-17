@@ -12,9 +12,13 @@
 -- Note for anyone purging accounts (see scripts/purge-*): both foreign keys
 -- cascade, so deleting a user takes their comments with them, and deleting an
 -- event takes the whole thread.
+--
+-- gen_random_uuid() is built into Postgres 13+. The older tables use
+-- uuid_generate_v4(), but on Supabase uuid-ossp lives in the `extensions`
+-- schema, so `public.uuid_generate_v4()` does not exist there.
 
 CREATE TABLE public.event_comments (
-    id         uuid DEFAULT public.uuid_generate_v4() NOT NULL,
+    id         uuid DEFAULT gen_random_uuid() NOT NULL,
     event_id   uuid NOT NULL,
     user_id    uuid NOT NULL,
     body       text NOT NULL,
