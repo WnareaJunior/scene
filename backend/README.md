@@ -218,11 +218,26 @@ go through it.
 ## Deploying
 
 - **Staging** (Render `scene-staging`, `https://scene-staging-pr6j.onrender.com`, My project / Staging) auto-deploys from `main`.
+- **Gate into main**: branch protection requires the `backend` and `web-e2e`
+  CI checks on an up-to-date branch before a PR can merge.
+- **Staging check**: `staging-smoke` runs on every push to `main`. It waits for
+  staging's `/health/ready` to report the merged commit, then runs the
+  Playwright suite against the staging API. It writes only to the staging
+  database (e2e account reset, event top-up, cleanup of `e2e+*` users) and
+  refuses the production host and project. Setup is in the workflow header:
+  a `staging` GitHub environment with `STAGING_DATABASE_URL` and
+  `STAGING_E2E_KEY`, plus `E2E_RATE_LIMIT_BYPASS` and
+  `http://localhost:4173` in `ALLOWED_ORIGINS` on the staging Render service.
 - **Production** deploys only through the `deploy-prod` GitHub Actions workflow
-  (`Actions → deploy-prod → Run workflow`). It runs under the `production`
-  environment, which needs a reviewer's approval, then calls the Render deploy
-  hook and waits for `/health`. Render's own auto-deploy for the production
-  service is switched off so nothing reaches prod by accident.
+  (`Actions → deploy-prod → Run workflow`, with a SHA or `main`). It runs under
+  the `production` environment, which needs a reviewer's approval. It refuses
+  commits that are not on `main`, sends the commit SHA to the Render deploy
+  hook, and waits until `/health/ready` reports that SHA with no pending
+  migrations. Render's own auto-deploy for the production service is switched
+  off so nothing reaches prod by accident.
+- **Web app**: `deploy-web` no longer runs on every merge. `deploy-prod` calls
+  it with the same SHA once production is ready, because the web build talks
+  to the production API.
 - **Keep-warm**: Render's free tier sleeps after ~15 idle minutes. Uptime Kuma
   on the devbox pings `/health` every 5 minutes (monitor "Scene API (prod)")
   and alerts through ntfy; that replaced the GitHub cron, which could not hold

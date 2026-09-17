@@ -1,0 +1,169 @@
+# Staging smoke: after every merge to main, wait for staging to be serving
+# that commit with an up-to-date schema, then run the Playwright suite against
+# the staging API. This is the check that stands between "CI passed on a
+# throwaway database" and pressing deploy-prod.
+#
+# It writes to the STAGING database only: it resets the e2e account (with a
+# fresh random password each run), tops up seed events when the feed would be
+# too short for B2, and deletes the e2e+* users its signup tests create. Two
+# guards refuse to run against production: the API host, and the database URL
+# (which must not contain the production Supabase project ref).
+#
+# One-time setup:
+#   Repo → Settings → Environments → new environment `staging`, with secrets
+#     STAGING_DATABASE_URL  the staging Supabase connection string
+#     STAGING_E2E_KEY       any long random string
+#   Render → scene-staging → Environment:
+#     E2E_RATE_LIMIT_BYPASS = the same value as STAGING_E2E_KEY
+#     ALLOWED_ORIGINS       add http://localhost:4173 (the suite serves the
+#                           web build there and calls staging from it)
+# Optional repo variables: STAGING_API_URL, PROD_DB_MARKER.
+name: staging-smoke
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# A newer merge supersedes an older one: staging will only ever report the
+# newest commit, so the older run could never finish waiting anyway.
+concurrency:
+  group: staging-smoke
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: staging
+    env:
+      API_URL: ${{ vars.STAGING_API_URL || 'https://scene-staging-pr6j.onrender.com' }}
+      # The production Supabase project ref (public: it is in docs/scene-atlas.html).
+      PROD_DB_MARKER: ${{ vars.PROD_DB_MARKER || 'kxtrlrtuanjcchwwfqvj' }}
+      DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
+      E2E_EMAIL: scene.e2e@e2e.test
+      E2E_USERNAME: scene_e2e
+      E2E_KEY: ${{ secrets.STAGING_E2E_KEY }}
+      E2E_WEB_URL: http://localhost:4173
+      EXPO_PUBLIC_API_URL: ${{ vars.STAGING_API_URL || 'https://scene-staging-pr6j.onrender.com' }}
+    steps:
+      - name: Refuse anything that looks like production
+        run: |
+          host=$(printf '%s' "$API_URL" | sed -E 's#^[a-z]+://([^/:]+).*#\1#')
+          case "$host" in
+            scene-19ss.onrender.com) echo "API_URL points at production ($host)"; exit 1 ;;
+          esac
+          [ -n "$DATABASE_URL" ] || { echo "STAGING_DATABASE_URL is not set on the staging environment"; exit 1; }
+          [ -n "$E2E_KEY" ] || { echo "STAGING_E2E_KEY is not set on the staging environment"; exit 1; }
+          [ -n "$PROD_DB_MARKER" ] || { echo "PROD_DB_MARKER is empty"; exit 1; }
+          case "$DATABASE_URL" in
+            *"$PROD_DB_MARKER"*) echo "STAGING_DATABASE_URL points at the production Supabase project"; exit 1 ;;
+          esac
+          echo "target: $host"
+
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Wait for staging to serve this commit
+        run: |
+          # Render auto-deploys staging on push; free-tier build plus boot is
+          # usually 2–5 minutes, and the first request may also wake it.
+          body=''
+          for i in $(seq 1 60); do
+            body=$(curl -s --max-time 60 "$API_URL/health/ready" || true)
+            commit=$(printf '%s' "$body" | jq -r '.commit // empty' 2>/dev/null || true)
+            status=$(printf '%s' "$body" | jq -r '.status // empty' 2>/dev/null || true)
+            echo "[$i] commit=${commit:-?} status=${status:-?}"
+            if [ "$commit" = "$GITHUB_SHA" ] && [ "$status" = "ready" ]; then exit 0; fi
+            # A merge that changes nothing Render builds may not redeploy
+            # staging. If staging is ready on an ancestor and nothing under
+            # backend/ changed since, that deploy is already this code.
+            if [ "$status" = "ready" ] && [ -n "$commit" ] && [ "$i" -ge 15 ] \
+               && git merge-base --is-ancestor "$commit" "$GITHUB_SHA" 2>/dev/null \
+               && git diff --quiet "$commit" "$GITHUB_SHA" -- backend; then
+              echo "staging is on $commit; backend/ is unchanged since, so it is serving this code"; exit 0
+            fi
+            if [ "$commit" = "$GITHUB_SHA" ]; then
+              echo "this commit is live on staging but not ready:"; printf '%s\n' "$body"
+            fi
+            sleep 20
+          done
+          echo "staging never reported $GITHUB_SHA as ready"; printf '%s\n' "$body"; exit 1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            backend/package-lock.json
+            frontend/package-lock.json
+            e2e/package-lock.json
+
+      - name: Install backend dependencies
+        run: npm ci
+        working-directory: backend
+
+      - name: Reset the e2e account and top up events
+        working-directory: backend
+        run: |
+          # A fresh password every run: nothing long-lived to store or leak.
+          E2E_PASSWORD="e2e-$(openssl rand -hex 16)"
+          echo "::add-mask::$E2E_PASSWORD"
+          echo "E2E_PASSWORD=$E2E_PASSWORD" >> "$GITHUB_ENV"
+          E2E_PASSWORD="$E2E_PASSWORD" node scripts/seed-e2e-account.js
+
+          # B2 needs a full first page (20) of upcoming public parties.
+          upcoming=$(node -e '
+            const db = require("./src/db");
+            db.query(`SELECT count(*)::int AS n FROM events
+                       WHERE status = $$active$$ AND is_private = false AND start_time > now()`)
+              .then(({ rows }) => { console.log(rows[0].n); return db.end(); })
+              .catch((e) => { console.error(e.message); process.exit(1); });')
+          echo "upcoming public events on staging: $upcoming"
+          if [ "$upcoming" -lt 25 ]; then
+            node scripts/seed-nyc-events.js --count 30
+          fi
+
+      - name: Install frontend dependencies
+        run: npm ci
+        working-directory: frontend
+
+      - name: Export web build (pointed at staging)
+        run: npx expo export --platform web
+        working-directory: frontend
+
+      - name: Install e2e dependencies
+        run: npm ci
+        working-directory: e2e
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps webkit chromium
+        working-directory: e2e
+
+      - name: Run Playwright suite against staging
+        run: npx playwright test
+        working-directory: e2e
+
+      - name: Delete the users this run's signup tests created
+        if: always()
+        working-directory: backend
+        run: |
+          node -e '
+            const db = require("./src/db");
+            db.query(`DELETE FROM users WHERE email LIKE $$e2e+%@e2e.test$$`)
+              .then(({ rowCount }) => { console.log(`deleted ${rowCount} e2e+ users`); return db.end(); })
+              .catch((e) => { console.error(e.message); process.exit(1); });'
+
+      - name: Upload report and traces
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: staging-playwright-report
+          path: |
+            e2e/playwright-report
+            e2e/test-results
+          retention-days: 7
