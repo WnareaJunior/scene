@@ -31,9 +31,23 @@ jobs:
       PROD_DB_MARKER: ${{ vars.PROD_DB_MARKER || 'kxtrlrtuanjcchwwfqvj' }}
       TARGET_URL: postgresql://scene:scene@localhost:5432/scene_rehearsal
     steps:
+      # The tooling (scripts, migrate.js, the Postgres image) comes from the
+      # commit this workflow runs on; only backend/migrations/ comes from the
+      # requested ref. A feature branch cut before a tooling fix would
+      # otherwise rehearse with stale scripts, or with none at all.
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.ref }}
+          fetch-depth: 0
+
+      - name: Take backend/migrations from the requested ref
+        env:
+          REF: ${{ inputs.ref }}
+        run: |
+          sha=$(git rev-parse --verify --quiet "origin/$REF^{commit}" || git rev-parse --verify "$REF^{commit}")
+          rm -rf backend/migrations
+          git checkout "$sha" -- backend/migrations
+          echo "tooling: $(git rev-parse --short HEAD)   migrations: $REF ($(git rev-parse --short "$sha"))"
+          ls backend/migrations
 
       - name: Write the staging env file (runner only)
         env:

@@ -226,7 +226,9 @@ files (timed), and checks that a second run is a no-op. If it fails here, it
 would have failed on the hosted database.
 
 Without a local Postgres, run it on a CI runner instead: **Actions →
-rehearse-migrations → Run workflow**, with the branch as `ref`. It uses the
+rehearse-migrations → Run workflow**, with the branch as `ref`. The scripts
+come from `main` and only `backend/migrations/` from that branch, so a branch
+cut before a tooling fix still rehearses with current tooling. It uses the
 `staging` environment's `STAGING_DATABASE_URL`, the same PostGIS + pgvector
 image as CI, and uploads nothing.
 
