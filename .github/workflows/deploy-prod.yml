@@ -6,17 +6,40 @@
 # run, then:
 #   1. resolves the requested ref to a commit SHA and refuses anything that is
 #      not on main (main only moves through PRs with green CI);
-#   2. calls the Render deploy hook with that SHA (the hook's `ref` parameter
+#   2. fast-forwards the `production` branch to that SHA — see below;
+#   3. calls the Render deploy hook with that SHA (the hook's `ref` parameter
 #      must be a SHA, not a branch name);
-#   3. waits until /health/ready reports that exact commit AND a database whose
+#   4. waits until /health/ready reports that exact commit AND a database whose
 #      migration ledger matches the files — not just "some instance answered";
-#   4. publishes the web app from the same commit (deploy-web.yml), so the
+#   5. publishes the web app from the same commit (deploy-web.yml), so the
 #      Pages build never runs ahead of the API it talks to.
+#
+# ── Why the `production` branch exists ─────────────────────────────────────
+# Auto-Deploy: No only stops deploys triggered by a push. It does NOT stop the
+# other ways Render starts a deploy, and every one of those that is not handed
+# an explicit commit resolves to *the tip of the service's tracked branch*:
+#   * saving an environment variable with "Save, rebuild, and deploy" or
+#     "Save and deploy" (the dashboard offers "Save only", which does not
+#     deploy — but it is one wrong button away);
+#   * the dashboard's "Deploy latest commit" button;
+#   * POST /v1/services/{id}/deploys without a commitId.
+# On 2026-09-17 an env-var save did exactly this and shipped two merges to
+# production outside this workflow. Nothing harmful went out, but the gate was
+# bypassed, and Render has no "pin to a commit" setting to prevent it.
+#
+# So the service tracks `production` instead of `main`, and this workflow is
+# the only thing that moves it. An accidental rebuild then redeploys the last
+# approved commit instead of whatever merged this morning.
+#
+# The push is fast-forward only. A deliberate rollback to an older commit is
+# therefore refused until you re-run with rollback: true, which force-updates
+# the branch — so a rollback is a decision, never a slip.
 #
 # One-time setup (Render dashboard + repo settings):
 #   1. Production service → Settings → Auto-Deploy: No.
-#   2. Production service → Settings → Deploy Hook → copy the URL.
-#   3. Repo → Settings → Environments → production → secret RENDER_DEPLOY_HOOK
+#   2. Production service → Settings → Branch: production (NOT main).
+#   3. Production service → Settings → Deploy Hook → copy the URL.
+#   4. Repo → Settings → Environments → production → secret RENDER_DEPLOY_HOOK
 #      = that URL; required reviewers = Wilson.
 #
 # Staging stays on auto-deploy from main, and staging-smoke.yml checks every
@@ -30,6 +53,11 @@ on:
         description: Commit SHA or branch to deploy (must be on main)
         required: true
         default: main
+      rollback:
+        description: "Allow moving production BACKWARDS to an older commit (force-updates the production branch)"
+        required: false
+        default: false
+        type: boolean
 
 concurrency:
   group: deploy-prod
@@ -42,6 +70,9 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    # Only this job writes, and only to move the production branch.
+    permissions:
+      contents: write
     environment:
       name: production
       url: https://scene-19ss.onrender.com/health/ready
@@ -68,6 +99,45 @@ jobs:
           echo "ref: $REQUESTED → $sha"
           echo "by:  $GITHUB_ACTOR"
           git log -1 --format='     %s' "$sha"
+
+      # The service tracks this branch, so its tip is what any deploy Render
+      # starts on its own will build. Moving it here — before the hook fires —
+      # means an accidental rebuild at any later moment redeploys this same
+      # commit rather than main's tip.
+      - name: Advance the production branch
+        env:
+          SHA: ${{ steps.resolve.outputs.sha }}
+          ROLLBACK: ${{ inputs.rollback }}
+        run: |
+          set -euo pipefail
+          # Absent on the very first run; the 2>/dev/null keeps git's "couldn't
+          # find remote ref" out of a log where it reads like a failure.
+          git fetch --no-tags origin +refs/heads/production:refs/remotes/origin/production 2>/dev/null || true
+
+          if git rev-parse --verify -q refs/remotes/origin/production >/dev/null; then
+            current=$(git rev-parse refs/remotes/origin/production)
+            echo "production is at $current"
+            if [ "$current" = "$SHA" ]; then
+              echo "already at $SHA — nothing to move"
+              exit 0
+            fi
+            if git merge-base --is-ancestor "$current" "$SHA"; then
+              echo "fast-forward $current → $SHA"
+            elif [ "$ROLLBACK" = "true" ]; then
+              echo "ROLLBACK: force-moving production $current → $SHA"
+              git push --force origin "$SHA:refs/heads/production"
+              exit 0
+            else
+              echo "refusing: $SHA is not a descendant of production's current tip $current."
+              echo "That means this is a rollback. Re-run with rollback: true if you mean it."
+              exit 1
+            fi
+          else
+            echo "production branch does not exist yet — creating it at $SHA"
+          fi
+
+          git push origin "$SHA:refs/heads/production"
+          echo "production now points at $SHA"
 
       - name: Trigger Render deploy
         env:
