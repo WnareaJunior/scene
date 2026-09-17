@@ -202,10 +202,32 @@ scripts/snapshot-restore.sh staging postgresql://dev:<pw>@localhost:5433/scene_s
 ```
 
 Dumps the source through `with-env.sh` (so the environment name is typed),
-excludes `search_logs` and `refresh_tokens`, restores into the local target,
-then runs `scripts/scrub.sql`: every email becomes `<id>@scrub.test`, every
-password becomes `password123`, sessions/reports/blocks are emptied. The
-target host must be local. Needs `pg_dump`, `pg_restore` and `psql` on PATH.
+excludes the rows of `search_logs` and `refresh_tokens` and Supabase's own
+schemas (`auth`, `storage`, …), restores into the local target, and checks
+that `users`, `events` and `schema_migrations` came through. `pg_restore`
+usually reports a few errors for platform leftovers; the script reports them
+and relies on that check instead. Then it runs `scripts/scrub.sql`: every email
+becomes `<id>@scrub.test`, every password becomes `password123`, and
+sessions, reports, blocks and search logs are emptied, in one transaction.
+`scrub.sql` refuses a database that has `auth.users` (a hosted one). The
+target host must be local. Needs `pg_dump`, `pg_restore` and `psql` of the
+source's major version (17) on PATH.
+
+### Rehearse migrations before applying them
+
+```bash
+scripts/rehearse-migrations.sh staging postgresql://dev:<pw>@localhost:5433/scene_rehearsal
+```
+
+Run it from the branch that adds the migrations. It snapshots and scrubs the
+source into the local target, shows `migrate.js --status`, applies the pending
+files (timed), and checks that a second run is a no-op. If it fails here, it
+would have failed on the hosted database.
+
+Without a local Postgres, run it on a CI runner instead: **Actions →
+rehearse-migrations → Run workflow**, with the branch as `ref`. It uses the
+`staging` environment's `STAGING_DATABASE_URL`, the same PostGIS + pgvector
+image as CI, and uploads nothing.
 
 ---
 
