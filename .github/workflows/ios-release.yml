@@ -1,0 +1,196 @@
+# iOS release — manual, gated, and it actually uploads.
+#
+# Until now the iOS app was the one thing with no pipeline at all: builds were
+# run by hand from a laptop with `eas build`, and build 8 was compiled but
+# never uploaded, which is why App Store Connect's build picker looked empty
+# for days. `eas build` does NOT submit. This workflow makes the upload part
+# of the same button so it cannot be forgotten again.
+#
+# Mirrors deploy-prod.yml on purpose: manual dispatch, the `production`
+# GitHub Environment (so it needs your approval per run), and a refusal to
+# build anything that is not on main.
+#
+# ── One-time setup (nothing here works until these exist) ───────────────────
+#   1. Expo → Account Settings → Access Tokens → create a *robot* token.
+#      Repo → Settings → Environments → production → secret EXPO_TOKEN.
+#   2. App Store Connect API key: already stored on EAS servers (used by the
+#      2026-08-12 submit). If that key is ever rotated, run
+#      `eas credentials` locally once — this workflow does not manage it.
+#   3. Optional repo variables, both with sensible defaults below:
+#      EXPO_PUBLIC_SHARE_HOST   the invite-link host compiled into the binary
+#      EXPO_PUBLIC_UPDATE_URL   set only when OTA updates are switched on
+#
+# ── What it does not do ────────────────────────────────────────────────────
+#   * No Android. The Play listing does not exist yet; add a parallel job when
+#     it does rather than bolting a matrix onto this one.
+#   * No OTA update publishing. `eas update` ships JS without review, which is
+#     a different risk decision from a store build — it deserves its own
+#     workflow and its own approval.
+#   * No version bumping. eas.json has appVersionSource: remote and
+#     autoIncrement on the production profile, so EAS owns the build number.
+#     The marketing version lives in app.config.js and is bumped in a PR.
+name: ios-release
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Commit SHA or branch to build (must be on main)
+        required: true
+        default: main
+      profile:
+        description: EAS build profile
+        required: true
+        default: production
+        type: choice
+        options:
+          - production
+          - preview
+      submit:
+        description: Upload to App Store Connect when the build succeeds (production only)
+        required: true
+        default: false
+        type: boolean
+
+# One iOS build at a time: EAS queues them anyway, and two runs racing on
+# autoIncrement is how you get two builds claiming the same build number.
+concurrency:
+  group: ios-release
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    environment:
+      name: production
+      url: https://appstoreconnect.apple.com/apps/6792423931
+    env:
+      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+    steps:
+      - name: Refuse to submit a non-production profile
+        if: ${{ inputs.submit && inputs.profile != 'production' }}
+        run: |
+          echo "submit: true is only valid with the production profile —"
+          echo "the preview profile is distribution: internal and App Store Connect will reject it."
+          exit 1
+
+      - name: Check EXPO_TOKEN is present
+        run: |
+          if [ -z "${EXPO_TOKEN:-}" ]; then
+            echo "EXPO_TOKEN is not set on the production environment."
+            echo "Expo → Account Settings → Access Tokens → create a robot token, then"
+            echo "Repo → Settings → Environments → production → New secret → EXPO_TOKEN."
+            exit 1
+          fi
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+          fetch-depth: 0
+
+      - name: Resolve the commit and check it is on main
+        id: resolve
+        env:
+          REQUESTED: ${{ inputs.ref }}
+        run: |
+          sha=$(git rev-parse HEAD)
+          if ! git merge-base --is-ancestor "$sha" origin/main; then
+            echo "$sha is not on main — only merged, CI-checked commits get built"; exit 1
+          fi
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "ref: $REQUESTED → $sha"
+          echo "by:  $GITHUB_ACTOR"
+          git log -1 --format='     %s' "$sha"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: frontend
+
+      - name: Install EAS CLI
+        run: npm install -g eas-cli@latest
+
+      # The same evaluation mobile-checks.yml runs on every PR. Repeated here
+      # because a release can be cut from a commit whose PR predates that gate.
+      - name: Expo config evaluates
+        working-directory: frontend
+        env:
+          EXPO_PUBLIC_SHARE_HOST: ${{ vars.EXPO_PUBLIC_SHARE_HOST }}
+          EXPO_PUBLIC_UPDATE_URL: ${{ vars.EXPO_PUBLIC_UPDATE_URL }}
+        run: npx expo config --type public > /dev/null
+
+      - name: Build
+        id: build
+        working-directory: frontend
+        env:
+          EXPO_PUBLIC_SHARE_HOST: ${{ vars.EXPO_PUBLIC_SHARE_HOST }}
+          EXPO_PUBLIC_UPDATE_URL: ${{ vars.EXPO_PUBLIC_UPDATE_URL }}
+          PROFILE: ${{ inputs.profile }}
+        run: |
+          set -euo pipefail
+          # --wait so the run's result is the build's result, --json so the
+          # build id is a value rather than something scraped from a log.
+          eas build \
+            --platform ios \
+            --profile "$PROFILE" \
+            --non-interactive \
+            --wait \
+            --json > build.json
+          id=$(node -e "
+            const b=require('./build.json');
+            const one=Array.isArray(b)?b[0]:b;
+            if(!one||!one.id){console.error('could not read a build id from build.json');process.exit(1)}
+            if(one.status && String(one.status).toLowerCase()!=='finished'){
+              console.error('build status: '+one.status);process.exit(1)
+            }
+            console.log(one.id);
+          ")
+          echo "id=$id" >> "$GITHUB_OUTPUT"
+          echo "build id: $id"
+
+      - name: Upload the build manifest
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eas-build-${{ steps.resolve.outputs.sha }}
+          path: frontend/build.json
+          if-no-files-found: ignore
+
+      # The step whose absence cost a week: a compiled build that never
+      # reaches App Store Connect looks exactly like no build at all.
+      - name: Submit to App Store Connect
+        if: ${{ inputs.submit }}
+        working-directory: frontend
+        env:
+          BUILD_ID: ${{ steps.build.outputs.id }}
+        run: |
+          set -euo pipefail
+          eas submit \
+            --platform ios \
+            --profile production \
+            --id "$BUILD_ID" \
+            --non-interactive
+          echo "uploaded $BUILD_ID — it still needs 'Manage Compliance' answered? No:"
+          echo "ITSAppUsesNonExemptEncryption=false is in app.config.js, so it should appear in TestFlight directly."
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "### iOS ${{ inputs.profile }} build"
+            echo ""
+            echo "- commit: \`${{ steps.resolve.outputs.sha }}\`"
+            echo "- build id: \`${{ steps.build.outputs.id || 'n/a' }}\`"
+            echo "- submitted: ${{ inputs.submit }}"
+            echo ""
+            echo "[App Store Connect](https://appstoreconnect.apple.com/apps/6792423931) · [EAS builds](https://expo.dev/accounts/wnareajunior/projects/scene/builds)"
+          } >> "$GITHUB_STEP_SUMMARY"

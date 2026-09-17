@@ -1,0 +1,128 @@
+# Mobile checks — the cheap gate the iOS app never had.
+#
+# The app has no unit tests and no type checker, so the failures that actually
+# reach a build are configuration ones: app.config.js throws, eas.json loses a
+# profile, or a build profile quietly starts pointing at the wrong API. Every
+# one of those is currently found by waiting ~20 minutes for an EAS build to
+# fail, or worse, by shipping it.
+#
+# This runs on any PR that touches frontend/, needs no secrets, and takes under
+# a minute. It does not build an app — see ios-release.yml for that.
+#
+# Deliberately NOT here:
+#   * `eas build` of any kind. It needs EXPO_TOKEN, costs build minutes, and
+#     queues for tens of minutes. Release builds are manual and gated.
+#   * expo-doctor as a hard gate. It flags upstream version drift the repo
+#     cannot always fix on the spot, so it runs but does not fail the job.
+name: mobile-checks
+
+on:
+  pull_request:
+    paths:
+      - 'frontend/**'
+      - '.github/workflows/mobile-checks.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'frontend/**'
+      - '.github/workflows/mobile-checks.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  config:
+    name: app config and build profiles
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: frontend
+
+      # app.config.js is real code: it parses URLs, derives associated domains
+      # from them and throws on a malformed share host. `expo config` is the
+      # cheapest way to prove it still evaluates.
+      - name: Expo config evaluates for each build profile's API URL
+        working-directory: frontend
+        run: |
+          set -euo pipefail
+          for url in \
+            "https://scene-19ss.onrender.com" \
+            "https://scene-staging-pr6j.onrender.com" \
+            "http://100.64.203.64:3005"
+          do
+            echo "::group::EXPO_PUBLIC_API_URL=$url"
+            EXPO_PUBLIC_API_URL="$url" npx expo config --type public > /dev/null
+            echo "::endgroup::"
+          done
+
+      # The web build ships from a subpath on GitHub Pages, which only takes
+      # effect through experiments.baseUrl — a silent drop would break every
+      # asset URL on the public site.
+      - name: Web base path reaches the config
+        working-directory: frontend
+        run: |
+          set -euo pipefail
+          EXPO_PUBLIC_WEB_BASE_PATH=/scene npx expo config --type public --json \
+            | node -e "
+              let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{
+                const c=JSON.parse(s);
+                const base=(c.experiments||{}).baseUrl;
+                if(base!=='/scene'){console.error('experiments.baseUrl was '+JSON.stringify(base)+', expected /scene');process.exit(1)}
+                console.log('baseUrl ok');
+              });"
+
+      # The guard exists because a share host with a scheme or a path produces
+      # associated domains iOS silently ignores — links then open Safari and
+      # nobody finds out until a user taps one.
+      - name: A malformed share host is still rejected
+        working-directory: frontend
+        run: |
+          set -euo pipefail
+          for bad in "https://scene.party/" "scene.party/e" "10.0.0.5"; do
+            if EXPO_PUBLIC_SHARE_HOST="$bad" npx expo config --type public > /dev/null 2>&1; then
+              echo "app.config.js accepted a malformed share host: $bad"
+              exit 1
+            fi
+            echo "rejected: $bad"
+          done
+
+      # A build profile silently repointed is the failure that ships a store
+      # binary at staging. Pin the invariants rather than the exact host.
+      - name: eas.json profiles point where they claim to
+        working-directory: frontend
+        run: |
+          node -e "
+            const eas = require('./eas.json');
+            const fail = (m) => { console.error(m); process.exitCode = 1; };
+            const prod = (eas.build.production || {});
+            const preview = (eas.build.preview || {});
+            const prodUrl = (prod.env || {}).EXPO_PUBLIC_API_URL || '';
+            const previewUrl = (preview.env || {}).EXPO_PUBLIC_API_URL || '';
+
+            if (prod.distribution !== 'store') fail('production profile must be distribution: store');
+            if (!prodUrl.startsWith('https://')) fail('production API URL must be https: ' + prodUrl);
+            if (/staging/i.test(prodUrl)) fail('production profile points at staging: ' + prodUrl);
+            if (!previewUrl.startsWith('https://')) fail('preview API URL must be https: ' + previewUrl);
+            if (prodUrl === previewUrl) fail('production and preview share an API URL: ' + prodUrl);
+            if (!((eas.submit.production || {}).ios || {}).ascAppId) fail('submit.production.ios.ascAppId is missing');
+            if (eas.cli.appVersionSource !== 'remote') fail('appVersionSource must stay remote, or build numbers collide');
+            if (prod.autoIncrement !== true) fail('production must autoIncrement, or App Store Connect rejects the build number');
+            if (!process.exitCode) console.log('eas.json ok');
+          "
+
+      # Advisory: upstream SDK drift is worth seeing on the PR, but it is not
+      # always this repo's to fix, so it does not gate the merge.
+      - name: expo-doctor (advisory)
+        working-directory: frontend
+        continue-on-error: true
+        run: npx --yes expo-doctor@latest
