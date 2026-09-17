@@ -60,6 +60,9 @@ export default function CreateScreen({ viewport, onCreated }) {
   const [mapScrollLocked, setMapScrollLocked] = useState(false);
   const [partyImage, setPartyImage] = useState(null);
   const [showMore, setShowMore] = useState(false);
+  // Mirrors events.show_attendees, which defaults true server-side. Off means
+  // only the host can pull the guest list; everyone else gets a 403.
+  const [showAttendees, setShowAttendees] = useState(true);
 
   const mapRef = useRef(null);
   const placesRef = useRef(null);
@@ -240,6 +243,7 @@ export default function CreateScreen({ viewport, onCreated }) {
         longitude: locationToSubmit.longitude,
         capacity,
         hashtags,
+        showAttendees,
         imageUrl,
       });
       if (data?.id) {
@@ -248,6 +252,7 @@ export default function CreateScreen({ viewport, onCreated }) {
         setTagInput('');
         setSelectedLocation(null);
         setPartyImage(null);
+        setShowAttendees(true);
         setShowMore(false);
         placesRef.current?.setAddressText('');
         setPosted(true);
@@ -460,9 +465,9 @@ export default function CreateScreen({ viewport, onCreated }) {
             style={styles.moreToggle}
             onPress={() => setShowMore((s) => !s)}
             accessibilityRole="button"
-            accessibilityLabel={showMore ? 'hide capacity and tags' : 'show capacity and tags'}
+            accessibilityLabel={showMore ? 'hide the optional fields' : 'show capacity, tags and guest list options'}
           >
-            <Text style={styles.moreToggleText}>{showMore ? '− less' : '+ capacity & tags'}</Text>
+            <Text style={styles.moreToggleText}>{showMore ? '− less' : '+ capacity, tags & guest list'}</Text>
           </TouchableOpacity>
 
           {showMore && (
@@ -507,6 +512,28 @@ export default function CreateScreen({ viewport, onCreated }) {
                   ))}
                 </View>
               )}
+
+              <TouchableOpacity
+                style={styles.toggleRow}
+                onPress={() => setShowAttendees((v) => !v)}
+                activeOpacity={0.7}
+                accessibilityRole="switch"
+                accessibilityState={{ checked: showAttendees }}
+                accessibilityLabel="show the guest list to everyone"
+                accessibilityHint="when off, only you can see who is coming"
+              >
+                <View style={[styles.checkbox, showAttendees && styles.checkboxOn]}>
+                  {showAttendees && <Text style={styles.checkboxMark}>✓</Text>}
+                </View>
+                <View style={styles.toggleCopy}>
+                  <Text style={styles.toggleLabel}>show who's coming</Text>
+                  <Text style={styles.toggleHint}>
+                    {showAttendees
+                      ? 'guests can see the list'
+                      : 'only you can see the list'}
+                  </Text>
+                </View>
+              </TouchableOpacity>
             </>
           )}
 
@@ -679,6 +706,21 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   moreToggleText: { color: COLORS.inkSecondary, fontSize: 14, fontWeight: '600' },
+
+  toggleRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    minHeight: 44, marginBottom: GAP,
+  },
+  checkbox: {
+    width: 20, height: 20,
+    borderWidth: 1, borderColor: COLORS.border,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  checkboxOn: { backgroundColor: COLORS.accent, borderColor: COLORS.accent },
+  checkboxMark: { color: COLORS.accentInk, fontSize: 13, fontWeight: '700' },
+  toggleCopy: { flexShrink: 1 },
+  toggleLabel: { color: COLORS.ink, fontSize: 14, fontWeight: '600' },
+  toggleHint: { color: COLORS.inkSecondary, fontSize: 12 },
 
   chipsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: GAP },
   chip: {

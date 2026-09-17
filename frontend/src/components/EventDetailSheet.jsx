@@ -5,6 +5,7 @@ import {
   Animated, PanResponder, Alert, Share,
 } from 'react-native';
 import { events as eventsApi } from '../api';
+import AttendeeList from './AttendeeList';
 import { COLORS } from '../constants/colors';
 
 const STATE_COLORS = { live: COLORS.liveGreen, upcoming: COLORS.accent, past: COLORS.inkFaint };
@@ -274,6 +275,13 @@ export default function EventDetailSheet({ event: eventProp, onClose, onRsvp, on
                     : null
                 }
               </View>
+
+              {/* Who's coming — face pile that expands inline */}
+              <AttendeeList
+                eventId={event.id}
+                goingCount={goingCount}
+                onUserPress={onHostPress}
+              />
 
               {/* Host controls / guest report */}
               {isHost ? (
