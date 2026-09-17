@@ -14,6 +14,7 @@ node_modules/
 *.dump
 !backend/migrations/*.sql
 !backend/migrations/legacy/*.sql
+!backend/scripts/scrub.sql
 
 # React Native
 .expo/
