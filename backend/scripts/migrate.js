@@ -30,8 +30,8 @@
 require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
-const crypto = require('crypto');
 const { Client } = require('pg');
+const { migrationChecksum, checksumMatches } = require('../src/migrationChecksum');
 
 const DIR = path.join(__dirname, '..', 'migrations');
 const LOCK_KEY = 7214001; // arbitrary, unique to this runner
@@ -53,7 +53,7 @@ function listFiles() {
         version: file.slice(0, 4),
         name: file,
         sql,
-        checksum: crypto.createHash('sha256').update(sql).digest('hex'),
+        checksum: migrationChecksum(sql), // line-ending insensitive
         noTransaction: /^--\s*migrate:no-transaction\b/m.test(head),
       };
     });
@@ -106,7 +106,7 @@ async function main() {
     // Drift check: an applied migration must not have been edited.
     for (const f of files) {
       const a = applied.get(f.version);
-      if (a && a.checksum !== f.checksum) {
+      if (a && !checksumMatches(a.checksum, f.sql)) {
         console.error(`migrate: ${f.name} was edited after it was applied (checksum mismatch). Add a new migration instead.`);
         process.exit(1);
       }

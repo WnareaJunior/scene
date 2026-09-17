@@ -15,8 +15,8 @@
 
 const fs = require('fs');
 const path = require('path');
-const crypto = require('crypto');
 const db = require('./db');
+const { migrationChecksum, checksumMatches } = require('./migrationChecksum');
 
 const MIGRATIONS_DIR = path.join(__dirname, '..', 'migrations');
 const FILE_RE = /^\d{4}_[\w-]+\.sql$/; // keep in step with scripts/migrate.js
@@ -32,8 +32,9 @@ function migrationFiles(dir) {
       .map((name) => ({
         version: name.slice(0, 4),
         name,
-        checksum: crypto.createHash('sha256').update(fs.readFileSync(path.join(dir, name), 'utf8')).digest('hex'),
-      }));
+        sql: fs.readFileSync(path.join(dir, name), 'utf8'),
+      }))
+      .map((f) => ({ ...f, checksum: migrationChecksum(f.sql) }));
     fileCache.set(dir, files);
   }
   return fileCache.get(dir);
@@ -72,7 +73,7 @@ async function checkReadiness({ dir = MIGRATIONS_DIR } = {}) {
   const pending = files.filter((f) => !applied.has(f.version)).map((f) => f.name);
   const missing = ledger.filter((r) => !onDisk.has(r.version)).map((r) => r.name);
   const drifted = files
-    .filter((f) => applied.has(f.version) && applied.get(f.version).checksum !== f.checksum)
+    .filter((f) => applied.has(f.version) && !checksumMatches(applied.get(f.version).checksum, f.sql))
     .map((f) => f.name);
 
   result.migrations = {
