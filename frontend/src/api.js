@@ -176,10 +176,14 @@ export const events = {
   feed: (params = {}) => request('GET', `/events/feed?${qs(params)}`),
   random: (params = {}) => request('GET', `/events/random?${qs(params)}`),
   get: (id) => request('GET', `/events/${id}`),
+  // The party behind an invite link; the token is the access check.
+  byInvite: (token) => request('GET', `/events/invite/${encodeURIComponent(token)}`),
+  inviteLink: (id) => request('POST', `/events/${id}/invite-link`),
   update: (id, data) => request('PATCH', `/events/${id}`, data),
   cancel: (id) => request('DELETE', `/events/${id}`),
   report: (id, reason) => request('POST', `/events/${id}/report`, { reason }),
-  rsvp: (id, status) => request('POST', `/events/${id}/rsvp`, { status }),
+  // inviteToken lets someone who arrived by link RSVP to a private party.
+  rsvp: (id, status, inviteToken) => request('POST', `/events/${id}/rsvp`, { status, inviteToken }),
   updateRsvp: (id, status) => request('PATCH', `/events/${id}/rsvp`, { status }),
   cancelRsvp: (id) => request('DELETE', `/events/${id}/rsvp`),
   attendees: (id, params = {}) => request('GET', `/events/${id}/attendees?${qs(params)}`),

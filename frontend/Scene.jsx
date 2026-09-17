@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { View, Text, Image, TouchableOpacity, StyleSheet, Dimensions, Keyboard } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { GestureDetector, Gesture } from 'react-native-gesture-handler';
@@ -27,7 +27,7 @@ const OVERDRAG = 0.15;
 // slideX = 0           → create
 // slideX = -SCREEN_W   → map (default)
 // slideX = -SCREEN_W*2 → profile
-export default function Scene({ user, onSignOut }) {
+export default function Scene({ user, onSignOut, inviteToken, onInviteHandled }) {
   const [viewport, setViewport] = useState(null);
   const [profileRefreshKey, setProfileRefreshKey] = useState(0);
   const [focusEvent, setFocusEvent] = useState(null);
@@ -63,6 +63,11 @@ export default function Scene({ user, onSignOut }) {
   }, [slideX, markVisited]);
 
   const dismissKeyboard = useCallback(() => Keyboard.dismiss(), []);
+
+  // An invite link opens on the map, wherever the user was swiped to.
+  useEffect(() => {
+    if (inviteToken) onNavigate('map');
+  }, [inviteToken, onNavigate]);
 
   function makeEdgePan(onlyDirection) {
     // Single-sided threshold: a [-99999, -15]-style range leaves no inactive
@@ -135,6 +140,8 @@ export default function Scene({ user, onSignOut }) {
                 onRegionChangeComplete={setViewport}
                 currentUserId={user?.id}
                 focusEvent={focusEvent}
+                inviteToken={inviteToken}
+                onInviteHandled={onInviteHandled}
               />
               {/* The swipe stays; these make it discoverable. Two 44pt targets
                   in the thumb zone, sitting just above the sheet's bar snap —

@@ -2,9 +2,10 @@ import React, { useState, useEffect, useRef } from 'react';
 import {
   Modal, View, Text, Image, TouchableOpacity,
   ScrollView, StyleSheet, Platform, ActivityIndicator,
-  Animated, PanResponder, Alert, Share,
+  Animated, PanResponder, Alert,
 } from 'react-native';
 import { events as eventsApi } from '../api';
+import { sharePartyLink, canShareParty } from '../inviteLink';
 import AttendeeList from './AttendeeList';
 import CommentThread from './CommentThread';
 import { COLORS } from '../constants/colors';
@@ -119,11 +120,10 @@ export default function EventDetailSheet({ event: eventProp, onClose, onRsvp, on
     }
   };
 
-  const handleShare = () => {
-    Share.share({
-      message: `${event.title} — ${date}${event.address ? ` · ${event.address}` : ''} (on scene)`,
-    }).catch(() => {});
-  };
+  // "send it" texts the party's invite link; iMessage turns it into a photo
+  // card. A private party's link can only come from its host.
+  const canShare = canShareParty(event, currentUserId) && event.status !== 'cancelled';
+  const handleShare = () => sharePartyLink(event);
 
   const handleReport = () => {
     const send = (reason) => {
@@ -338,14 +338,16 @@ export default function EventDetailSheet({ event: eventProp, onClose, onRsvp, on
                   {isFull && !hasRsvp ? 'party full' : hasRsvp ? 'going ✓' : 'RSVP'}
                 </Text>
               </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.shareBtn}
-                onPress={handleShare}
-                accessibilityRole="button"
-                accessibilityLabel="share this party"
-              >
-                <Text style={styles.shareBtnText}>send it</Text>
-              </TouchableOpacity>
+              {canShare && (
+                <TouchableOpacity
+                  style={styles.shareBtn}
+                  onPress={handleShare}
+                  accessibilityRole="button"
+                  accessibilityLabel="send an invite link to this party"
+                >
+                  <Text style={styles.shareBtnText}>send it</Text>
+                </TouchableOpacity>
+              )}
             </View>
           </>
         )}

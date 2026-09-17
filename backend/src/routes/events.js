@@ -6,6 +6,7 @@ const { v4: uuidv4 } = require('uuid');
 
 const storage = require('../storage');
 const { eventVisibilitySql, canSeeEvent } = require('../eventVisibility');
+const { isToken, ensureToken, inviteUrl } = require('../inviteLinks');
 
 const ALLOWED_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 const MIME_TO_EXT = { 'image/jpeg': '.jpg', 'image/png': '.png', 'image/webp': '.webp' };
@@ -282,32 +283,92 @@ router.get('/', requireAuth, async (req, res, next) => {
   }
 });
 
+// The full event the detail sheet renders, looked up by id or by invite token.
+// `column` is one of the two literals below, never caller input.
+async function loadEventDetail(column, value, viewerId) {
+  const { rows } = await db.query(
+    `SELECT e.id, e.title, e.description, e.latitude, e.longitude, e.address,
+            e.start_time, e.end_time, e.capacity, e.hashtags, e.is_private, e.show_attendees, e.status,
+            e.host_id, e.image_url,
+            COUNT(r.id) FILTER (WHERE r.status = 'going') AS going_count,
+            COUNT(r.id) FILTER (WHERE r.status = 'interested') AS interested_count,
+            u.username AS host_username, u.profile_picture AS host_picture,
+            (SELECT status FROM rsvps WHERE event_id = e.id AND user_id = $2) AS user_rsvp
+     FROM events e
+     JOIN users u ON u.id = e.host_id
+     LEFT JOIN rsvps r ON r.event_id = e.id
+     WHERE ${column === 'invite_token' ? 'e.invite_token' : 'e.id'} = $1
+     GROUP BY e.id, u.username, u.profile_picture`,
+    [value, viewerId]
+  );
+  return rows[0] || null;
+}
+
+// GET /events/invite/:token — the event behind an invite link.
+//
+// Holding the token is the access check: this is how a private party reaches
+// someone who doesn't follow the host. It unlocks this one event and nothing
+// else (see eventVisibility.js). Registered before /:eventId so "invite" is
+// never read as an id. A host who has blocked the viewer still wins — the link
+// answers 404 for them, the same as a dead token.
+router.get('/invite/:token', requireAuth, async (req, res, next) => {
+  try {
+    if (!isToken(req.params.token)) return res.status(404).json({ error: 'Event not found' });
+
+    const event = await loadEventDetail('invite_token', req.params.token, req.user.sub);
+    if (!event) return res.status(404).json({ error: 'Event not found' });
+
+    const { rows: blocked } = await db.query(
+      `SELECT 1 FROM blocks WHERE blocker_id = $1 AND blocked_id = $2`,
+      [event.host_id, req.user.sub]
+    );
+    if (blocked.length) return res.status(404).json({ error: 'Event not found' });
+
+    res.json(event);
+  } catch (err) {
+    next(err);
+  }
+});
+
 // GET /events/:eventId
 router.get('/:eventId', requireAuth, async (req, res, next) => {
   try {
-    const { rows } = await db.query(
-      `SELECT e.id, e.title, e.description, e.latitude, e.longitude, e.address,
-              e.start_time, e.end_time, e.capacity, e.hashtags, e.is_private, e.show_attendees, e.status,
-              e.host_id, e.image_url,
-              COUNT(r.id) FILTER (WHERE r.status = 'going') AS going_count,
-              COUNT(r.id) FILTER (WHERE r.status = 'interested') AS interested_count,
-              u.username AS host_username, u.profile_picture AS host_picture,
-              (SELECT status FROM rsvps WHERE event_id = e.id AND user_id = $2) AS user_rsvp
-       FROM events e
-       JOIN users u ON u.id = e.host_id
-       LEFT JOIN rsvps r ON r.event_id = e.id
-       WHERE e.id = $1
-       GROUP BY e.id, u.username, u.profile_picture`,
-      [req.params.eventId, req.user.sub]
-    );
-    if (!rows.length) return res.status(404).json({ error: 'Event not found' });
-
-    const event = rows[0];
+    const event = await loadEventDetail('id', req.params.eventId, req.user.sub);
     if (!(await canSeeEvent(event, req.user.sub))) {
       return res.status(404).json({ error: 'Event not found' });
     }
 
     res.json(event);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /events/:eventId/invite-link — the shareable URL for a party.
+//
+// Anyone who can see a public party can share it; the link grants nothing the
+// map doesn't. A private party's link is an invitation past the host's circle,
+// so only the host can hand one out — otherwise any follower could forward it
+// to anyone.
+router.post('/:eventId/invite-link', requireAuth, async (req, res, next) => {
+  try {
+    const { rows } = await db.query(
+      `SELECT id, host_id, is_private, status FROM events WHERE id = $1`,
+      [req.params.eventId]
+    );
+    const event = rows[0];
+    if (!(await canSeeEvent(event, req.user.sub))) {
+      return res.status(404).json({ error: 'Event not found' });
+    }
+    if (event.is_private && event.host_id !== req.user.sub) {
+      return res.status(403).json({ error: 'Only the host can invite people to a private party' });
+    }
+    if (event.status !== 'active') {
+      return res.status(409).json({ error: 'This party was called off' });
+    }
+
+    const token = await ensureToken(event.id);
+    res.json({ url: inviteUrl(req, token), token });
   } catch (err) {
     next(err);
   }
@@ -404,9 +465,27 @@ router.post('/:eventId/rsvp', requireAuth, async (req, res, next) => {
       return res.status(400).json({ error: 'status must be going or interested' });
     }
 
-    // Check event exists
-    const eventCheck = await db.query(`SELECT id FROM events WHERE id = $1`, [req.params.eventId]);
-    if (!eventCheck.rows.length) return res.status(404).json({ error: 'Event not found' });
+    // You can RSVP to what you can see, or to what you were sent a link to.
+    // The invite token is how a stranger joins a private party; once they
+    // have, their RSVP keeps it visible to them without the link.
+    const { rows: found } = await db.query(
+      `SELECT id, host_id, is_private, invite_token FROM events WHERE id = $1`,
+      [req.params.eventId]
+    );
+    const target = found[0];
+    const invited = target?.invite_token != null && req.body.inviteToken === target.invite_token;
+    if (!invited && !(await canSeeEvent(target, req.user.sub))) {
+      return res.status(404).json({ error: 'Event not found' });
+    }
+    // A forwarded link must not get someone the host blocked through the door;
+    // GET /events/invite/:token answers them 404 too.
+    if (invited && target.host_id !== req.user.sub) {
+      const { rows: blocked } = await db.query(
+        `SELECT 1 FROM blocks WHERE blocker_id = $1 AND blocked_id = $2`,
+        [target.host_id, req.user.sub]
+      );
+      if (blocked.length) return res.status(404).json({ error: 'Event not found' });
+    }
 
     let rows;
     if (status === 'going') {

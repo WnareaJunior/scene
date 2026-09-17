@@ -38,6 +38,19 @@ EXPO_PUBLIC_API_URL=http://localhost:3000 npx expo start
 Metro does not key its cache on env vars: pass `-c` after changing the URL or
 the old value stays baked in.
 
+### Invite links
+
+`app.config.js` registers the `scene://` scheme and claims `https://<host>/e/*`
+(iOS associated domains, Android intent filter with `autoVerify`) for:
+
+- `EXPO_PUBLIC_SHARE_HOST`, a bare hostname such as `scene.party`, when set
+- the host of `EXPO_PUBLIC_API_URL`, always (so links sent before a custom
+  domain keep opening the app)
+
+Unset, links live on the API's Render host. `EXPO_PUBLIC_SHARE_HOST` must match
+the API's `SHARE_BASE_URL`, and changing it needs a new EAS build, not an OTA
+update. Domain-day steps: `backend/README.md` → "Invite links: domain day".
+
 ### Run
 
 ```bash

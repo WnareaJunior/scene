@@ -341,6 +341,8 @@ Authorization: Bearer <accessToken>
 | GET | `/events/feed` | Events from people you follow |
 | GET | `/events/random` | One random nearby event |
 | GET | `/events/:eventId` | Full event detail |
+| GET | `/events/invite/:token` | Event behind an invite link (see "Invite links") |
+| POST | `/events/:eventId/invite-link` | Shareable link for a party |
 | PATCH | `/events/:eventId` | Update event (host only) |
 | DELETE | `/events/:eventId` | Cancel event (host only) |
 
@@ -362,7 +364,7 @@ Image upload accepts JPEG, PNG, and WebP. Magic-byte validation is performed ser
 
 | Method | Path | Body | Description |
 |---|---|---|---|
-| POST | `/events/:eventId/rsvp` | `{ status }` | RSVP — `going` enforces capacity |
+| POST | `/events/:eventId/rsvp` | `{ status, inviteToken? }` | RSVP — `going` enforces capacity; `inviteToken` admits a link holder to a private party |
 | PATCH | `/events/:eventId/rsvp` | `{ status }` | Change RSVP status |
 | DELETE | `/events/:eventId/rsvp` | — | Cancel RSVP |
 | GET | `/events/:eventId/attendees` | — | Attendee list (if host allows) |
@@ -379,6 +381,147 @@ Image upload accepts JPEG, PNG, and WebP. Magic-byte validation is performed ser
 **Optional:** `hashtags`
 
 Returns minimal `EventPin` objects (id, lat, lng, title, hashtags, goingCount, startTime) — not full event detail. Tap a pin → `GET /events/:id`.
+
+### Invite links (public, no `/api/v1` prefix)
+
+A party's shareable link is `https://<share host>/e/<token>`. One URL serves
+three readers: link-preview crawlers (iMessage builds its card from the Open
+Graph tags), phones with Scene installed (universal links / app links hand the
+URL to the app, which opens the party's sheet), and phones without it (a web
+page with "get scene").
+
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| POST | `/api/v1/events/:eventId/invite-link` | Bearer | Returns `{ url, token }`, minting the token on first share. Any viewer of a public party; only the host of a private one (403); 409 once cancelled |
+| GET | `/api/v1/events/invite/:token` | Bearer | The full event behind a token. Holding the token is the access check; 404 for unknown or malformed tokens and for viewers the host blocked |
+| POST | `/api/v1/events/:eventId/rsvp` | Bearer | Also accepts `inviteToken`, which is how a non-follower joins a private party |
+| GET | `/e/:token` | none | The invite page: OG tags + a script-free page. 404 page for a dead token |
+| GET | `/e-card.png` | none | 1024×1024 preview image for parties without a photo |
+| GET | `/.well-known/apple-app-site-association` | none | iOS universal links. 404 until `APPLE_TEAM_ID` is set |
+| GET | `/.well-known/assetlinks.json` | none | Android app links. 404 until `ANDROID_CERT_SHA256` is set |
+
+A token unlocks exactly one party, only on the fetch and the RSVP. It is not
+part of the visibility predicate (`src/eventVisibility.js`), so holding a link
+never puts a private party on your map, feeds, profile lists or search.
+
+| Env var | Default | Purpose |
+|---|---|---|
+| `SHARE_BASE_URL` | the request's own origin | The origin links are built on, e.g. `https://scene.party`. Must be a bare https origin; production refuses to boot otherwise. **Must name the same host as the app build's `EXPO_PUBLIC_SHARE_HOST`.** |
+| `APPLE_TEAM_ID` | unset (AASA 404s) | 10-character Team ID; publishes `apple-app-site-association` for `<team>.com.wilsonnarea.scene` |
+| `ANDROID_CERT_SHA256` | unset (assetlinks 404s) | Comma-separated SHA-256 signing-cert fingerprints (`AA:BB:…`) |
+| `APP_STORE_URL` | the public TestFlight link | Where "get scene" goes |
+| `APP_STORE_ID` | unset | `6792423931` once the app is live on the App Store: turns on Safari's smart banner |
+| `INVITE_TIMEZONE` | `America/New_York` | Time zone for the time on the card (events store no zone) |
+| `IOS_BUNDLE_ID` / `ANDROID_PACKAGE` | `com.wilsonnarea.scene` | Only if the app identifiers ever change |
+
+**Preview gotcha:** Render's free tier sleeps after ~15 idle minutes. iMessage
+fetches the preview once, from the sender's phone, and gives up quickly; a
+cold start can outlast it, and the card silently degrades to a bare URL. That
+is not fixable in code. Production is kept warm by the Uptime Kuma ping, which
+is best-effort; the real fix is an always-on instance (Render Starter) behind
+the custom domain.
+
+**Installing from the link:** there is no deferred deep link. Someone without
+the app installs it from the page, then taps the link again, and the page
+tells them so. See "Deferred deep linking" below for the options.
+
+#### Invite links: domain day
+
+Everything below is configuration plus one app build. No code changes.
+Example host: `scene.party` (use whatever you bought; a subdomain like
+`go.example.com` works the same way).
+
+1. **Render: add the domain to the production service.** Dashboard →
+   `scene-19ss` → Settings → Custom Domains → Add → `scene.party`. Render
+   shows the DNS records to create and issues the TLS certificate itself once
+   they resolve.
+2. **DNS, at the registrar**, exactly as Render's page shows. At the time of
+   writing that is:
+   - apex (`scene.party`): `A @ 216.24.57.1`, or `ALIAS`/`ANAME @ scene-19ss.onrender.com` if the registrar supports it
+   - a subdomain (`go.scene.party`): `CNAME go scene-19ss.onrender.com`
+   - delete any `AAAA` records on that name (Render's docs require it; they break verification)
+
+   Wait for Render to show the domain as verified with a certificate, then
+   check `curl -sI https://scene.party/health` returns 200.
+3. **Render env vars** (production service → Environment), then redeploy
+   through `deploy-prod`:
+   - `SHARE_BASE_URL=https://scene.party`
+   - `APPLE_TEAM_ID=<Team ID>`: developer.apple.com → Account → Membership details
+   - `ANDROID_CERT_SHA256=<fingerprint>`: `eas credentials -p android` → production keystore → SHA-256. Once the app is on Google Play with Play App Signing, also add Play Console → Test and release → App integrity → App signing key certificate → SHA-256, comma-separated
+   - `APP_STORE_URL=https://apps.apple.com/app/id6792423931` and `APP_STORE_ID=6792423931`, once the app is live on the App Store (until then leave the TestFlight default)
+
+   `APPLE_TEAM_ID` and `ANDROID_CERT_SHA256` do not depend on the domain; they
+   can be set today and make links on the Render host open the app too.
+4. **App: point the build at the domain.** In `frontend/eas.json`, add
+   `"EXPO_PUBLIC_SHARE_HOST": "scene.party"` to the `production` profile's
+   `env` (bare hostname, no `https://`). `npx expo config --type public`
+   should then list `applinks:scene.party` and `applinks:scene-19ss.onrender.com`.
+5. **Rebuild; an OTA update will not do.** Associated domains and intent
+   filters are compiled into the binary:
+   ```bash
+   cd frontend
+   eas build -p ios --profile production
+   eas submit -p ios --profile production --id <build-id>
+   eas build -p android --profile production   # when Android ships
+   ```
+   The iOS build syncs the Associated Domains capability onto the App ID in
+   the Apple Developer portal (EAS does this automatically; set
+   `EXPO_NO_CAPABILITY_SYNC=1` to do it by hand instead).
+6. **Verify iOS.**
+   ```bash
+   curl -si https://scene.party/.well-known/apple-app-site-association   # 200, application/json, no redirect
+   curl -s  https://app-site-association.cdn-apple.com/a/v1/scene.party  # Apple's CDN copy: what devices actually get
+   ```
+   The CDN can lag hours behind a change. Then install the new build from
+   TestFlight (iOS fetches the file at install time), paste a link into Notes
+   or Messages and tap it: it should open Scene on the party. Long-press shows
+   "Open in Scene". Typing the URL into Safari's address bar never opens an
+   app; that is iOS behavior, not a bug.
+7. **Verify Android.**
+   ```bash
+   curl -s https://scene.party/.well-known/assetlinks.json
+   adb shell pm verify-app-links --re-verify com.wilsonnarea.scene
+   adb shell pm get-app-links com.wilsonnarea.scene    # scene.party: verified
+   ```
+8. **Verify the card.** Mint a link from the app ("send it"), text it to
+   yourself, and check the photo card. The `og:url` and `og:image` in
+   `curl -s https://scene.party/e/<token>` should both be on `scene.party`.
+
+**Old links keep working.** Links already sent on
+`scene-19ss.onrender.com/e/…` are served by the same service, so they still
+render. The app keeps the Render host in its associated domains next to the
+new one, so they still open the app. No redirect is needed, and none should be
+added on the Render host: it is also the API origin every installed build
+calls.
+
+**The one switch, and how a mismatch shows up.** `SHARE_BASE_URL` (API) and
+`EXPO_PUBLIC_SHARE_HOST` (app build) must name the same host. If they
+disagree, links still work as web pages but never open the app. The build
+prints the `SHARE_BASE_URL` it expects, the API logs the host it expects at
+boot, and the app logs a warning each time it receives a link on a host it
+was not built for.
+
+#### Deferred deep linking (not built)
+
+"Install, then open straight to the party" needs something to carry the token
+across the App Store, which drops it. The options:
+
+- **A link service (Branch, AppsFlyer OneLink, Adjust).** The only thing that
+  works reliably on iOS: fingerprinting plus their SDK. It costs an SDK, a
+  privacy-label change and a vendor in the link path, and it does nothing for
+  TestFlight installs.
+- **Clipboard.** The page copies the link and the app reads it on first
+  launch. iOS 16+ shows a "paste from Safari?" prompt for that, which reads as
+  creepy on a first launch. The page is also deliberately script-free.
+- **Android Play Install Referrer.** First-party and reliable: the "get scene"
+  button links to the Play listing with `&referrer=invite%3D<token>`, and the
+  app reads it once on first launch with `react-native-play-install-referrer`.
+  Android only, and only once the app is on Google Play.
+
+**Recommendation:** keep "installed it? tap the link again" (shipped) until
+installs from links are a measurable share of signups. Then add the Play
+Install Referrer when Android launches (small, no vendor), and use Branch for
+iOS only if the re-tap drop-off turns out to matter.
 
 ---
 
