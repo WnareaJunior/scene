@@ -183,6 +183,9 @@ export const events = {
   updateRsvp: (id, status) => request('PATCH', `/events/${id}/rsvp`, { status }),
   cancelRsvp: (id) => request('DELETE', `/events/${id}/rsvp`),
   attendees: (id, params = {}) => request('GET', `/events/${id}/attendees?${qs(params)}`),
+  comments: (id, params = {}) => request('GET', `/events/${id}/comments?${qs(params)}`),
+  comment: (id, body) => request('POST', `/events/${id}/comments`, { body }),
+  deleteComment: (id, commentId) => request('DELETE', `/events/${id}/comments/${commentId}`),
 };
 
 // ── Map ───────────────────────────────────────────────────────────────────────

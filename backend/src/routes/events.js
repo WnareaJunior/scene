@@ -538,4 +538,126 @@ router.get('/:eventId/attendees', requireAuth, async (req, res, next) => {
   }
 });
 
+// Comment visibility mirrors GET /events/:eventId exactly: a private event is
+// readable by its host or by someone already going, and invisible otherwise.
+// Returns the event row when the caller may see it, or null when they may not,
+// so callers answer 404 rather than confirming a private event exists.
+async function visibleEvent(eventId, userId) {
+  const { rows } = await db.query(
+    `SELECT id, host_id, is_private FROM events WHERE id = $1`,
+    [eventId]
+  );
+  if (!rows.length) return null;
+  const event = rows[0];
+  if (!event.is_private || event.host_id === userId) return event;
+
+  const { rows: rsvpRows } = await db.query(
+    `SELECT 1 FROM rsvps WHERE event_id = $1 AND user_id = $2 AND status = 'going'`,
+    [eventId, userId]
+  );
+  return rsvpRows.length ? event : null;
+}
+
+// GET /events/:eventId/comments — oldest first; a thread reads forward.
+router.get('/:eventId/comments', requireAuth, async (req, res, next) => {
+  try {
+    const event = await visibleEvent(req.params.eventId, req.user.sub);
+    if (!event) return res.status(404).json({ error: 'Event not found' });
+
+    const limit = Math.min(parseInt(req.query.limit) || 50, 100);
+    const offset = parseInt(req.query.offset) || 0;
+
+    const [{ rows: countRows }, { rows }] = await Promise.all([
+      db.query(`SELECT count(*) FROM event_comments WHERE event_id = $1`, [req.params.eventId]),
+      // Paged newest-first so offset walks backwards through history: the first
+      // page is the end of the conversation, which is the part that matters.
+      // Reversed before responding so the payload still reads chronologically.
+      db.query(
+        `SELECT c.id, c.body, c.created_at,
+                u.id AS user_id, u.username, u.profile_picture,
+                (c.user_id = $4) AS is_mine,
+                (c.user_id = $5) AS is_host
+         FROM event_comments c
+         JOIN users u ON u.id = c.user_id
+         WHERE c.event_id = $1
+         ORDER BY c.created_at DESC, c.id DESC
+         LIMIT $2 OFFSET $3`,
+        [req.params.eventId, limit, offset, req.user.sub, event.host_id]
+      ),
+    ]);
+
+    res.json({ data: rows.reverse(), total: parseInt(countRows[0].count), limit, offset });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /events/:eventId/comments — RSVP required, host exempt.
+router.post('/:eventId/comments', requireAuth, async (req, res, next) => {
+  try {
+    const body = typeof req.body?.body === 'string' ? req.body.body.trim() : '';
+    if (!body) return res.status(400).json({ error: 'body is required' });
+    if (body.length > 500) return res.status(400).json({ error: 'body must be 500 characters or fewer' });
+
+    const event = await visibleEvent(req.params.eventId, req.user.sub);
+    if (!event) return res.status(404).json({ error: 'Event not found' });
+
+    // The host can always speak on their own party; everyone else has to have
+    // said they are coming first. Interested counts — the point is to keep out
+    // people with no stake in the party, not to gate on a hard commitment.
+    if (event.host_id !== req.user.sub) {
+      const { rows: rsvpRows } = await db.query(
+        `SELECT 1 FROM rsvps WHERE event_id = $1 AND user_id = $2`,
+        [req.params.eventId, req.user.sub]
+      );
+      if (!rsvpRows.length) {
+        return res.status(403).json({ error: 'RSVP before you comment' });
+      }
+    }
+
+    const { rows } = await db.query(
+      `INSERT INTO event_comments (event_id, user_id, body) VALUES ($1, $2, $3) RETURNING id, body, created_at`,
+      [req.params.eventId, req.user.sub, body]
+    );
+
+    const { rows: me } = await db.query(
+      `SELECT id AS user_id, username, profile_picture FROM users WHERE id = $1`,
+      [req.user.sub]
+    );
+
+    res.status(201).json({
+      ...rows[0],
+      ...me[0],
+      is_mine: true,
+      is_host: event.host_id === req.user.sub,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// DELETE /events/:eventId/comments/:commentId — author, or the host moderating.
+router.delete('/:eventId/comments/:commentId', requireAuth, async (req, res, next) => {
+  try {
+    const { rows } = await db.query(
+      `SELECT c.user_id, e.host_id
+       FROM event_comments c
+       JOIN events e ON e.id = c.event_id
+       WHERE c.id = $1 AND c.event_id = $2`,
+      [req.params.commentId, req.params.eventId]
+    );
+    if (!rows.length) return res.status(404).json({ error: 'Comment not found' });
+
+    const { user_id, host_id } = rows[0];
+    if (user_id !== req.user.sub && host_id !== req.user.sub) {
+      return res.status(403).json({ error: 'Not your comment' });
+    }
+
+    await db.query(`DELETE FROM event_comments WHERE id = $1`, [req.params.commentId]);
+    res.status(204).end();
+  } catch (err) {
+    next(err);
+  }
+});
+
 module.exports = router;
