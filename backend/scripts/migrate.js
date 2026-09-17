@@ -14,6 +14,8 @@
 //
 // Env: DATABASE_URL (required), DATABASE_SSL=disable for a TLS-less local
 // Postgres (same switch as src/db.js on the devbox branch).
+//      MIGRATE_CONNECT_TIMEOUT_MS (default 30000) — how long to keep retrying a
+//      database that is still coming up. See src/dbRetry.js for why.
 //
 // File headers the runner understands (first 20 lines):
 //   -- migrate:no-transaction   run outside a transaction (CREATE INDEX CONCURRENTLY)
@@ -32,6 +34,7 @@ const fs = require('fs');
 const path = require('path');
 const { Client } = require('pg');
 const { migrationChecksum, checksumMatches } = require('../src/migrationChecksum');
+const { connectWithRetry } = require('../src/dbRetry');
 
 const DIR = path.join(__dirname, '..', 'migrations');
 const LOCK_KEY = 7214001; // arbitrary, unique to this runner
@@ -59,14 +62,13 @@ function listFiles() {
     });
 }
 
-function connect() {
-  if (!process.env.DATABASE_URL) {
-    console.error('migrate: DATABASE_URL is not set');
-    process.exit(1);
-  }
+// A *fresh* client per attempt: connectWithRetry may need several, and a pg
+// Client cannot be reused once its connection has failed.
+function newClient() {
   return new Client({
     connectionString: process.env.DATABASE_URL,
     ssl: process.env.DATABASE_SSL === 'disable' ? false : { rejectUnauthorized: false },
+    connectionTimeoutMillis: 5000, // so one hung attempt can't eat the whole budget
   });
 }
 
@@ -87,8 +89,17 @@ async function main() {
     process.exit(1);
   }
 
-  const client = connect();
-  await client.connect();
+  if (!process.env.DATABASE_URL) {
+    console.error('migrate: DATABASE_URL is not set');
+    process.exit(1);
+  }
+  // CI's pg_isready gate can report ready while TCP is still closed, and a cold
+  // hosted database can answer 57P03 once — so wait out a database that is
+  // coming up, but fail straight through a bad password or a missing database.
+  const client = await connectWithRetry(newClient, {
+    timeoutMs: Number(process.env.MIGRATE_CONNECT_TIMEOUT_MS || 30000),
+    log: (msg) => console.error(`migrate: ${msg.replace(/^db: /, '')}`),
+  });
   try {
     await client.query(`SELECT pg_advisory_lock($1)`, [LOCK_KEY]);
     await client.query(`
