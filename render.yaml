@@ -1,0 +1,101 @@
+# Render Blueprint — the two API services, as code.
+#
+# This file is the record of how scene (production) and scene-staging are meant
+# to be configured. Render does NOT read it automatically: the services were
+# created by hand, so until they are linked to this Blueprint in the dashboard
+# (Blueprints → New Blueprint Instance, matching the existing service names),
+# changing a value here changes nothing. Change it here AND in the dashboard,
+# or link them once and let Render apply it.
+#
+# Secrets and per-environment values (DATABASE_URL, JWT secrets, Supabase keys,
+# SHARE_BASE_URL, …) are deliberately absent or marked `sync: false`, so
+# applying this Blueprint can never overwrite or print them. Only the settings
+# below are managed here.
+#
+# Written 2026-09-17, after a production deploy went live without its
+# migrations: production's start command was `npm run dev` (nodemon), which
+# skips the `migrate.js --if-enabled` step that `npm start` runs.
+services:
+  - type: web
+    name: scene
+    runtime: node
+    repo: https://github.com/WnareaJunior/scene
+    branch: main
+    rootDir: backend
+    region: ohio
+    plan: free
+    # Production deploys only through the deploy-prod workflow, which sends a
+    # commit SHA to the deploy hook and then waits on /health/ready.
+    autoDeploy: false
+    buildCommand: npm ci          # was `yarn`, which ignores package-lock.json
+    startCommand: npm start       # was `npm run dev` (nodemon): no migrations, a watcher in prod
+    healthCheckPath: /health      # was unset: Render could not tell a bad instance from a good one
+    envVars:
+      - key: MIGRATE_ON_BOOT      # apply pending migrations before the API starts
+        value: "true"
+      - key: NODE_ENV             # Express defaults to development without this
+        value: production
+      - key: SEARCH_ENABLED
+        sync: false
+      - key: ALLOWED_ORIGINS
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_ACCESS_SECRET
+        sync: false
+      - key: JWT_REFRESH_SECRET
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_KEY
+        sync: false
+      - key: SUPABASE_BUCKET
+        sync: false
+      - key: VOYAGE_API_KEY
+        sync: false
+    # Not listed on purpose, and to be deleted from the production service:
+    #   E2E_RATE_LIMIT_BYPASS — lets any caller with the key skip the auth rate
+    #     limiter. The e2e suite runs against staging now, never production.
+    #   JWT_SECRET — superseded by JWT_ACCESS_SECRET / JWT_REFRESH_SECRET.
+
+  - type: web
+    name: scene-staging
+    runtime: node
+    repo: https://github.com/WnareaJunior/scene
+    branch: main
+    rootDir: backend
+    region: ohio
+    plan: free
+    # Staging auto-deploys every merge; staging-smoke then runs the Playwright
+    # suite against it.
+    autoDeploy: true
+    buildCommand: npm ci
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: MIGRATE_ON_BOOT
+        value: "true"
+      - key: NODE_ENV
+        value: production         # staging runs the production code path
+      - key: E2E_RATE_LIMIT_BYPASS  # staging-smoke's x-e2e-key; matches STAGING_E2E_KEY
+        sync: false
+      - key: SEARCH_ENABLED
+        sync: false
+      - key: ALLOWED_ORIGINS      # includes http://localhost:4173 for staging-smoke
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_ACCESS_SECRET
+        sync: false
+      - key: JWT_REFRESH_SECRET
+        sync: false
+      - key: JWT_ACCESS_EXPIRES_IN
+        sync: false
+      - key: JWT_REFRESH_EXPIRES_IN
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_KEY
+        sync: false
+      - key: SUPABASE_BUCKET
+        sync: false
