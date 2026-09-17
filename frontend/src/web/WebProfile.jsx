@@ -5,7 +5,7 @@
 //     so "edit display name" maps to editing the bio
 //   - account deletion, follower lists: use the app
 // Sign-out is a plain button (no Alert confirm — Alert is a no-op on web).
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, ActivityIndicator, StyleSheet, ScrollView,
 } from 'react-native';
@@ -19,6 +19,10 @@ export default function WebProfile({ user, onSignOut }) {
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState(null);
   const [signingOut, setSigningOut] = useState(false);
+  // Set on the first keystroke. The refresh below must not replace a bio the
+  // user is already editing: on a slow API it lands mid-typing and splices the
+  // old bio back in front of the new text.
+  const bioEdited = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -26,7 +30,7 @@ export default function WebProfile({ user, onSignOut }) {
       .then((d) => {
         if (cancelled || !d?.id) return;
         setProfile(d);
-        setBioDraft(d.bio ?? '');
+        if (!bioEdited.current) setBioDraft(d.bio ?? '');
       })
       .catch(() => {
         // Non-blocking: cached login data is already on screen.
@@ -85,7 +89,7 @@ export default function WebProfile({ user, onSignOut }) {
       <TextInput
         style={styles.input}
         value={bioDraft}
-        onChangeText={(t) => { setBioDraft(t); setSaved(false); }}
+        onChangeText={(t) => { bioEdited.current = true; setBioDraft(t); setSaved(false); }}
         placeholder="say something about your scenes"
         placeholderTextColor={COLORS.inkSecondary}
         multiline
